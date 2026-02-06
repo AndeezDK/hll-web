@@ -4,6 +4,19 @@ All notable changes to this project will be documented in this file.
 
 ---
 
+## [v0.3.19] - 2026-02-06
+### Changed
+- **roster.html**: Replaced "Primary Role" column with two new columns:
+  - **Played** — color-coded chips showing top 3 roles from match history (e.g. `42% SL | 31% INF | 15% CMD`), green ≥40%, blue ≥20%, grey below
+  - **Prefers** — ranked preference tags from officer-set roles (1st choice highlighted orange)
+- **roster.html**: Edit modal role dropdowns relabeled to "Prefers — 1st/2nd/3rd Choice"
+- **roster.html**: Search now includes all three preferred roles
+- **roster.html**: CSV export headers updated to "Prefers 1st/2nd/3rd"
+### Added
+- **roster.html**: Loads match_lineups data on init to calculate per-player role percentages
+
+---
+
 ## [v0.3.18] - 2026-02-06
 ### Added
 - **matches.html**: Summary stats bar (Matches, Wins, Losses, Win Rate, Avg Score) — updates with filters
