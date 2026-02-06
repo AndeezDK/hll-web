@@ -4,6 +4,48 @@ All notable changes to this project will be documented in this file.
 
 ---
 
+## [v0.3.18] - 2026-02-06
+### Added
+- **matches.html**: Summary stats bar (Matches, Wins, Losses, Win Rate, Avg Score) — updates with filters
+- **matches.html**: Enemy team dropdown filter
+- **matches.html**: Sortable columns (Date, Map, Enemy, Score, Result) with ascending/descending toggle
+- **matches.html**: Clickable table rows open match detail modal
+- **matches.html**: "Showing X of Y" match count next to filters
+- **matches.html**: Delete Match button in modal footer (cascades to match_details, match_lineups, no_shows)
+- **matches.html**: Support points column in modal friendly & enemy tables
+- **matches.html**: Team kill/death totals in modal section headers
+- **matches.html**: Role display from match_lineups table (more accurate than match_details.role)
+- **matches.html**: Mobile responsive modal (single-column grid, capped width/height)
+- **matches.html**: Offline state handling (shows "Database offline" instead of infinite loading)
+
+---
+
+## [v0.3.17] - 2026-02-06
+### Added
+- **roster.html**: Manual SteamID entry in player edit modal — TEMP players show an editable SteamID field (marked ⚠️ Temporary)
+- Entering a real SteamID replaces the TEMP entry: creates new player with real ID, deletes temp, updates lineup references
+- Validates that the new SteamID doesn't already exist in the roster
+
+---
+
+## [v0.3.16] - 2026-02-06
+### Added
+- **admin.html**: Players can now be added without a SteamID — generates a `TEMP-xxxxxxxx` placeholder
+- **admin.html**: SteamID pairing during Preview Import — detects TEMP roster players matching friendly CSV players by name, shows checkboxes to approve pairing
+- **admin.html**: On Confirm Import, approved pairings replace TEMP IDs with real SteamIDs in the database
+- **roster.html**: ⚠️ "No SteamID" badge shown next to players with TEMP IDs
+
+---
+
+## [v0.3.15] - 2026-02-06
+### Changed
+- **lineup.html**: Node slots (Nodes North, Middle, South) no longer block players already assigned elsewhere in the lineup
+- Infantry players can now be picked for node duty without being greyed out
+- All other sections (Commander, Artillery, SL, Infantry, Tanks, etc.) keep the conflict check as before
+- Applies to both desktop dropdown and mobile bottom sheet pickers
+
+---
+
 ## [v0.3.14] - 2026-02-06
 ### Fixed
 - **admin.html**: Moved `autoAddNewPlayers()` to run BEFORE match insert (was Step 6, now Step 0)

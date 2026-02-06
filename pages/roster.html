@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Roster - HLL Tool v0.3.0</title>
+    <title>Roster - HLL Tool v0.3.17</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <link rel="stylesheet" href="../css/styles.css">
 </head>
@@ -30,7 +30,7 @@
         <!-- Header -->
         <div class="page-header">
             <h1 class="page-title">Roster</h1>
-            <span class="version-badge">v0.3.0</span>
+            <span class="version-badge">v0.3.17</span>
         </div>
 
         <!-- Stats Summary -->
@@ -271,10 +271,13 @@
         }
         
         function renderPlayerRow(p) {
+            const tempBadge = p.steam_id.startsWith('TEMP-') 
+                ? ' <span style="color: #f5a623; font-size: 11px;" title="No SteamID — will pair on match import">⚠️ No SteamID</span>' 
+                : '';
             return `
                 <tr data-steam-id="${p.steam_id}">
                     <td>
-                        <strong>${HLL.formatPlayerName(p.name, p.team)}</strong>
+                        <strong>${HLL.formatPlayerName(p.name, p.team)}</strong>${tempBadge}
                     </td>
                     <td>
                         <span class="badge ${HLL.getTeamBadgeClass(p.team)}">${p.team}</span>
@@ -321,8 +324,8 @@
             modalBody.innerHTML = `
                 <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px;">
                     <div class="form-group">
-                        <label class="form-label">Steam ID</label>
-                        <input type="text" class="form-input" value="${player.steam_id}" disabled>
+                        <label class="form-label">Steam ID ${player.steam_id.startsWith('TEMP-') ? '<span style="color: #f5a623; font-size: 11px;">⚠️ Temporary</span>' : ''}</label>
+                        <input type="text" class="form-input" id="editSteamId" value="${player.steam_id}" ${player.steam_id.startsWith('TEMP-') ? 'placeholder="Enter real SteamID to replace temp"' : 'disabled'}>
                     </div>
                     <div class="form-group">
                         <label class="form-label">Team</label>
@@ -413,6 +416,10 @@
         async function savePlayerChanges() {
             if (!currentPlayerSteamId) return;
             
+            const newSteamId = document.getElementById('editSteamId')?.value?.trim();
+            const isTemp = currentPlayerSteamId.startsWith('TEMP-');
+            const steamIdChanged = isTemp && newSteamId && newSteamId !== currentPlayerSteamId && !newSteamId.startsWith('TEMP-');
+            
             const updates = {
                 team: document.getElementById('editTeam').value,
                 primary_role: document.getElementById('editPrimaryRole').value || null,
@@ -422,6 +429,62 @@
             };
             
             HLL.showLoading('Saving...');
+            
+            if (steamIdChanged) {
+                // Check if new SteamID already exists
+                const { data: existing } = await HLL.supabase
+                    .from('players')
+                    .select('steam_id')
+                    .eq('steam_id', newSteamId);
+                
+                if (existing && existing.length > 0) {
+                    HLL.hideLoading();
+                    HLL.showAlert('That SteamID already exists in the roster', 'error');
+                    return;
+                }
+                
+                // Get full current player data
+                const { data: oldPlayer } = await HLL.supabase
+                    .from('players')
+                    .select('*')
+                    .eq('steam_id', currentPlayerSteamId)
+                    .single();
+                
+                if (oldPlayer) {
+                    // Create new entry with real SteamID
+                    const newPlayer = { ...oldPlayer, ...updates, steam_id: newSteamId };
+                    delete newPlayer.created_at;
+                    delete newPlayer.updated_at;
+                    
+                    const { error: insertErr } = await HLL.supabase
+                        .from('players')
+                        .insert(newPlayer);
+                    
+                    if (insertErr) {
+                        HLL.hideLoading();
+                        HLL.showAlert('Failed to update SteamID: ' + insertErr.message, 'error');
+                        return;
+                    }
+                    
+                    // Delete temp entry
+                    await HLL.supabase
+                        .from('players')
+                        .delete()
+                        .eq('steam_id', currentPlayerSteamId);
+                    
+                    // Update any lineup references
+                    await HLL.supabase
+                        .from('lineups')
+                        .update({ steam_id: newSteamId })
+                        .eq('steam_id', currentPlayerSteamId);
+                    
+                    HLL.hideLoading();
+                    HLL.showAlert(`SteamID updated: ${currentPlayerSteamId} → ${newSteamId}`, 'success');
+                    closePlayerModal();
+                    await loadRoster();
+                    return;
+                }
+            }
             
             const success = await HLL.updatePlayer(currentPlayerSteamId, updates);
             

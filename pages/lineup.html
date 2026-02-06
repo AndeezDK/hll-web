@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Lineups - HLL Tool v0.3.7</title>
+    <title>Lineups - HLL Tool v0.3.15</title>
     <!-- Supabase JS Client -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <style>
@@ -798,7 +798,7 @@
     
     <div class="page-header">
         <h1 class="page-title">Lineups</h1>
-        <span class="version-badge">v0.3.7</span>
+        <span class="version-badge">v0.3.15</span>
         <div class="sync-indicator" id="syncIndicator">
             <span class="sync-dot"></span>
             <span class="sync-text">Offline</span>
@@ -1656,13 +1656,14 @@
         
         function renderBottomSheetList(filter = '') {
             const assigned = getAssignedPlayers();
+            const isNodeSlot = bottomSheetSlot && bottomSheetSlot.classList.contains('node-slot');
             const filtered = players.filter(p => 
                 p.name.toLowerCase().includes(filter.toLowerCase()) || 
                 p.team.toLowerCase().includes(filter.toLowerCase())
             );
             
             bottomSheetList.innerHTML = filtered.map(p => {
-                const isAssigned = assigned.includes(p.name);
+                const isAssigned = !isNodeSlot && assigned.includes(p.name);
                 return `<div class="bottom-sheet-item ${isAssigned ? 'already-assigned' : ''}" data-name="${p.name}" data-team="${p.team}">
                     <span class="player-name">${formatPlayerName(p.name, p.team)}</span>
                     <span class="player-team">${p.team}</span>
@@ -1820,8 +1821,9 @@
         }
         function renderDropdown(filter = '') {
             const assigned = getAssignedPlayers();
+            const isNodeSlot = currentSlot && currentSlot.classList.contains('node-slot');
             dropdownList.innerHTML = players.filter(p => p.name.toLowerCase().includes(filter.toLowerCase()) || p.team.toLowerCase().includes(filter.toLowerCase()))
-                .map(p => `<div class="dropdown-item ${assigned.includes(p.name) ? 'already-assigned' : ''}" data-name="${p.name}" data-team="${p.team}"><span>${formatPlayerName(p.name, p.team)}</span><span class="player-team">${p.team}</span></div>`).join('');
+                .map(p => `<div class="dropdown-item ${!isNodeSlot && assigned.includes(p.name) ? 'already-assigned' : ''}" data-name="${p.name}" data-team="${p.team}"><span>${formatPlayerName(p.name, p.team)}</span><span class="player-team">${p.team}</span></div>`).join('');
             dropdownList.querySelectorAll('.dropdown-item:not(.already-assigned)').forEach(i => i.addEventListener('click', () => selectPlayer(i.dataset.name, i.dataset.team)));
         }
         function selectPlayer(name, team) { 

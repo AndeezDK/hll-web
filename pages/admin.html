@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Admin - HLL Tool v0.3.14</title>
+    <title>Admin - HLL Tool v0.3.16</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <link rel="stylesheet" href="../css/styles.css">
     <style>
@@ -80,7 +80,7 @@
         <!-- Header -->
         <div class="page-header">
             <h1 class="page-title">Admin</h1>
-            <span class="version-badge">v0.3.14</span>
+            <span class="version-badge">v0.3.16</span>
         </div>
 
         <div class="admin-grid">
@@ -88,8 +88,8 @@
             <div class="action-card">
                 <h3>👤 Add Player</h3>
                 <div class="form-group">
-                    <label class="form-label">Steam ID</label>
-                    <input type="text" class="form-input" id="newSteamId" placeholder="76561198...">
+                    <label class="form-label">Steam ID <span style="color: #8b949e; font-weight: 400;">(optional)</span></label>
+                    <input type="text" class="form-input" id="newSteamId" placeholder="76561198... or leave blank">
                 </div>
                 <div class="form-group">
                     <label class="form-label">Player Name</label>
@@ -254,13 +254,18 @@
         // ============================================================================
         
         async function addPlayer() {
-            const steamId = document.getElementById('newSteamId').value.trim();
+            let steamId = document.getElementById('newSteamId').value.trim();
             const name = document.getElementById('newPlayerName').value.trim();
             const team = document.getElementById('newPlayerTeam').value;
             
-            if (!steamId || !name) {
-                HLL.showAlert('Please enter Steam ID and name', 'error');
+            if (!name) {
+                HLL.showAlert('Please enter a player name', 'error');
                 return;
+            }
+            
+            // Generate temp ID if no SteamID provided
+            if (!steamId) {
+                steamId = 'TEMP-' + Math.random().toString(36).substr(2, 8).toUpperCase();
             }
             
             HLL.showLoading('Adding player...');
@@ -274,7 +279,8 @@
             HLL.hideLoading();
             
             if (success) {
-                HLL.showAlert('Player added successfully', 'success');
+                const tempNote = steamId.startsWith('TEMP-') ? ' (no SteamID — will pair on match import)' : '';
+                HLL.showAlert('Player added successfully' + tempNote, 'success');
                 document.getElementById('newSteamId').value = '';
                 document.getElementById('newPlayerName').value = '';
             } else {
@@ -427,7 +433,37 @@
                 // Step 7: Calculate MVP
                 const mvp = calculateMVP(players);
                 
-                // Step 8: Validate
+                // Step 8: Detect TEMP players that can be paired with real SteamIDs
+                const { data: rosterPlayers } = await HLL.supabase
+                    .from('players')
+                    .select('steam_id, name');
+                const tempPlayers = (rosterPlayers || []).filter(p => p.steam_id.startsWith('TEMP-'));
+                
+                const pairings = [];
+                if (tempPlayers.length > 0) {
+                    const normalizeName = s => (s || '').replace(/[^a-z0-9]/gi, '').toLowerCase();
+                    const friendlyPlayers = players.filter(p => p.isFriendly);
+                    
+                    for (const tp of tempPlayers) {
+                        const match = friendlyPlayers.find(fp => 
+                            normalizeName(fp.name) === normalizeName(tp.name) && fp.steamId
+                        );
+                        if (match) {
+                            // Check the real SteamID isn't already in roster
+                            const alreadyExists = (rosterPlayers || []).some(rp => rp.steam_id === match.steamId);
+                            if (!alreadyExists) {
+                                pairings.push({
+                                    tempId: tp.steam_id,
+                                    realSteamId: match.steamId,
+                                    playerName: tp.name,
+                                    approved: true // default checked
+                                });
+                            }
+                        }
+                    }
+                }
+                
+                // Step 9: Validate
                 const errors = [];
                 const friendlyPlayers = players.filter(p => p.isFriendly);
                 const enemyPlayers = players.filter(p => !p.isFriendly);
@@ -437,6 +473,7 @@
                 if (friendlyPlayers.length === 0) errors.push({ type: 'CRITICAL', msg: 'No friendly players detected' });
                 if (!matchInfo.myScore && matchInfo.myScore !== 0) errors.push({ type: 'WARNING', msg: 'Could not detect score' });
                 if (noShows.length > 0) errors.push({ type: 'INFO', msg: `${noShows.length} no-show(s) detected` });
+                if (pairings.length > 0) errors.push({ type: 'INFO', msg: `${pairings.length} player(s) can be paired with SteamIDs` });
                 
                 const hasCritical = errors.some(e => e.type === 'CRITICAL');
                 
@@ -449,7 +486,8 @@
                     mvp,
                     friendlyPlayers,
                     enemyPlayers,
-                    errors
+                    errors,
+                    pairings
                 };
                 
                 HLL.hideLoading();
@@ -567,6 +605,22 @@
                         <h4 style="margin-bottom: 8px; color: #f87171;">No-Shows: ${noShows.length}</h4>
                         <div style="margin-bottom: 16px; font-size: 13px;">
                             ${noShows.map(ns => `<div style="padding: 2px 0;">• ${ns.playerName || ns.steamId} (${ns.role})</div>`).join('')}
+                        </div>
+                    ` : ''}
+                    
+                    ${pairings.length > 0 ? `
+                        <h4 style="margin-bottom: 8px; color: #f5a623;">🔗 SteamID Pairing: ${pairings.length} player(s)</h4>
+                        <div style="background: rgba(245,166,35,0.1); border: 1px solid #f5a623; border-radius: 6px; padding: 10px; margin-bottom: 16px; font-size: 13px;">
+                            <div style="margin-bottom: 8px; color: #8b949e;">These players were added without a SteamID and can now be paired:</div>
+                            ${pairings.map((p, i) => `
+                                <div style="display: flex; align-items: center; gap: 8px; padding: 4px 0;">
+                                    <input type="checkbox" id="pairing-${i}" checked style="accent-color: #f5a623;">
+                                    <label for="pairing-${i}" style="flex: 1;">
+                                        <strong>${p.playerName}</strong>
+                                        <span style="color: #8b949e;"> → ${p.realSteamId}</span>
+                                    </label>
+                                </div>
+                            `).join('')}
                         </div>
                     ` : ''}
                     
@@ -983,11 +1037,50 @@
         async function confirmMatchImport() {
             if (!pendingMatchImport) return;
             
-            const { matchInfo, players, noShows, mvp, friendlyPlayers } = pendingMatchImport;
+            const { matchInfo, players, noShows, mvp, friendlyPlayers, pairings } = pendingMatchImport;
             
             HLL.showLoading('Importing match...');
             
             try {
+                // --- PRE-STEP: Apply SteamID pairings for TEMP players ---
+                if (pairings && pairings.length > 0) {
+                    for (let i = 0; i < pairings.length; i++) {
+                        const p = pairings[i];
+                        const checkbox = document.getElementById(`pairing-${i}`);
+                        if (checkbox && checkbox.checked) {
+                            // Insert new row with real SteamID, copy data from temp
+                            const { data: tempPlayer } = await HLL.supabase
+                                .from('players')
+                                .select('*')
+                                .eq('steam_id', p.tempId)
+                                .single();
+                            
+                            if (tempPlayer) {
+                                // Create player with real SteamID
+                                const newPlayer = { ...tempPlayer, steam_id: p.realSteamId };
+                                delete newPlayer.created_at;
+                                delete newPlayer.updated_at;
+                                
+                                const { error: insertErr } = await HLL.supabase
+                                    .from('players')
+                                    .insert(newPlayer);
+                                
+                                if (!insertErr) {
+                                    // Delete temp entry
+                                    await HLL.supabase
+                                        .from('players')
+                                        .delete()
+                                        .eq('steam_id', p.tempId);
+                                    
+                                    console.log(`Paired ${p.playerName}: ${p.tempId} → ${p.realSteamId}`);
+                                } else {
+                                    console.warn(`Failed to pair ${p.playerName}:`, insertErr);
+                                }
+                            }
+                        }
+                    }
+                }
+                
                 // --- 0. AUTO-ADD NEW FRIENDLY PLAYERS TO ROSTER (must be before match insert for FK) ---
                 await autoAddNewPlayers(friendlyPlayers, matchInfo);
                 

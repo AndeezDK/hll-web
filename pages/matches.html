@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Matches - HLL Tool v0.3.0</title>
+    <title>Matches - HLL Tool v0.3.18</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <link rel="stylesheet" href="../css/styles.css">
     <style>
@@ -21,6 +21,101 @@
         .faction-axis {
             background: rgba(248, 81, 73, 0.2);
             color: var(--accent-red);
+        }
+
+        /* Summary stats row */
+        .match-summary {
+            display: flex;
+            gap: 12px;
+            margin-bottom: 16px;
+            flex-wrap: wrap;
+        }
+        .match-summary .stat-box {
+            flex: 1;
+            min-width: 100px;
+        }
+
+        /* Sortable header styling */
+        .data-table th.sortable {
+            cursor: pointer;
+            user-select: none;
+        }
+        .data-table th.sortable:hover {
+            color: var(--accent-orange);
+        }
+
+        /* Match detail modal enhancements */
+        .match-detail-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 16px;
+            margin-top: 16px;
+        }
+        .match-detail-grid .team-section h4 {
+            margin-bottom: 8px;
+        }
+        .match-detail-grid .table-container {
+            max-height: 350px;
+            overflow-y: auto;
+        }
+        .mvp-row {
+            background: rgba(245, 166, 35, 0.1);
+        }
+        .no-shows-section {
+            margin-top: 16px;
+        }
+        .no-shows-section h4 {
+            margin-bottom: 8px;
+            color: var(--accent-red);
+        }
+        .no-shows-list {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+
+        /* Match count badge */
+        .match-count {
+            font-size: 12px;
+            color: var(--text-muted);
+            margin-left: 8px;
+        }
+
+        /* Clickable rows */
+        .data-table tr[data-clickable] {
+            cursor: pointer;
+        }
+        .data-table tr[data-clickable]:hover {
+            background: var(--bg-hover);
+        }
+
+        /* Delete button */
+        .btn-danger {
+            background: rgba(248, 81, 73, 0.15);
+            color: var(--accent-red);
+            border: 1px solid rgba(248, 81, 73, 0.3);
+        }
+        .btn-danger:hover {
+            background: rgba(248, 81, 73, 0.3);
+        }
+
+        /* Responsive modal */
+        @media (max-width: 700px) {
+            .match-detail-grid {
+                grid-template-columns: 1fr;
+            }
+            .stat-row {
+                flex-wrap: wrap;
+            }
+            .stat-row .stat-box {
+                min-width: 80px;
+                flex: 1 1 80px;
+            }
+            .modal {
+                max-width: 95vw !important;
+                max-height: 90vh;
+                overflow-y: auto;
+            }
         }
     </style>
 </head>
@@ -45,9 +140,19 @@
     <div class="app-container">
         <div class="page-header">
             <h1 class="page-title">Match History</h1>
-            <span class="version-badge">v0.3.0</span>
+            <span class="version-badge">v0.3.18</span>
         </div>
 
+        <!-- Summary Stats -->
+        <div class="match-summary" id="matchSummary">
+            <div class="stat-box"><span class="stat-value" id="totalMatches">-</span><span class="stat-label">Matches</span></div>
+            <div class="stat-box ok"><span class="stat-value" id="totalWins">-</span><span class="stat-label">Wins</span></div>
+            <div class="stat-box warning"><span class="stat-value" id="totalLosses">-</span><span class="stat-label">Losses</span></div>
+            <div class="stat-box"><span class="stat-value" id="winRate">-</span><span class="stat-label">Win Rate</span></div>
+            <div class="stat-box"><span class="stat-value" id="avgScore">-</span><span class="stat-label">Avg Score</span></div>
+        </div>
+
+        <!-- Filters -->
         <div class="search-bar">
             <div class="filter-group">
                 <button class="filter-btn active" data-filter="all">All</button>
@@ -62,23 +167,28 @@
                 <option value="Allies">Allies</option>
                 <option value="Axis">Axis</option>
             </select>
+            <select class="form-select" id="enemyFilter" style="width: auto;">
+                <option value="">All Enemies</option>
+            </select>
+            <span class="match-count" id="matchCount"></span>
         </div>
 
+        <!-- Matches Table -->
         <div class="card">
             <div class="table-container">
                 <table class="data-table" id="matchesTable">
                     <thead>
                         <tr>
-                            <th>Date</th>
-                            <th>Match ID</th>
-                            <th>Map</th>
-                            <th>Enemy</th>
+                            <th class="sortable" data-column="match_date">Date</th>
+                            <th>ID</th>
+                            <th class="sortable" data-column="map">Map</th>
+                            <th class="sortable" data-column="enemy_team">Enemy</th>
                             <th>Faction</th>
-                            <th>Score</th>
-                            <th>Result</th>
+                            <th class="sortable" data-column="my_score">Score</th>
+                            <th class="sortable" data-column="result">Result</th>
                             <th>Duration</th>
                             <th>MVP</th>
-                            <th>Actions</th>
+                            <th></th>
                         </tr>
                     </thead>
                     <tbody id="matchesBody">
@@ -89,6 +199,7 @@
         </div>
     </div>
 
+    <!-- Match Detail Modal -->
     <div class="modal-overlay" id="matchModal">
         <div class="modal" style="max-width: 900px;">
             <div class="modal-header">
@@ -97,6 +208,7 @@
             </div>
             <div class="modal-body" id="modalBody"></div>
             <div class="modal-footer">
+                <button class="btn btn-danger" id="deleteMatchBtn" style="margin-right: auto;">Delete Match</button>
                 <button class="btn btn-secondary" onclick="closeMatchModal()">Close</button>
             </div>
         </div>
@@ -114,19 +226,30 @@
         let currentResultFilter = 'all';
         let currentMapFilter = '';
         let currentFactionFilter = '';
-        
+        let currentEnemyFilter = '';
+        let currentSort = { column: 'match_date', direction: 'desc' };
+        let currentModalMatchId = null;
+
+        // ========================================
+        // Init
+        // ========================================
+
         async function init() {
             HLL.showLoading('Loading matches...');
             await HLL.init();
             if (HLL.isOnline) {
                 await loadMatches();
-                populateMapFilter();
+                populateFilters();
+            } else {
+                document.getElementById('matchesBody').innerHTML =
+                    '<tr><td colspan="10" class="text-center text-muted">Database offline</td></tr>';
             }
             HLL.hideLoading();
             setupEventListeners();
         }
-        
+
         function setupEventListeners() {
+            // Result filter buttons
             document.querySelectorAll('.filter-btn').forEach(btn => {
                 btn.addEventListener('click', () => {
                     document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
@@ -135,6 +258,8 @@
                     filterAndRender();
                 });
             });
+
+            // Dropdown filters
             document.getElementById('mapFilter').addEventListener('change', (e) => {
                 currentMapFilter = e.target.value;
                 filterAndRender();
@@ -143,123 +268,364 @@
                 currentFactionFilter = e.target.value;
                 filterAndRender();
             });
+            document.getElementById('enemyFilter').addEventListener('change', (e) => {
+                currentEnemyFilter = e.target.value;
+                filterAndRender();
+            });
+
+            // Sortable column headers
+            document.querySelectorAll('.data-table th.sortable').forEach(th => {
+                th.addEventListener('click', () => {
+                    const col = th.dataset.column;
+                    if (currentSort.column === col) {
+                        currentSort.direction = currentSort.direction === 'asc' ? 'desc' : 'asc';
+                    } else {
+                        currentSort.column = col;
+                        currentSort.direction = col === 'match_date' ? 'desc' : 'asc';
+                    }
+                    document.querySelectorAll('.data-table th.sortable').forEach(h =>
+                        h.classList.remove('sorted-asc', 'sorted-desc'));
+                    th.classList.add(`sorted-${currentSort.direction}`);
+                    renderTable();
+                });
+            });
+
+            // Modal
+            document.getElementById('matchModal').addEventListener('click', (e) => {
+                if (e.target.id === 'matchModal') closeMatchModal();
+            });
+            document.addEventListener('keydown', (e) => {
+                if (e.key === 'Escape') closeMatchModal();
+            });
+
+            // Delete match
+            document.getElementById('deleteMatchBtn').addEventListener('click', handleDeleteMatch);
         }
-        
+
+        // ========================================
+        // Data Loading
+        // ========================================
+
         async function loadMatches() {
             allMatches = await HLL.loadMatches(500);
             filterAndRender();
         }
-        
-        function populateMapFilter() {
-            const maps = [...new Set(allMatches.map(m => m.map))].sort();
-            const select = document.getElementById('mapFilter');
+
+        function populateFilters() {
+            const maps = [...new Set(allMatches.map(m => m.map).filter(Boolean))].sort();
+            const mapSelect = document.getElementById('mapFilter');
             maps.forEach(map => {
-                const option = document.createElement('option');
-                option.value = map;
-                option.textContent = map;
-                select.appendChild(option);
+                const opt = document.createElement('option');
+                opt.value = map;
+                opt.textContent = map;
+                mapSelect.appendChild(opt);
+            });
+
+            const enemies = [...new Set(allMatches.map(m => m.enemy_team).filter(Boolean))].sort();
+            const enemySelect = document.getElementById('enemyFilter');
+            enemies.forEach(enemy => {
+                const opt = document.createElement('option');
+                opt.value = enemy;
+                opt.textContent = enemy;
+                enemySelect.appendChild(opt);
             });
         }
-        
+
+        // ========================================
+        // Filtering & Rendering
+        // ========================================
+
         function filterAndRender() {
             filteredMatches = allMatches.filter(m => {
                 if (currentResultFilter !== 'all' && m.result !== currentResultFilter) return false;
                 if (currentMapFilter && m.map !== currentMapFilter) return false;
                 if (currentFactionFilter && m.my_faction !== currentFactionFilter) return false;
+                if (currentEnemyFilter && m.enemy_team !== currentEnemyFilter) return false;
                 return true;
             });
+            updateSummary();
             renderTable();
         }
-        
+
+        function updateSummary() {
+            const total = filteredMatches.length;
+            const wins = filteredMatches.filter(m => m.result === 'W').length;
+            const losses = filteredMatches.filter(m => m.result === 'L').length;
+            const winRate = total > 0 ? Math.round((wins / total) * 100) : 0;
+
+            const totalMy = filteredMatches.reduce((s, m) => s + (m.my_score || 0), 0);
+            const totalEnemy = filteredMatches.reduce((s, m) => s + (m.enemy_score || 0), 0);
+            const avgMy = total > 0 ? (totalMy / total).toFixed(1) : '-';
+            const avgEnemy = total > 0 ? (totalEnemy / total).toFixed(1) : '-';
+
+            document.getElementById('totalMatches').textContent = total;
+            document.getElementById('totalWins').textContent = wins;
+            document.getElementById('totalLosses').textContent = losses;
+            document.getElementById('winRate').textContent = total > 0 ? winRate + '%' : '-';
+            document.getElementById('avgScore').textContent = total > 0 ? `${avgMy} - ${avgEnemy}` : '-';
+            document.getElementById('matchCount').textContent =
+                filteredMatches.length < allMatches.length
+                    ? `Showing ${filteredMatches.length} of ${allMatches.length}`
+                    : `${allMatches.length} matches`;
+        }
+
         function renderTable() {
             const tbody = document.getElementById('matchesBody');
             if (filteredMatches.length === 0) {
                 tbody.innerHTML = '<tr><td colspan="10" class="text-center text-muted">No matches found</td></tr>';
                 return;
             }
-            tbody.innerHTML = filteredMatches.map(m => `
-                <tr>
+
+            const sorted = [...filteredMatches].sort((a, b) => {
+                let aVal = a[currentSort.column];
+                let bVal = b[currentSort.column];
+                if (aVal == null) return 1;
+                if (bVal == null) return -1;
+
+                if (currentSort.column === 'match_date') {
+                    aVal = new Date(aVal).getTime();
+                    bVal = new Date(bVal).getTime();
+                }
+                if (typeof aVal === 'number' && typeof bVal === 'number') {
+                    return currentSort.direction === 'asc' ? aVal - bVal : bVal - aVal;
+                }
+                aVal = String(aVal).toLowerCase();
+                bVal = String(bVal).toLowerCase();
+                return currentSort.direction === 'asc'
+                    ? aVal.localeCompare(bVal)
+                    : bVal.localeCompare(aVal);
+            });
+
+            tbody.innerHTML = sorted.map(m => `
+                <tr data-clickable onclick="openMatchModal('${m.match_id}')">
                     <td>${HLL.formatDate(m.match_date)}</td>
-                    <td style="font-family: monospace; font-size: 11px;">${m.match_id}</td>
-                    <td>${m.map}</td>
-                    <td>${m.enemy_team}</td>
-                    <td><span class="faction-badge faction-${m.my_faction.toLowerCase()}">${m.my_faction}</span></td>
-                    <td><strong>${m.my_score}</strong> - ${m.enemy_score}</td>
-                    <td><span class="badge ${HLL.getResultBadgeClass(m.result)}">${m.result}</span></td>
+                    <td style="font-family: monospace; font-size: 11px; color: var(--text-muted);">${m.match_id}</td>
+                    <td>${m.map || '-'}</td>
+                    <td>${m.enemy_team || '-'}</td>
+                    <td><span class="faction-badge faction-${(m.my_faction || '').toLowerCase()}">${m.my_faction || '-'}</span></td>
+                    <td><strong>${m.my_score ?? '-'}</strong> - ${m.enemy_score ?? '-'}</td>
+                    <td><span class="badge ${HLL.getResultBadgeClass(m.result)}">${m.result || '-'}</span></td>
                     <td>${m.duration || '-'}</td>
                     <td>${m.mvp_name || '-'}</td>
-                    <td><button class="btn btn-sm btn-secondary" onclick="openMatchModal('${m.match_id}')">View</button></td>
+                    <td><button class="btn btn-sm btn-secondary" onclick="event.stopPropagation(); openMatchModal('${m.match_id}')">View</button></td>
                 </tr>
             `).join('');
         }
-        
+
+        // ========================================
+        // Match Detail Modal
+        // ========================================
+
         async function openMatchModal(matchId) {
             HLL.showLoading('Loading match details...');
+            currentModalMatchId = matchId;
             try {
-                const { data: match } = await HLL.supabase.from('matches').select('*').eq('match_id', matchId).single();
-                const { data: details } = await HLL.supabase.from('match_details').select('*').eq('match_id', matchId).order('team').order('kills', { ascending: false });
-                const { data: noShows } = await HLL.supabase.from('no_shows').select('*').eq('match_id', matchId);
-                
+                const { data: match } = await HLL.supabase
+                    .from('matches').select('*').eq('match_id', matchId).single();
+                const { data: details } = await HLL.supabase
+                    .from('match_details').select('*').eq('match_id', matchId)
+                    .order('team').order('kills', { ascending: false });
+                const { data: lineups } = await HLL.supabase
+                    .from('match_lineups').select('*').eq('match_id', matchId);
+                const { data: noShows } = await HLL.supabase
+                    .from('no_shows').select('*').eq('match_id', matchId);
+
                 HLL.hideLoading();
-                renderMatchModal(match, details || [], noShows || []);
+                renderMatchModal(match, details || [], lineups || [], noShows || []);
                 document.getElementById('matchModal').classList.add('active');
             } catch (err) {
                 HLL.hideLoading();
+                console.error('Error loading match:', err);
                 HLL.showAlert('Failed to load match details', 'error');
             }
         }
-        
-        function renderMatchModal(match, details, noShows) {
-            document.getElementById('modalMatchTitle').textContent = `${match.my_team} vs ${match.enemy_team} - ${match.map}`;
-            const friendlyPlayers = details.filter(d => d.team === 'Friendly');
-            const enemyPlayers = details.filter(d => d.team === 'Enemy');
-            
+
+        function renderMatchModal(match, details, lineups, noShows) {
+            document.getElementById('modalMatchTitle').textContent =
+                `${match.my_team} vs ${match.enemy_team} — ${match.map}`;
+
+            const friendly = details.filter(d => d.team === 'Friendly');
+            const enemy = details.filter(d => d.team === 'Enemy');
+
+            // Role map from match_lineups
+            const roleMap = {};
+            lineups.forEach(l => { roleMap[l.player_name] = l.role; });
+
+            // Team totals
+            const fK = friendly.reduce((s, p) => s + (p.kills || 0), 0);
+            const fD = friendly.reduce((s, p) => s + (p.deaths || 0), 0);
+            const eK = enemy.reduce((s, p) => s + (p.kills || 0), 0);
+            const eD = enemy.reduce((s, p) => s + (p.deaths || 0), 0);
+
             document.getElementById('modalBody').innerHTML = `
-                <div class="stat-row" style="justify-content: center;">
-                    <div class="stat-box"><span class="stat-value">${HLL.formatDate(match.match_date)}</span><span class="stat-label">Date</span></div>
-                    <div class="stat-box"><span class="stat-value">${match.map}</span><span class="stat-label">Map</span></div>
-                    <div class="stat-box"><span class="stat-value">${match.my_faction}</span><span class="stat-label">Faction</span></div>
-                    <div class="stat-box ${match.result === 'W' ? 'ok' : 'warning'}"><span class="stat-value">${match.my_score} - ${match.enemy_score}</span><span class="stat-label">${match.result === 'W' ? 'Victory' : 'Defeat'}</span></div>
-                    <div class="stat-box"><span class="stat-value">${match.duration || '-'}</span><span class="stat-label">Duration</span></div>
-                    <div class="stat-box"><span class="stat-value">${match.mvp_name || '-'}</span><span class="stat-label">MVP</span></div>
+                <div class="stat-row" style="justify-content: center; flex-wrap: wrap;">
+                    <div class="stat-box">
+                        <span class="stat-value">${HLL.formatDate(match.match_date)}</span>
+                        <span class="stat-label">Date</span>
+                    </div>
+                    <div class="stat-box">
+                        <span class="stat-value">${match.map}</span>
+                        <span class="stat-label">Map</span>
+                    </div>
+                    <div class="stat-box">
+                        <span class="stat-value">
+                            <span class="faction-badge faction-${match.my_faction.toLowerCase()}">${match.my_faction}</span>
+                        </span>
+                        <span class="stat-label">Faction</span>
+                    </div>
+                    <div class="stat-box ${match.result === 'W' ? 'ok' : 'warning'}">
+                        <span class="stat-value">${match.my_score} - ${match.enemy_score}</span>
+                        <span class="stat-label">${match.result === 'W' ? 'Victory' : match.result === 'L' ? 'Defeat' : 'Draw'}</span>
+                    </div>
+                    <div class="stat-box">
+                        <span class="stat-value">${match.duration || '-'}</span>
+                        <span class="stat-label">Duration</span>
+                    </div>
+                    <div class="stat-box">
+                        <span class="stat-value">${match.mvp_name ? match.mvp_name + ' ⭐' : '-'}</span>
+                        <span class="stat-label">MVP</span>
+                    </div>
                 </div>
-                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 16px;">
-                    <div>
-                        <h4 style="margin-bottom: 8px; color: var(--accent-green);">${match.my_team} (${friendlyPlayers.length})</h4>
-                        <div class="table-container" style="max-height: 300px; overflow-y: auto;">
+
+                <div class="match-detail-grid">
+                    <div class="team-section">
+                        <h4 style="color: var(--accent-green);">
+                            ${match.my_team} (${friendly.length}) — ${fK}K / ${fD}D
+                        </h4>
+                        <div class="table-container">
                             <table class="data-table">
-                                <thead><tr><th>Player</th><th>Role</th><th class="numeric">K</th><th class="numeric">D</th><th class="numeric">CE</th></tr></thead>
-                                <tbody>${friendlyPlayers.length > 0 ? friendlyPlayers.map(p => `
-                                    <tr ${p.player_name === match.mvp_name ? 'style="background: rgba(245, 166, 35, 0.1);"' : ''}>
-                                        <td>${p.player_name} ${p.player_name === match.mvp_name ? '⭐' : ''}</td>
-                                        <td style="font-size: 11px;">${p.role || '-'}</td>
+                                <thead>
+                                    <tr>
+                                        <th>Player</th>
+                                        <th>Role</th>
+                                        <th class="numeric">K</th>
+                                        <th class="numeric">D</th>
+                                        <th class="numeric">CE</th>
+                                        <th class="numeric">Supp</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    ${friendly.length > 0 ? friendly.map(p => `
+                                    <tr class="${p.player_name === match.mvp_name ? 'mvp-row' : ''}">
+                                        <td>${p.player_name}${p.player_name === match.mvp_name ? ' ⭐' : ''}</td>
+                                        <td style="font-size: 11px; color: var(--text-secondary);">${roleMap[p.player_name] || p.role || '-'}</td>
                                         <td class="numeric">${p.kills}</td>
                                         <td class="numeric">${p.deaths}</td>
                                         <td class="numeric">${p.combat_eff}</td>
-                                    </tr>`).join('') : '<tr><td colspan="5" class="text-center text-muted">No data</td></tr>'}</tbody>
+                                        <td class="numeric">${p.support_pts || 0}</td>
+                                    </tr>`).join('') : '<tr><td colspan="6" class="text-center text-muted">No data</td></tr>'}
+                                </tbody>
                             </table>
                         </div>
                     </div>
-                    <div>
-                        <h4 style="margin-bottom: 8px; color: var(--accent-red);">${match.enemy_team} (${enemyPlayers.length})</h4>
-                        <div class="table-container" style="max-height: 300px; overflow-y: auto;">
+
+                    <div class="team-section">
+                        <h4 style="color: var(--accent-red);">
+                            ${match.enemy_team} (${enemy.length}) — ${eK}K / ${eD}D
+                        </h4>
+                        <div class="table-container">
                             <table class="data-table">
-                                <thead><tr><th>Player</th><th class="numeric">K</th><th class="numeric">D</th><th class="numeric">CE</th></tr></thead>
-                                <tbody>${enemyPlayers.length > 0 ? enemyPlayers.map(p => `
-                                    <tr><td>${p.player_name}</td><td class="numeric">${p.kills}</td><td class="numeric">${p.deaths}</td><td class="numeric">${p.combat_eff}</td></tr>
-                                `).join('') : '<tr><td colspan="4" class="text-center text-muted">No data</td></tr>'}</tbody>
+                                <thead>
+                                    <tr>
+                                        <th>Player</th>
+                                        <th class="numeric">K</th>
+                                        <th class="numeric">D</th>
+                                        <th class="numeric">CE</th>
+                                        <th class="numeric">Supp</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    ${enemy.length > 0 ? enemy.map(p => `
+                                    <tr>
+                                        <td>${p.player_name}</td>
+                                        <td class="numeric">${p.kills}</td>
+                                        <td class="numeric">${p.deaths}</td>
+                                        <td class="numeric">${p.combat_eff}</td>
+                                        <td class="numeric">${p.support_pts || 0}</td>
+                                    </tr>`).join('') : '<tr><td colspan="5" class="text-center text-muted">No data</td></tr>'}
+                                </tbody>
                             </table>
                         </div>
                     </div>
                 </div>
-                ${noShows.length > 0 ? `<div style="margin-top: 16px;"><h4 style="margin-bottom: 8px; color: var(--accent-red);">No-Shows (${noShows.length})</h4><div style="display: flex; gap: 8px; flex-wrap: wrap;">${noShows.map(ns => `<span class="badge badge-team-merc">${ns.player_name}</span>`).join('')}</div></div>` : ''}
+
+                ${noShows.length > 0 ? `
+                <div class="no-shows-section">
+                    <h4>No-Shows (${noShows.length})</h4>
+                    <div class="no-shows-list">
+                        ${noShows.map(ns => `<span class="badge badge-team-merc">${ns.player_name}</span>`).join('')}
+                    </div>
+                </div>` : ''}
             `;
         }
-        
-        function closeMatchModal() { document.getElementById('matchModal').classList.remove('active'); }
-        document.getElementById('matchModal').addEventListener('click', (e) => { if (e.target.id === 'matchModal') closeMatchModal(); });
-        document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeMatchModal(); });
-        
+
+        function closeMatchModal() {
+            document.getElementById('matchModal').classList.remove('active');
+            currentModalMatchId = null;
+        }
+
+        // ========================================
+        // Delete Match
+        // ========================================
+
+        async function handleDeleteMatch() {
+            if (!currentModalMatchId) return;
+            if (!confirm(`Delete match ${currentModalMatchId}?\n\nThis removes all match details, lineups, and no-show records. This cannot be undone.`)) {
+                return;
+            }
+
+            HLL.showLoading('Deleting match...');
+            try {
+                const { error } = await HLL.supabase
+                    .from('matches')
+                    .delete()
+                    .eq('match_id', currentModalMatchId);
+
+                if (error) throw error;
+
+                HLL.hideLoading();
+                closeMatchModal();
+                HLL.showAlert(`Match ${currentModalMatchId} deleted`, 'info');
+
+                // Reload and refresh filters
+                await loadMatches();
+                repopulateFilters();
+            } catch (err) {
+                HLL.hideLoading();
+                console.error('Delete error:', err);
+                HLL.showAlert('Failed to delete match: ' + err.message, 'error');
+            }
+        }
+
+        function repopulateFilters() {
+            const savedMap = currentMapFilter;
+            const savedEnemy = currentEnemyFilter;
+
+            const mapSelect = document.getElementById('mapFilter');
+            mapSelect.innerHTML = '<option value="">All Maps</option>';
+            [...new Set(allMatches.map(m => m.map).filter(Boolean))].sort().forEach(map => {
+                const opt = document.createElement('option');
+                opt.value = map;
+                opt.textContent = map;
+                mapSelect.appendChild(opt);
+            });
+            mapSelect.value = savedMap || '';
+            currentMapFilter = mapSelect.value;
+
+            const enemySelect = document.getElementById('enemyFilter');
+            enemySelect.innerHTML = '<option value="">All Enemies</option>';
+            [...new Set(allMatches.map(m => m.enemy_team).filter(Boolean))].sort().forEach(enemy => {
+                const opt = document.createElement('option');
+                opt.value = enemy;
+                opt.textContent = enemy;
+                enemySelect.appendChild(opt);
+            });
+            enemySelect.value = savedEnemy || '';
+            currentEnemyFilter = enemySelect.value;
+
+            filterAndRender();
+        }
+
         init();
     </script>
 </body>
