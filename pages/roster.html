@@ -1,0 +1,498 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Roster - HLL Tool v0.3.0</title>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <link rel="stylesheet" href="../css/styles.css">
+</head>
+<body>
+    <!-- Navigation -->
+    <nav class="nav-bar">
+        <a href="../index.html" class="nav-logo">HLL Tool</a>
+        <div class="nav-links">
+            <a href="../index.html" class="nav-link">Home</a>
+            <a href="lineup.html" class="nav-link">Lineups</a>
+            <a href="roster.html" class="nav-link active">Roster</a>
+            <a href="stats.html" class="nav-link">Stats</a>
+            <a href="matches.html" class="nav-link">Matches</a>
+            <a href="admin.html" class="nav-link">Admin</a>
+        </div>
+        <div class="nav-spacer"></div>
+        <div class="nav-status">
+            <span class="status-dot"></span>
+            <span>Connecting...</span>
+        </div>
+    </nav>
+
+    <div class="app-container">
+        <!-- Header -->
+        <div class="page-header">
+            <h1 class="page-title">Roster</h1>
+            <span class="version-badge">v0.3.0</span>
+        </div>
+
+        <!-- Stats Summary -->
+        <div class="stat-row" id="rosterStats">
+            <div class="stat-box">
+                <span class="stat-value" id="totalCount">-</span>
+                <span class="stat-label">Total</span>
+            </div>
+            <div class="stat-box">
+                <span class="stat-value" id="circleCount">-</span>
+                <span class="stat-label">Circle</span>
+            </div>
+            <div class="stat-box">
+                <span class="stat-value" id="dkbCount">-</span>
+                <span class="stat-label">DKB</span>
+            </div>
+            <div class="stat-box">
+                <span class="stat-value" id="mercCount">-</span>
+                <span class="stat-label">Merc</span>
+            </div>
+            <div class="stat-box">
+                <span class="stat-value" id="activeCount">-</span>
+                <span class="stat-label">Active (30d)</span>
+            </div>
+        </div>
+
+        <!-- Search & Filters -->
+        <div class="search-bar">
+            <div class="search-input-wrapper">
+                <span class="search-icon">🔍</span>
+                <input type="text" class="form-input" id="searchInput" placeholder="Search players...">
+            </div>
+            <div class="filter-group">
+                <button class="filter-btn active" data-filter="all">All</button>
+                <button class="filter-btn" data-filter="Circle">Circle</button>
+                <button class="filter-btn" data-filter="DKB">DKB</button>
+                <button class="filter-btn" data-filter="Merc">Merc</button>
+            </div>
+            <button class="btn btn-secondary" onclick="exportRoster()">📤 Export CSV</button>
+        </div>
+
+        <!-- Roster Table -->
+        <div class="card">
+            <div class="table-container">
+                <table class="data-table" id="rosterTable">
+                    <thead>
+                        <tr>
+                            <th class="sortable" data-column="name">Player</th>
+                            <th class="sortable" data-column="team">Team</th>
+                            <th class="sortable" data-column="primary_role">Primary Role</th>
+                            <th class="sortable" data-column="total_matches">Matches</th>
+                            <th class="sortable" data-column="attendance_pct">Attend%</th>
+                            <th class="sortable" data-column="avg_kills">Avg Kills</th>
+                            <th class="sortable" data-column="kd_ratio">K/D</th>
+                            <th class="sortable" data-column="avg_ce">Avg CE</th>
+                            <th class="sortable" data-column="mvp_count">MVPs</th>
+                            <th class="sortable" data-column="last_seen">Last Seen</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="rosterBody">
+                        <tr>
+                            <td colspan="11" class="text-center text-muted">Loading...</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Player Detail Modal -->
+    <div class="modal-overlay" id="playerModal">
+        <div class="modal" style="max-width: 600px;">
+            <div class="modal-header">
+                <span class="modal-title" id="modalPlayerName">Player Details</span>
+                <button class="modal-close" onclick="closePlayerModal()">×</button>
+            </div>
+            <div class="modal-body" id="modalBody">
+                <!-- Populated by JS -->
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="closePlayerModal()">Close</button>
+                <button class="btn btn-primary" onclick="savePlayerChanges()">Save Changes</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Loading Overlay -->
+    <div class="loading-overlay hidden" id="loadingOverlay">
+        <div class="loading-spinner"></div>
+        <div class="loading-text">Loading...</div>
+    </div>
+
+    <script src="../js/hll.js"></script>
+    <script>
+        // ============================================================================
+        // STATE
+        // ============================================================================
+        
+        let allPlayers = [];
+        let filteredPlayers = [];
+        let currentFilter = 'all';
+        let currentSearch = '';
+        let currentPlayerSteamId = null;
+        
+        // ============================================================================
+        // INITIALIZATION
+        // ============================================================================
+        
+        async function init() {
+            HLL.showLoading('Loading roster...');
+            await HLL.init();
+            
+            if (HLL.isOnline) {
+                await loadRoster();
+            } else {
+                document.getElementById('rosterBody').innerHTML = 
+                    '<tr><td colspan="11" class="text-center text-muted">Offline - Connect to database</td></tr>';
+            }
+            
+            HLL.hideLoading();
+            
+            // Set up event listeners
+            setupEventListeners();
+        }
+        
+        function setupEventListeners() {
+            // Search input
+            document.getElementById('searchInput').addEventListener('input', (e) => {
+                currentSearch = e.target.value.toLowerCase();
+                filterAndRender();
+            });
+            
+            // Filter buttons
+            document.querySelectorAll('.filter-btn').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+                    btn.classList.add('active');
+                    currentFilter = btn.dataset.filter;
+                    filterAndRender();
+                });
+            });
+        }
+        
+        // ============================================================================
+        // DATA LOADING
+        // ============================================================================
+        
+        async function loadRoster() {
+            try {
+                // Load player stats view (includes calculated fields)
+                const { data, error } = await HLL.supabase
+                    .from('players')
+                    .select('*')
+                    .order('name');
+                
+                if (error) throw error;
+                
+                allPlayers = data || [];
+                
+                // Calculate attendance % and K/D client-side for now
+                allPlayers = allPlayers.map(p => ({
+                    ...p,
+                    attendance_pct: (p.total_matches + p.no_shows) > 0 
+                        ? Math.round(p.total_matches / (p.total_matches + p.no_shows) * 100) 
+                        : null,
+                    kd_ratio: p.total_deaths > 0 
+                        ? (p.total_kills / p.total_deaths).toFixed(2) 
+                        : null
+                }));
+                
+                updateStats();
+                filterAndRender();
+                
+                // Initialize sortable table
+                HLL.initSortableTable('rosterTable', filteredPlayers, renderPlayerRow);
+                
+            } catch (err) {
+                console.error('Error loading roster:', err);
+                HLL.showAlert('Failed to load roster', 'error');
+            }
+        }
+        
+        function updateStats() {
+            const total = allPlayers.length;
+            const circle = allPlayers.filter(p => p.team === 'Circle').length;
+            const dkb = allPlayers.filter(p => p.team === 'DKB').length;
+            const merc = allPlayers.filter(p => p.team === 'Merc').length;
+            
+            // Active in last 30 days
+            const thirtyDaysAgo = new Date();
+            thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+            const active = allPlayers.filter(p => p.last_seen && new Date(p.last_seen) > thirtyDaysAgo).length;
+            
+            document.getElementById('totalCount').textContent = total;
+            document.getElementById('circleCount').textContent = circle;
+            document.getElementById('dkbCount').textContent = dkb;
+            document.getElementById('mercCount').textContent = merc;
+            document.getElementById('activeCount').textContent = active;
+        }
+        
+        // ============================================================================
+        // FILTERING & RENDERING
+        // ============================================================================
+        
+        function filterAndRender() {
+            filteredPlayers = allPlayers.filter(p => {
+                // Team filter
+                if (currentFilter !== 'all' && p.team !== currentFilter) return false;
+                
+                // Search filter
+                if (currentSearch) {
+                    const searchFields = [
+                        p.name,
+                        p.steam_id,
+                        p.primary_role,
+                        p.notes
+                    ].filter(Boolean).join(' ').toLowerCase();
+                    
+                    if (!searchFields.includes(currentSearch)) return false;
+                }
+                
+                return true;
+            });
+            
+            renderTable();
+        }
+        
+        function renderTable() {
+            const tbody = document.getElementById('rosterBody');
+            
+            if (filteredPlayers.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="11" class="text-center text-muted">No players found</td></tr>';
+                return;
+            }
+            
+            tbody.innerHTML = filteredPlayers.map(renderPlayerRow).join('');
+        }
+        
+        function renderPlayerRow(p) {
+            return `
+                <tr data-steam-id="${p.steam_id}">
+                    <td>
+                        <strong>${HLL.formatPlayerName(p.name, p.team)}</strong>
+                    </td>
+                    <td>
+                        <span class="badge ${HLL.getTeamBadgeClass(p.team)}">${p.team}</span>
+                    </td>
+                    <td>${p.primary_role || '-'}</td>
+                    <td class="numeric">${p.total_matches || 0}</td>
+                    <td class="numeric ${getAttendanceClass(p.attendance_pct)}">
+                        ${p.attendance_pct !== null ? p.attendance_pct + '%' : '-'}
+                    </td>
+                    <td class="numeric">${p.avg_kills !== null ? p.avg_kills : '-'}</td>
+                    <td class="numeric">${p.kd_ratio || '-'}</td>
+                    <td class="numeric">${p.avg_ce || '-'}</td>
+                    <td class="numeric">${p.mvp_count || 0}</td>
+                    <td>${p.last_seen ? HLL.formatDate(p.last_seen) : '-'}</td>
+                    <td>
+                        <button class="btn btn-sm btn-secondary" onclick="openPlayerModal('${p.steam_id}')">
+                            Edit
+                        </button>
+                    </td>
+                </tr>
+            `;
+        }
+        
+        function getAttendanceClass(pct) {
+            if (pct === null) return '';
+            if (pct >= 80) return 'text-success';
+            if (pct < 50) return 'text-danger';
+            return '';
+        }
+        
+        // ============================================================================
+        // PLAYER MODAL
+        // ============================================================================
+        
+        function openPlayerModal(steamId) {
+            const player = allPlayers.find(p => p.steam_id === steamId);
+            if (!player) return;
+            
+            currentPlayerSteamId = steamId;
+            
+            document.getElementById('modalPlayerName').textContent = player.name;
+            
+            const modalBody = document.getElementById('modalBody');
+            modalBody.innerHTML = `
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px;">
+                    <div class="form-group">
+                        <label class="form-label">Steam ID</label>
+                        <input type="text" class="form-input" value="${player.steam_id}" disabled>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Team</label>
+                        <select class="form-select" id="editTeam">
+                            ${HLL.teams.map(t => `<option value="${t}" ${player.team === t ? 'selected' : ''}>${t}</option>`).join('')}
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Primary Role</label>
+                        <select class="form-select" id="editPrimaryRole">
+                            <option value="">None</option>
+                            ${HLL.roles.map(r => `<option value="${r}" ${player.primary_role === r ? 'selected' : ''}>${r}</option>`).join('')}
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Secondary Role</label>
+                        <select class="form-select" id="editSecondaryRole">
+                            <option value="">None</option>
+                            ${HLL.roles.map(r => `<option value="${r}" ${player.secondary_role === r ? 'selected' : ''}>${r}</option>`).join('')}
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Tertiary Role</label>
+                        <select class="form-select" id="editTertiaryRole">
+                            <option value="">None</option>
+                            ${HLL.roles.map(r => `<option value="${r}" ${player.tertiary_role === r ? 'selected' : ''}>${r}</option>`).join('')}
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Notes</label>
+                        <input type="text" class="form-input" id="editNotes" value="${player.notes || ''}">
+                    </div>
+                </div>
+                
+                <hr style="border-color: var(--border-color); margin: 16px 0;">
+                
+                <h4 style="margin-bottom: 12px; color: var(--text-secondary);">Statistics</h4>
+                <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px;">
+                    <div class="stat-box">
+                        <span class="stat-value">${player.total_matches || 0}</span>
+                        <span class="stat-label">Matches</span>
+                    </div>
+                    <div class="stat-box">
+                        <span class="stat-value">${player.attendance_pct !== null ? player.attendance_pct + '%' : '-'}</span>
+                        <span class="stat-label">Attendance</span>
+                    </div>
+                    <div class="stat-box">
+                        <span class="stat-value">${player.total_kills || 0}</span>
+                        <span class="stat-label">Total Kills</span>
+                    </div>
+                    <div class="stat-box">
+                        <span class="stat-value">${player.kd_ratio || '-'}</span>
+                        <span class="stat-label">K/D</span>
+                    </div>
+                    <div class="stat-box">
+                        <span class="stat-value">${player.most_kills || 0}</span>
+                        <span class="stat-label">Most Kills</span>
+                    </div>
+                    <div class="stat-box">
+                        <span class="stat-value">${player.avg_ce || '-'}</span>
+                        <span class="stat-label">Avg CE</span>
+                    </div>
+                    <div class="stat-box">
+                        <span class="stat-value">${player.avg_support || '-'}</span>
+                        <span class="stat-label">Avg Support</span>
+                    </div>
+                    <div class="stat-box">
+                        <span class="stat-value">${player.mvp_count || 0}</span>
+                        <span class="stat-label">MVPs</span>
+                    </div>
+                </div>
+                
+                <div style="margin-top: 16px; font-size: 12px; color: var(--text-muted);">
+                    <div>First seen: ${player.first_seen ? HLL.formatDate(player.first_seen) : 'Never'}</div>
+                    <div>Last seen: ${player.last_seen ? HLL.formatDate(player.last_seen) : 'Never'}</div>
+                    ${player.previous_names?.length ? `<div>Previous names: ${player.previous_names.join(', ')}</div>` : ''}
+                </div>
+            `;
+            
+            document.getElementById('playerModal').classList.add('active');
+        }
+        
+        function closePlayerModal() {
+            document.getElementById('playerModal').classList.remove('active');
+            currentPlayerSteamId = null;
+        }
+        
+        async function savePlayerChanges() {
+            if (!currentPlayerSteamId) return;
+            
+            const updates = {
+                team: document.getElementById('editTeam').value,
+                primary_role: document.getElementById('editPrimaryRole').value || null,
+                secondary_role: document.getElementById('editSecondaryRole').value || null,
+                tertiary_role: document.getElementById('editTertiaryRole').value || null,
+                notes: document.getElementById('editNotes').value || null
+            };
+            
+            HLL.showLoading('Saving...');
+            
+            const success = await HLL.updatePlayer(currentPlayerSteamId, updates);
+            
+            HLL.hideLoading();
+            
+            if (success) {
+                HLL.showAlert('Player updated', 'success');
+                closePlayerModal();
+                await loadRoster(); // Refresh
+            } else {
+                HLL.showAlert('Failed to update player', 'error');
+            }
+        }
+        
+        // ============================================================================
+        // EXPORT
+        // ============================================================================
+        
+        function exportRoster() {
+            const headers = ['Steam ID', 'Name', 'Team', 'Primary Role', 'Secondary Role', 'Tertiary Role', 
+                           'Matches', 'No-Shows', 'Attendance%', 'Total Kills', 'Total Deaths', 'K/D',
+                           'Avg Kills', 'Most Kills', 'Avg CE', 'Avg Support', 'MVP Count', 'First Seen', 'Last Seen', 'Notes'];
+            
+            const rows = filteredPlayers.map(p => [
+                p.steam_id,
+                p.name,
+                p.team,
+                p.primary_role || '',
+                p.secondary_role || '',
+                p.tertiary_role || '',
+                p.total_matches || 0,
+                p.no_shows || 0,
+                p.attendance_pct !== null ? p.attendance_pct : '',
+                p.total_kills || 0,
+                p.total_deaths || 0,
+                p.kd_ratio || '',
+                p.avg_kills || '',
+                p.most_kills || 0,
+                p.avg_ce || '',
+                p.avg_support || '',
+                p.mvp_count || 0,
+                p.first_seen || '',
+                p.last_seen || '',
+                p.notes || ''
+            ]);
+            
+            const csv = [headers, ...rows].map(row => row.map(cell => `"${cell}"`).join(',')).join('\n');
+            
+            const blob = new Blob([csv], { type: 'text/csv' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `HLL_Roster_${new Date().toISOString().split('T')[0]}.csv`;
+            a.click();
+            URL.revokeObjectURL(url);
+            
+            HLL.showAlert('Roster exported', 'success');
+        }
+        
+        // Close modal on overlay click
+        document.getElementById('playerModal').addEventListener('click', (e) => {
+            if (e.target.id === 'playerModal') closePlayerModal();
+        });
+        
+        // Close modal on Escape
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') closePlayerModal();
+        });
+        
+        // Start
+        init();
+    </script>
+</body>
+</html>

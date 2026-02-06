@@ -1,0 +1,320 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HLL Tool v0.3.0</title>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+    <!-- Navigation -->
+    <nav class="nav-bar">
+        <a href="index.html" class="nav-logo">HLL Tool</a>
+        <div class="nav-links">
+            <a href="index.html" class="nav-link active">Home</a>
+            <a href="pages/lineup.html" class="nav-link">Lineups</a>
+            <a href="pages/roster.html" class="nav-link">Roster</a>
+            <a href="pages/stats.html" class="nav-link">Stats</a>
+            <a href="pages/matches.html" class="nav-link">Matches</a>
+            <a href="pages/admin.html" class="nav-link">Admin</a>
+        </div>
+        <div class="nav-spacer"></div>
+        <div class="nav-status">
+            <span class="status-dot"></span>
+            <span>Connecting...</span>
+        </div>
+    </nav>
+
+    <div class="app-container">
+        <!-- Header -->
+        <div class="page-header">
+            <h1 class="page-title">HLL Clan Management</h1>
+            <span class="version-badge">v0.3.0</span>
+        </div>
+
+        <!-- Quick Stats -->
+        <div class="stat-row" id="quickStats">
+            <div class="stat-box">
+                <span class="stat-value" id="totalPlayers">-</span>
+                <span class="stat-label">Players</span>
+            </div>
+            <div class="stat-box">
+                <span class="stat-value" id="totalMatches">-</span>
+                <span class="stat-label">Matches</span>
+            </div>
+            <div class="stat-box">
+                <span class="stat-value" id="winRate">-</span>
+                <span class="stat-label">Win Rate</span>
+            </div>
+            <div class="stat-box">
+                <span class="stat-value" id="activeLineups">-</span>
+                <span class="stat-label">Active Lineups</span>
+            </div>
+        </div>
+
+        <!-- Quick Links Grid -->
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px; margin-top: 24px;">
+            
+            <!-- Lineups Card -->
+            <div class="card">
+                <div class="card-header">
+                    <span class="card-title">📋 Lineups</span>
+                </div>
+                <div class="card-body">
+                    <p class="text-muted mb-md">Manage match lineups with real-time collaboration. Multiple officers can edit simultaneously.</p>
+                    <a href="pages/lineup.html" class="btn btn-primary">Open Lineup Tool</a>
+                </div>
+            </div>
+
+            <!-- Roster Card -->
+            <div class="card">
+                <div class="card-header">
+                    <span class="card-title">👥 Roster</span>
+                </div>
+                <div class="card-body">
+                    <p class="text-muted mb-md">View all players with stats, roles, and attendance tracking.</p>
+                    <a href="pages/roster.html" class="btn btn-primary">View Roster</a>
+                </div>
+            </div>
+
+            <!-- Stats Card -->
+            <div class="card">
+                <div class="card-header">
+                    <span class="card-title">📊 Team Stats</span>
+                </div>
+                <div class="card-body">
+                    <p class="text-muted mb-md">Map win rates by faction, enemy team records, and performance analytics.</p>
+                    <a href="pages/stats.html" class="btn btn-primary">View Stats</a>
+                </div>
+            </div>
+
+            <!-- Match History Card -->
+            <div class="card">
+                <div class="card-header">
+                    <span class="card-title">🏆 Match History</span>
+                </div>
+                <div class="card-body">
+                    <p class="text-muted mb-md">Browse past matches with detailed player stats and results.</p>
+                    <a href="pages/matches.html" class="btn btn-primary">View Matches</a>
+                </div>
+            </div>
+
+        </div>
+
+        <!-- Recent Activity -->
+        <div class="card mt-lg">
+            <div class="card-header">
+                <span class="card-title">Recent Matches</span>
+                <a href="pages/matches.html" class="btn btn-sm btn-secondary">View All</a>
+            </div>
+            <div class="card-body">
+                <div class="table-container">
+                    <table class="data-table" id="recentMatchesTable">
+                        <thead>
+                            <tr>
+                                <th>Date</th>
+                                <th>Map</th>
+                                <th>Enemy</th>
+                                <th>Faction</th>
+                                <th>Score</th>
+                                <th>Result</th>
+                            </tr>
+                        </thead>
+                        <tbody id="recentMatchesBody">
+                            <tr>
+                                <td colspan="6" class="text-center text-muted">Loading...</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- Connection Settings -->
+        <div class="card mt-lg" id="settingsCard">
+            <div class="card-header">
+                <span class="card-title">⚙️ Connection Settings</span>
+            </div>
+            <div class="card-body">
+                <div class="form-group">
+                    <label class="form-label">Supabase URL</label>
+                    <input type="text" class="form-input" id="supabaseUrl" placeholder="https://xxx.supabase.co">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Supabase Anon Key</label>
+                    <input type="text" class="form-input" id="supabaseKey" placeholder="eyJ...">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Default Team</label>
+                    <select class="form-select" id="defaultTeam">
+                        <option value="Circle">Circle</option>
+                        <option value="DKB">DKB</option>
+                        <option value="Unity">Unity</option>
+                    </select>
+                </div>
+                <div class="flex gap-sm">
+                    <button class="btn btn-primary" onclick="saveSettings()">Save & Connect</button>
+                    <button class="btn btn-secondary" onclick="testConnection()">Test Connection</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Loading Overlay -->
+    <div class="loading-overlay hidden" id="loadingOverlay">
+        <div class="loading-spinner"></div>
+        <div class="loading-text">Loading...</div>
+    </div>
+
+    <script src="js/hll.js"></script>
+    <script>
+        // ============================================================================
+        // PAGE INITIALIZATION
+        // ============================================================================
+        
+        async function init() {
+            // Populate settings form with saved values
+            document.getElementById('supabaseUrl').value = HLL.config.supabaseUrl;
+            document.getElementById('supabaseKey').value = HLL.config.supabaseKey;
+            document.getElementById('defaultTeam').value = HLL.config.defaultTeam;
+            
+            // Initialize connection
+            HLL.showLoading('Connecting to database...');
+            await HLL.init();
+            HLL.hideLoading();
+            
+            if (HLL.isOnline) {
+                loadDashboardData();
+            }
+        }
+        
+        async function loadDashboardData() {
+            try {
+                // Load player count
+                const players = await HLL.loadPlayers();
+                document.getElementById('totalPlayers').textContent = players.length;
+                
+                // Load match stats
+                const matches = await HLL.loadMatches(100);
+                document.getElementById('totalMatches').textContent = matches.length;
+                
+                // Calculate win rate
+                if (matches.length > 0) {
+                    const wins = matches.filter(m => m.result === 'W').length;
+                    const winRate = Math.round((wins / matches.length) * 100);
+                    document.getElementById('winRate').textContent = winRate + '%';
+                }
+                
+                // Count active lineups
+                const { data: lineups } = await HLL.supabase
+                    .from('lineups')
+                    .select('lineup_number, team_id')
+                    .not('steam_id', 'is', null);
+                
+                const uniqueLineups = new Set();
+                lineups?.forEach(l => uniqueLineups.add(`${l.team_id}-${l.lineup_number}`));
+                document.getElementById('activeLineups').textContent = uniqueLineups.size;
+                
+                // Render recent matches
+                renderRecentMatches(matches.slice(0, 5));
+                
+            } catch (err) {
+                console.error('Error loading dashboard:', err);
+            }
+        }
+        
+        function renderRecentMatches(matches) {
+            const tbody = document.getElementById('recentMatchesBody');
+            
+            if (matches.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted">No matches yet</td></tr>';
+                return;
+            }
+            
+            tbody.innerHTML = matches.map(m => `
+                <tr>
+                    <td>${HLL.formatDate(m.match_date)}</td>
+                    <td>${m.map}</td>
+                    <td>${m.enemy_team}</td>
+                    <td>${m.my_faction}</td>
+                    <td>${m.my_score} - ${m.enemy_score}</td>
+                    <td><span class="badge ${HLL.getResultBadgeClass(m.result)}">${m.result}</span></td>
+                </tr>
+            `).join('');
+        }
+        
+        // ============================================================================
+        // SETTINGS
+        // ============================================================================
+        
+        async function saveSettings() {
+            const url = document.getElementById('supabaseUrl').value.trim();
+            const key = document.getElementById('supabaseKey').value.trim();
+            const team = document.getElementById('defaultTeam').value;
+            
+            if (!url || !key) {
+                HLL.showAlert('Please enter both URL and Key', 'error');
+                return;
+            }
+            
+            HLL.saveConfig(url, key, team);
+            
+            HLL.showLoading('Reconnecting...');
+            await HLL.initSupabase();
+            HLL.updateNavStatus();
+            HLL.hideLoading();
+            
+            if (HLL.isOnline) {
+                HLL.showAlert('Connected successfully!', 'success');
+                loadDashboardData();
+            } else {
+                HLL.showAlert('Connection failed', 'error');
+            }
+        }
+        
+        async function testConnection() {
+            const url = document.getElementById('supabaseUrl').value.trim();
+            const key = document.getElementById('supabaseKey').value.trim();
+            
+            if (!url || !key) {
+                HLL.showAlert('Please enter both URL and Key', 'error');
+                return;
+            }
+            
+            HLL.showLoading('Testing connection...');
+            
+            try {
+                const client = window.supabase.createClient(url, key);
+                const { data, error } = await client.from('teams').select('*').limit(1);
+                
+                HLL.hideLoading();
+                
+                if (error) {
+                    HLL.showAlert('Connection failed: ' + error.message, 'error');
+                } else {
+                    HLL.showAlert('Connection successful!', 'success');
+                }
+            } catch (err) {
+                HLL.hideLoading();
+                HLL.showAlert('Connection failed: ' + err.message, 'error');
+            }
+        }
+        
+        // Start
+        init();
+    </script>
+
+    <style>
+        /* Animation for alerts */
+        @keyframes slideIn {
+            from { transform: translateX(100%); opacity: 0; }
+            to { transform: translateX(0); opacity: 1; }
+        }
+        @keyframes slideOut {
+            from { transform: translateX(0); opacity: 1; }
+            to { transform: translateX(100%); opacity: 0; }
+        }
+    </style>
+</body>
+</html>

@@ -1,0 +1,698 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Stats - HLL Tool v0.3.12</title>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <link rel="stylesheet" href="../css/styles.css">
+    <style>
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+            gap: 16px;
+        }
+        
+        .win-bar {
+            display: flex;
+            height: 8px;
+            border-radius: 4px;
+            overflow: hidden;
+            background: var(--bg-tertiary);
+            margin-top: 4px;
+        }
+        
+        .win-bar-fill {
+            background: var(--accent-green);
+            transition: width 0.3s ease;
+        }
+        
+        .faction-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 11px;
+            font-weight: 600;
+        }
+        
+        .faction-allies {
+            background: rgba(56, 139, 253, 0.2);
+            color: var(--accent-blue);
+        }
+        
+        .faction-axis {
+            background: rgba(248, 81, 73, 0.2);
+            color: var(--accent-red);
+        }
+        
+        .map-row {
+            display: flex;
+            align-items: center;
+            padding: 10px 0;
+            border-bottom: 1px solid var(--border-color);
+        }
+        
+        .map-row:last-child {
+            border-bottom: none;
+        }
+        
+        .map-name {
+            flex: 1;
+            font-weight: 500;
+        }
+        
+        .map-stats {
+            display: flex;
+            gap: 16px;
+            align-items: center;
+        }
+        
+        .map-record {
+            font-size: 12px;
+            color: var(--text-secondary);
+            min-width: 60px;
+            text-align: center;
+        }
+        
+        .map-winrate {
+            font-weight: 700;
+            min-width: 50px;
+            text-align: right;
+        }
+        
+        .enemy-row {
+            display: flex;
+            align-items: center;
+            padding: 12px;
+            border-bottom: 1px solid var(--border-color);
+        }
+        
+        .enemy-row:last-child {
+            border-bottom: none;
+        }
+        
+        .enemy-name {
+            flex: 1;
+            font-weight: 500;
+        }
+        
+        .enemy-stats {
+            display: flex;
+            gap: 24px;
+            align-items: center;
+        }
+        
+        .points-diff {
+            font-size: 11px;
+            padding: 2px 6px;
+            border-radius: 4px;
+        }
+        
+        .points-diff.positive {
+            background: rgba(63, 185, 80, 0.2);
+            color: var(--accent-green);
+        }
+        
+        .points-diff.negative {
+            background: rgba(248, 81, 73, 0.2);
+            color: var(--accent-red);
+        }
+        
+        .role-bar-row {
+            display: flex;
+            align-items: center;
+            padding: 6px 0;
+            gap: 10px;
+        }
+        
+        .role-bar-label {
+            min-width: 90px;
+            font-size: 13px;
+            font-weight: 500;
+        }
+        
+        .role-bar-track {
+            flex: 1;
+            height: 14px;
+            background: var(--bg-tertiary);
+            border-radius: 4px;
+            overflow: hidden;
+        }
+        
+        .role-bar-fill {
+            height: 100%;
+            border-radius: 4px;
+            transition: width 0.3s ease;
+        }
+        
+        .role-bar-value {
+            min-width: 50px;
+            text-align: right;
+            font-size: 12px;
+            color: var(--text-secondary);
+        }
+    </style>
+</head>
+<body>
+    <!-- Navigation -->
+    <nav class="nav-bar">
+        <a href="../index.html" class="nav-logo">HLL Tool</a>
+        <div class="nav-links">
+            <a href="../index.html" class="nav-link">Home</a>
+            <a href="lineup.html" class="nav-link">Lineups</a>
+            <a href="roster.html" class="nav-link">Roster</a>
+            <a href="stats.html" class="nav-link active">Stats</a>
+            <a href="matches.html" class="nav-link">Matches</a>
+            <a href="admin.html" class="nav-link">Admin</a>
+        </div>
+        <div class="nav-spacer"></div>
+        <div class="nav-status">
+            <span class="status-dot"></span>
+            <span>Connecting...</span>
+        </div>
+    </nav>
+
+    <div class="app-container">
+        <!-- Header -->
+        <div class="page-header">
+            <h1 class="page-title">Team Stats</h1>
+            <span class="version-badge">v0.3.12</span>
+        </div>
+
+        <!-- Overall Stats -->
+        <div class="stat-row" id="overallStats">
+            <div class="stat-box">
+                <span class="stat-value" id="totalMatches">-</span>
+                <span class="stat-label">Total Matches</span>
+            </div>
+            <div class="stat-box">
+                <span class="stat-value" id="totalWins">-</span>
+                <span class="stat-label">Wins</span>
+            </div>
+            <div class="stat-box">
+                <span class="stat-value" id="totalLosses">-</span>
+                <span class="stat-label">Losses</span>
+            </div>
+            <div class="stat-box">
+                <span class="stat-value" id="overallWinRate">-</span>
+                <span class="stat-label">Win Rate</span>
+            </div>
+            <div class="stat-box">
+                <span class="stat-value" id="pointsFor">-</span>
+                <span class="stat-label">Points For</span>
+            </div>
+            <div class="stat-box">
+                <span class="stat-value" id="pointsAgainst">-</span>
+                <span class="stat-label">Points Against</span>
+            </div>
+        </div>
+
+        <div class="stats-grid">
+            <!-- Map Stats - Allies -->
+            <div class="card">
+                <div class="card-header">
+                    <span class="card-title">
+                        <span class="faction-badge faction-allies">★ Allies</span>
+                        Map Performance
+                    </span>
+                </div>
+                <div class="card-body" id="mapStatsAllies">
+                    <div class="text-center text-muted">Loading...</div>
+                </div>
+            </div>
+
+            <!-- Map Stats - Axis -->
+            <div class="card">
+                <div class="card-header">
+                    <span class="card-title">
+                        <span class="faction-badge faction-axis">✠ Axis</span>
+                        Map Performance
+                    </span>
+                </div>
+                <div class="card-body" id="mapStatsAxis">
+                    <div class="text-center text-muted">Loading...</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Enemy Team Stats -->
+        <div class="card mt-lg">
+            <div class="card-header">
+                <span class="card-title">🎯 Enemy Team Records</span>
+            </div>
+            <div class="card-body" id="enemyStats">
+                <div class="text-center text-muted">Loading...</div>
+            </div>
+        </div>
+
+        <!-- Role Stats -->
+        <div class="stats-grid mt-lg">
+            <!-- Role Distribution -->
+            <div class="card">
+                <div class="card-header">
+                    <span class="card-title">🎖️ Role Distribution</span>
+                </div>
+                <div class="card-body" id="roleDistribution">
+                    <div class="text-center text-muted">Loading...</div>
+                </div>
+            </div>
+
+            <!-- Top by Role -->
+            <div class="card">
+                <div class="card-header">
+                    <span class="card-title">👤 Player Role %</span>
+                </div>
+                <div class="card-body">
+                    <div class="table-container" style="max-height: 500px; overflow: auto;">
+                        <table class="data-table" id="playerRoleTable">
+                            <thead>
+                                <tr>
+                                    <th>Player</th>
+                                    <th class="numeric">Games</th>
+                                    <th class="numeric">CMD</th>
+                                    <th class="numeric">ART</th>
+                                    <th class="numeric">SL</th>
+                                    <th class="numeric">INF</th>
+                                    <th class="numeric">SNIP</th>
+                                    <th class="numeric">SPOT</th>
+                                    <th class="numeric">TC</th>
+                                    <th class="numeric">TANK</th>
+                                    <th class="numeric">DEF</th>
+                                </tr>
+                            </thead>
+                            <tbody id="playerRoleBody">
+                                <tr><td colspan="11" class="text-center text-muted">Loading...</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Top Players -->
+        <div class="stats-grid mt-lg">
+            <!-- Top Killers -->
+            <div class="card">
+                <div class="card-header">
+                    <span class="card-title">🏆 Top Killers (Avg)</span>
+                </div>
+                <div class="card-body">
+                    <table class="data-table" id="topKillersTable">
+                        <thead>
+                            <tr>
+                                <th>#</th>
+                                <th>Player</th>
+                                <th class="numeric">Avg Kills</th>
+                                <th class="numeric">Matches</th>
+                            </tr>
+                        </thead>
+                        <tbody id="topKillersBody">
+                            <tr><td colspan="4" class="text-center text-muted">Loading...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Top K/D -->
+            <div class="card">
+                <div class="card-header">
+                    <span class="card-title">⚔️ Top K/D Ratio</span>
+                </div>
+                <div class="card-body">
+                    <table class="data-table" id="topKDTable">
+                        <thead>
+                            <tr>
+                                <th>#</th>
+                                <th>Player</th>
+                                <th class="numeric">K/D</th>
+                                <th class="numeric">Matches</th>
+                            </tr>
+                        </thead>
+                        <tbody id="topKDBody">
+                            <tr><td colspan="4" class="text-center text-muted">Loading...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Top MVPs -->
+            <div class="card">
+                <div class="card-header">
+                    <span class="card-title">🌟 Most MVPs</span>
+                </div>
+                <div class="card-body">
+                    <table class="data-table" id="topMVPTable">
+                        <thead>
+                            <tr>
+                                <th>#</th>
+                                <th>Player</th>
+                                <th class="numeric">MVPs</th>
+                                <th class="numeric">Matches</th>
+                            </tr>
+                        </thead>
+                        <tbody id="topMVPBody">
+                            <tr><td colspan="4" class="text-center text-muted">Loading...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Best Attendance -->
+            <div class="card">
+                <div class="card-header">
+                    <span class="card-title">📅 Best Attendance</span>
+                </div>
+                <div class="card-body">
+                    <table class="data-table" id="topAttendanceTable">
+                        <thead>
+                            <tr>
+                                <th>#</th>
+                                <th>Player</th>
+                                <th class="numeric">Attend%</th>
+                                <th class="numeric">Matches</th>
+                            </tr>
+                        </thead>
+                        <tbody id="topAttendanceBody">
+                            <tr><td colspan="4" class="text-center text-muted">Loading...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Loading Overlay -->
+    <div class="loading-overlay hidden" id="loadingOverlay">
+        <div class="loading-spinner"></div>
+        <div class="loading-text">Loading...</div>
+    </div>
+
+    <script src="../js/hll.js"></script>
+    <script>
+        async function init() {
+            HLL.showLoading('Loading stats...');
+            await HLL.init();
+            
+            if (HLL.isOnline) {
+                await Promise.all([
+                    loadOverallStats(),
+                    loadMapStats(),
+                    loadEnemyStats(),
+                    loadPlayerLeaderboards(),
+                    loadRoleStats()
+                ]);
+            }
+            
+            HLL.hideLoading();
+        }
+        
+        async function loadOverallStats() {
+            try {
+                const matches = await HLL.loadMatches(1000);
+                
+                const wins = matches.filter(m => m.result === 'W').length;
+                const losses = matches.filter(m => m.result === 'L').length;
+                const pointsFor = matches.reduce((sum, m) => sum + (m.my_score || 0), 0);
+                const pointsAgainst = matches.reduce((sum, m) => sum + (m.enemy_score || 0), 0);
+                const winRate = matches.length > 0 ? Math.round((wins / matches.length) * 100) : 0;
+                
+                document.getElementById('totalMatches').textContent = matches.length;
+                document.getElementById('totalWins').textContent = wins;
+                document.getElementById('totalLosses').textContent = losses;
+                document.getElementById('overallWinRate').textContent = winRate + '%';
+                document.getElementById('pointsFor').textContent = pointsFor;
+                document.getElementById('pointsAgainst').textContent = pointsAgainst;
+            } catch (err) {
+                console.error('Error loading overall stats:', err);
+            }
+        }
+        
+        async function loadMapStats() {
+            try {
+                const matches = await HLL.loadMatches(1000);
+                const mapStats = {};
+                
+                matches.forEach(m => {
+                    const key = `${m.map}-${m.my_faction}`;
+                    if (!mapStats[key]) {
+                        mapStats[key] = { map: m.map, faction: m.my_faction, matches: 0, wins: 0, losses: 0 };
+                    }
+                    mapStats[key].matches++;
+                    if (m.result === 'W') mapStats[key].wins++;
+                    if (m.result === 'L') mapStats[key].losses++;
+                });
+                
+                const alliesStats = Object.values(mapStats).filter(s => s.faction === 'Allies').sort((a, b) => b.matches - a.matches);
+                const axisStats = Object.values(mapStats).filter(s => s.faction === 'Axis').sort((a, b) => b.matches - a.matches);
+                
+                renderMapStats('mapStatsAllies', alliesStats);
+                renderMapStats('mapStatsAxis', axisStats);
+            } catch (err) {
+                console.error('Error loading map stats:', err);
+            }
+        }
+        
+        function renderMapStats(containerId, stats) {
+            const container = document.getElementById(containerId);
+            
+            if (stats.length === 0) {
+                container.innerHTML = '<div class="text-center text-muted">No matches yet</div>';
+                return;
+            }
+            
+            container.innerHTML = stats.map(s => {
+                const winRate = s.matches > 0 ? Math.round((s.wins / s.matches) * 100) : 0;
+                const winRateClass = winRate >= 60 ? 'text-success' : (winRate < 40 ? 'text-danger' : '');
+                
+                return `
+                    <div class="map-row">
+                        <span class="map-name">${s.map}</span>
+                        <div class="map-stats">
+                            <span class="map-record">${s.wins}W - ${s.losses}L</span>
+                            <span class="map-winrate ${winRateClass}">${winRate}%</span>
+                        </div>
+                    </div>
+                    <div class="win-bar">
+                        <div class="win-bar-fill" style="width: ${winRate}%"></div>
+                    </div>
+                `;
+            }).join('');
+        }
+        
+        async function loadEnemyStats() {
+            try {
+                const matches = await HLL.loadMatches(1000);
+                const enemyStats = {};
+                
+                matches.forEach(m => {
+                    const enemy = m.enemy_team;
+                    if (!enemyStats[enemy]) {
+                        enemyStats[enemy] = { enemy, matches: 0, wins: 0, losses: 0, pointsFor: 0, pointsAgainst: 0 };
+                    }
+                    enemyStats[enemy].matches++;
+                    if (m.result === 'W') enemyStats[enemy].wins++;
+                    if (m.result === 'L') enemyStats[enemy].losses++;
+                    enemyStats[enemy].pointsFor += m.my_score || 0;
+                    enemyStats[enemy].pointsAgainst += m.enemy_score || 0;
+                });
+                
+                const sorted = Object.values(enemyStats).sort((a, b) => b.matches - a.matches);
+                renderEnemyStats(sorted);
+            } catch (err) {
+                console.error('Error loading enemy stats:', err);
+            }
+        }
+        
+        function renderEnemyStats(stats) {
+            const container = document.getElementById('enemyStats');
+            
+            if (stats.length === 0) {
+                container.innerHTML = '<div class="text-center text-muted">No matches yet</div>';
+                return;
+            }
+            
+            container.innerHTML = stats.map(s => {
+                const winRate = s.matches > 0 ? Math.round((s.wins / s.matches) * 100) : 0;
+                const winRateClass = winRate >= 60 ? 'text-success' : (winRate < 40 ? 'text-danger' : '');
+                const pointsDiff = s.pointsFor - s.pointsAgainst;
+                const pointsDiffClass = pointsDiff > 0 ? 'positive' : (pointsDiff < 0 ? 'negative' : '');
+                const pointsDiffText = pointsDiff > 0 ? `+${pointsDiff}` : pointsDiff;
+                
+                return `
+                    <div class="enemy-row">
+                        <span class="enemy-name">${s.enemy}</span>
+                        <div class="enemy-stats">
+                            <span style="min-width: 80px;">${s.matches} matches</span>
+                            <span style="min-width: 80px;">${s.wins}W - ${s.losses}L</span>
+                            <span class="map-winrate ${winRateClass}" style="min-width: 50px;">${winRate}%</span>
+                            <span class="points-diff ${pointsDiffClass}">${pointsDiffText} pts</span>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+        
+        async function loadPlayerLeaderboards() {
+            try {
+                const players = await HLL.loadPlayers();
+                const qualified = players.filter(p => p.total_matches >= 3);
+                
+                // Top Killers
+                const topKillers = [...qualified].sort((a, b) => (b.avg_kills || 0) - (a.avg_kills || 0)).slice(0, 10);
+                renderLeaderboard('topKillersBody', topKillers, 'avg_kills');
+                
+                // Top K/D
+                const topKD = [...qualified]
+                    .map(p => ({ ...p, kd: p.total_deaths > 0 ? (p.total_kills / p.total_deaths) : 0 }))
+                    .sort((a, b) => b.kd - a.kd).slice(0, 10);
+                renderLeaderboard('topKDBody', topKD, 'kd', 2);
+                
+                // Top MVPs
+                const topMVP = [...players].sort((a, b) => (b.mvp_count || 0) - (a.mvp_count || 0)).filter(p => p.mvp_count > 0).slice(0, 10);
+                renderLeaderboard('topMVPBody', topMVP, 'mvp_count');
+                
+                // Best Attendance
+                const topAttendance = [...players]
+                    .filter(p => (p.total_matches + (p.no_shows || 0)) >= 5)
+                    .map(p => ({ ...p, attendance: p.total_matches / (p.total_matches + (p.no_shows || 0)) * 100 }))
+                    .sort((a, b) => b.attendance - a.attendance).slice(0, 10);
+                renderLeaderboard('topAttendanceBody', topAttendance, 'attendance', 0, '%');
+            } catch (err) {
+                console.error('Error loading leaderboards:', err);
+            }
+        }
+        
+        function renderLeaderboard(tableId, players, statKey, decimals = 1, suffix = '') {
+            const tbody = document.getElementById(tableId);
+            
+            if (players.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="4" class="text-center text-muted">No data</td></tr>';
+                return;
+            }
+            
+            tbody.innerHTML = players.map((p, i) => `
+                <tr>
+                    <td class="center">${i + 1}</td>
+                    <td>${HLL.formatPlayerName(p.name, p.team)}</td>
+                    <td class="numeric">${(p[statKey] || 0).toFixed(decimals)}${suffix}</td>
+                    <td class="numeric">${p.total_matches || 0}</td>
+                </tr>
+            `).join('');
+        }
+        
+        async function loadRoleStats() {
+            try {
+                // Fetch all match_lineups
+                const { data: lineups, error } = await HLL.supabase
+                    .from('match_lineups')
+                    .select('role, player_name, steam_id, match_id');
+                
+                if (error) throw error;
+                if (!lineups || lineups.length === 0) {
+                    document.getElementById('roleDistribution').innerHTML = '<div class="text-center text-muted">No match lineup data yet</div>';
+                    document.getElementById('playerRoleBody').innerHTML = '<tr><td colspan="11" class="text-center text-muted">No match lineup data yet</td></tr>';
+                    return;
+                }
+                
+                // === ROLE DISTRIBUTION (bar chart) ===
+                const roleCounts = {};
+                const roleColors = {
+                    'Commander': '#f5a623', 'Artillery': '#f85149', 'SL': '#388bfd',
+                    'Infantry': '#3fb950', 'TC': '#bc8cff', 'Gunner': '#bc8cff',
+                    'Driver': '#bc8cff', 'Spotter': '#d2a8ff', 'Sniper': '#d2a8ff',
+                    'Defence': '#79c0ff', 'Streamer': '#8b949e', 'Reserve': '#484f58'
+                };
+                
+                lineups.forEach(l => {
+                    const role = l.role || 'Unknown';
+                    roleCounts[role] = (roleCounts[role] || 0) + 1;
+                });
+                
+                const totalSlots = lineups.length;
+                const sortedRoles = Object.entries(roleCounts).sort((a, b) => b[1] - a[1]);
+                const maxCount = sortedRoles[0] ? sortedRoles[0][1] : 1;
+                
+                document.getElementById('roleDistribution').innerHTML = sortedRoles.map(([role, count]) => {
+                    const pct = Math.round((count / totalSlots) * 100);
+                    const barPct = Math.round((count / maxCount) * 100);
+                    const color = roleColors[role] || '#8b949e';
+                    return `
+                        <div class="role-bar-row">
+                            <span class="role-bar-label">${role}</span>
+                            <div class="role-bar-track">
+                                <div class="role-bar-fill" style="width: ${barPct}%; background: ${color};"></div>
+                            </div>
+                            <span class="role-bar-value">${count} (${pct}%)</span>
+                        </div>
+                    `;
+                }).join('');
+                
+                // === PER-PLAYER ROLE% TABLE ===
+                // Maps to Excel Roster columns: CMD%, ART%, SL%, INF%, SNIPER%, SPOTTER%, TC%, TANK_CREW%, DEFENSE%
+                const roleCategories = {
+                    'CMD':  ['Commander'],
+                    'ART':  ['Artillery'],
+                    'SL':   ['SL'],
+                    'INF':  ['Infantry'],
+                    'SNIP': ['Sniper'],
+                    'SPOT': ['Spotter'],
+                    'TC':   ['TC'],
+                    'TANK': ['Gunner', 'Driver'],
+                    'DEF':  ['Defence']
+                };
+                
+                // Count unique matches per player and role occurrences
+                const playerData = {};
+                lineups.forEach(l => {
+                    const key = l.steam_id || l.player_name;
+                    if (!playerData[key]) {
+                        playerData[key] = { name: l.player_name, matches: new Set(), roleCounts: {} };
+                    }
+                    playerData[key].matches.add(l.match_id);
+                    const role = l.role || 'Unknown';
+                    playerData[key].roleCounts[role] = (playerData[key].roleCounts[role] || 0) + 1;
+                });
+                
+                // Build table rows sorted by total matches desc
+                const playerRows = Object.values(playerData)
+                    .map(p => {
+                        const totalMatches = p.matches.size;
+                        const pcts = {};
+                        for (const [cat, roles] of Object.entries(roleCategories)) {
+                            const count = roles.reduce((sum, r) => sum + (p.roleCounts[r] || 0), 0);
+                            pcts[cat] = totalMatches > 0 ? Math.round((count / totalMatches) * 100) : 0;
+                        }
+                        return { name: p.name, totalMatches, pcts };
+                    })
+                    .sort((a, b) => b.totalMatches - a.totalMatches);
+                
+                const tbody = document.getElementById('playerRoleBody');
+                if (playerRows.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="11" class="text-center text-muted">No data</td></tr>';
+                } else {
+                    tbody.innerHTML = playerRows.map(p => {
+                        const cells = ['CMD','ART','SL','INF','SNIP','SPOT','TC','TANK','DEF']
+                            .map(cat => {
+                                const val = p.pcts[cat];
+                                const cls = val >= 50 ? ' style="color: #3fb950; font-weight: 600;"'
+                                          : val >= 25 ? ' style="color: #79c0ff;"'
+                                          : val > 0  ? '' : ' style="color: #484f58;"';
+                                return `<td class="numeric"${cls}>${val > 0 ? val + '%' : '-'}</td>`;
+                            }).join('');
+                        return `<tr><td>${p.name}</td><td class="numeric">${p.totalMatches}</td>${cells}</tr>`;
+                    }).join('');
+                }
+                
+            } catch (err) {
+                console.error('Error loading role stats:', err);
+                document.getElementById('roleDistribution').innerHTML = '<div class="text-center text-muted">Error loading role data</div>';
+                document.getElementById('playerRoleBody').innerHTML = '<tr><td colspan="11" class="text-center text-muted">Error loading role data</td></tr>';
+            }
+        }
+        
+        init();
+    </script>
+</body>
+</html>

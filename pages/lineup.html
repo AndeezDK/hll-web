@@ -1,0 +1,2500 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Lineups - HLL Tool v0.3.7</title>
+    <!-- Supabase JS Client -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #0f1419;
+            color: #e7e9ea;
+            min-height: 100vh;
+            padding: 8px;
+            font-size: 11px;
+            -webkit-tap-highlight-color: transparent;
+        }
+        
+        /* Connection Status Banner */
+        .connection-banner {
+            position: fixed; top: 0; left: 0; right: 0;
+            padding: 6px 12px; font-size: 11px; font-weight: 600;
+            text-align: center; z-index: 200; transition: all 0.3s ease;
+        }
+        .connection-banner.connecting { background: #388bfd; color: white; }
+        .connection-banner.connected { background: #238636; color: white; }
+        .connection-banner.error { background: #f85149; color: white; }
+        .connection-banner.offline { background: #f5a623; color: #0f1419; }
+        .connection-banner.hidden { transform: translateY(-100%); }
+        
+        body.has-banner { padding-top: 36px; }
+        
+        /* Loading Overlay */
+        .loading-overlay {
+            position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(15, 20, 25, 0.9);
+            display: flex; flex-direction: column;
+            justify-content: center; align-items: center; z-index: 3000;
+        }
+        .loading-overlay.hidden { display: none; }
+        .loading-spinner {
+            width: 40px; height: 40px;
+            border: 3px solid #30363d; border-top-color: #f5a623;
+            border-radius: 50%; animation: spin 1s linear infinite;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        .loading-text { margin-top: 12px; color: #8b949e; font-size: 12px; }
+        
+        /* Config Modal */
+        .config-modal {
+            position: fixed; top: 50%; left: 50%;
+            transform: translate(-50%, -50%);
+            background: #1c2128; border-radius: 12px;
+            padding: 24px; z-index: 3001;
+            width: 90%; max-width: 400px;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+        }
+        .config-modal.hidden { display: none; }
+        .config-modal h2 { color: #f5a623; margin-bottom: 16px; font-size: 18px; }
+        .config-modal label { display: block; margin-bottom: 4px; color: #8b949e; font-size: 11px; }
+        .config-modal input, .config-modal select {
+            width: 100%; padding: 10px; background: #0f1419;
+            border: 1px solid #30363d; border-radius: 6px;
+            color: #e7e9ea; font-size: 12px; margin-bottom: 12px;
+        }
+        .config-modal input:focus { outline: none; border-color: #f5a623; }
+        .config-modal .btn-row { display: flex; gap: 8px; margin-top: 16px; }
+        .config-modal .btn-row .btn { flex: 1; }
+        
+        /* Sync indicator */
+        .sync-indicator {
+            display: flex; align-items: center; gap: 4px;
+            font-size: 9px; color: #8b949e;
+        }
+        .sync-indicator.syncing { color: #388bfd; }
+        .sync-indicator.synced { color: #3fb950; }
+        .sync-indicator.error { color: #f85149; }
+        .sync-dot {
+            width: 6px; height: 6px;
+            border-radius: 50%; background: currentColor;
+        }
+        .sync-indicator.syncing .sync-dot { animation: pulse 1s ease-in-out infinite; }
+        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
+        
+        /* Version badge */
+        .version-badge {
+            font-size: 9px; background: #30363d;
+            padding: 2px 6px; border-radius: 4px; color: #8b949e;
+        }
+        
+        /* Tab indicators for saved data */
+        .tab.has-data::after {
+            content: ''; position: absolute;
+            top: 4px; right: 4px;
+            width: 6px; height: 6px;
+            background: #3fb950; border-radius: 50%;
+        }
+        .tab.modified::after { background: #f5a623; }
+        .tab { position: relative; }
+        
+        /* Share mode */
+        body.share-mode .page-header, body.share-mode .stats-row, body.share-mode .bottom-row,
+        body.share-mode .actions, body.share-mode .share-toggle, body.share-mode .add-slot-btn,
+        body.share-mode .match-info { display: none !important; }
+        body.share-mode .match-info-share { display: flex !important; }
+        body.share-mode { padding: 10px; }
+        
+        .match-info-share {
+            display: none;
+            background: linear-gradient(135deg, #1c2128 0%, #252d38 100%);
+            border-radius: 8px;
+            padding: 12px 16px;
+            margin-bottom: 10px;
+            justify-content: center;
+            align-items: center;
+            gap: 16px;
+            flex-wrap: wrap;
+        }
+        .match-info-share .team-name { font-weight: 700; color: #f5a623; font-size: 16px; }
+        .match-info-share .vs { color: #8b949e; }
+        .match-info-share .match-details { color: #8b949e; font-size: 11px; }
+        
+        .share-toggle {
+            position: fixed; top: 6px; right: 6px;
+            background: #30363d; border: none; color: #e7e9ea;
+            padding: 6px 12px; border-radius: 6px; font-size: 11px;
+            cursor: pointer; z-index: 100; transition: all 0.2s;
+        }
+        .share-toggle:hover { background: #484f58; transform: scale(1.05); }
+        
+        /* Header */
+        .page-header { margin-bottom: 8px; display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+        .page-title { font-size: 18px; font-weight: 700; color: #f5a623; }
+        .tabs { display: flex; gap: 2px; flex-wrap: wrap; }
+        .tab {
+            padding: 5px 12px; background: #1c2128; border: none;
+            color: #8b949e; cursor: pointer; font-size: 11px;
+            border-radius: 4px 4px 0 0; transition: all 0.2s;
+        }
+        .tab:hover { background: #262c36; color: #e7e9ea; }
+        .tab.active { background: #f5a623; color: #0f1419; font-weight: 600; }
+        
+        /* Match Info */
+        .match-info {
+            background: linear-gradient(135deg, #1c2128 0%, #252d38 100%);
+            border-radius: 6px; padding: 8px 10px; margin-bottom: 8px;
+            display: flex; flex-wrap: wrap; gap: 8px; align-items: center;
+        }
+        .match-field { display: flex; flex-direction: column; gap: 2px; }
+        .match-field label { font-size: 8px; color: #8b949e; text-transform: uppercase; }
+        .match-field input, .match-field select {
+            background: #0f1419; border: 1px solid #30363d; border-radius: 4px;
+            padding: 4px 6px; color: #e7e9ea; font-size: 11px; transition: border-color 0.2s;
+        }
+        .match-field input:focus, .match-field select:focus { outline: none; border-color: #f5a623; }
+        .vs-display { display: flex; align-items: center; gap: 6px; }
+        .vs-display select, .vs-display input { width: 85px; }
+        .vs-badge { font-size: 11px; color: #8b949e; font-weight: 600; }
+        .status-badge { padding: 3px 10px; border-radius: 12px; font-size: 9px; font-weight: 600; text-transform: uppercase; }
+        .status-badge.draft { background: #388bfd33; color: #388bfd; }
+        .status-badge.locked { background: #f5a62333; color: #f5a623; }
+        .status-badge.saved { background: #23863633; color: #3fb950; }
+        .status-badge.unsaved { background: #f8514933; color: #f85149; }
+        
+        /* Locked state */
+        body.lineup-locked .player-slot,
+        body.lineup-locked .infantry-slot,
+        body.lineup-locked .node-slot,
+        body.lineup-locked .reserve-slot {
+            pointer-events: none;
+            opacity: 0.8;
+        }
+        body.lineup-locked .here-check,
+        body.lineup-locked .sl-check {
+            pointer-events: auto;
+        }
+        body.lineup-locked .add-slot-btn,
+        body.lineup-locked .remove-slot-btn {
+            display: none !important;
+        }
+        body.lineup-locked .match-info select,
+        body.lineup-locked .match-info input {
+            pointer-events: none;
+            opacity: 0.7;
+        }
+        
+        /* Stats Row */
+        .stats-row { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 8px; }
+        .stat-box {
+            background: linear-gradient(135deg, #1c2128 0%, #252d38 100%);
+            border-radius: 6px; padding: 6px 10px;
+            display: flex; flex-direction: column; align-items: center;
+            min-width: 50px; transition: transform 0.2s;
+        }
+        .stat-box:hover { transform: translateY(-1px); }
+        .stat-value { font-size: 16px; font-weight: 700; color: #f5a623; }
+        .stat-label { font-size: 8px; color: #8b949e; text-transform: uppercase; }
+        .stat-box.warning .stat-value { color: #f85149; }
+        .stat-box.ok .stat-value { color: #3fb950; }
+        
+        /* Main Layout - Responsive */
+        .lineup-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin-bottom: 6px; }
+        
+        @media (max-width: 1200px) { .lineup-grid { grid-template-columns: repeat(2, 1fr); } }
+        @media (max-width: 600px) {
+            .lineup-grid { grid-template-columns: 1fr; }
+            .page-header { flex-direction: column; align-items: flex-start; }
+            .match-info { flex-direction: column; align-items: stretch; }
+            .vs-display { justify-content: center; }
+            .vs-display select, .vs-display input { width: 100px; }
+            .stats-row { justify-content: center; }
+            .bottom-row { grid-template-columns: 1fr !important; }
+            .share-toggle { top: auto; bottom: 10px; right: 10px; padding: 10px 16px; font-size: 12px; }
+        }
+        
+        /* Section */
+        .section { margin-bottom: 3px; }
+        .section-header {
+            padding: 4px 8px; border-radius: 4px 4px 0 0;
+            font-weight: 600; font-size: 9px; text-transform: uppercase; letter-spacing: 0.3px;
+        }
+        .section-header.gray { background: linear-gradient(135deg, #808080 0%, #6a6a6a 100%); color: white; }
+        .section-header.dark-red { background: linear-gradient(135deg, #C00000 0%, #a00000 100%); color: white; }
+        .section-header.bright-green { background: linear-gradient(135deg, #70AD47 0%, #5a9438 100%); color: white; }
+        .section-header.blue { background: linear-gradient(135deg, #4472C4 0%, #3560a8 100%); color: white; }
+        .section-header.orange { background: linear-gradient(135deg, #f7c000 0%, #d9a800 100%); color: #1c2128; }
+        .section-header.yellow { background: linear-gradient(135deg, #f7f300 0%, #d9d500 100%); color: #1c2128; }
+        .section-header.tan { background: linear-gradient(135deg, #D4A574 0%, #c49464 100%); color: #1c2128; }
+        .section-content { background: #1c2128; border-radius: 0 0 4px 4px; padding: 4px; }
+        
+        /* Player Slots */
+        .player-slot {
+            background: #0f1419; border: 1px solid #30363d; border-radius: 3px;
+            padding: 3px 5px; margin-bottom: 2px;
+            display: flex; align-items: center; gap: 4px;
+            cursor: pointer; font-size: 10px; transition: all 0.15s;
+        }
+        .player-slot:hover { border-color: #f5a623; background: #1c2128; }
+        .player-slot.filled { border-color: #238636; background: #0d1117; }
+        .player-slot.no-show { border-color: #f85149; background: #f8514922; }
+        .player-slot.no-show .slot-name { text-decoration: line-through; color: #f85149; }
+        .player-slot .here-check { width: 14px; height: 14px; cursor: pointer; accent-color: #3fb950; }
+        .slot-role { color: #8b949e; min-width: 32px; font-size: 9px; }
+        .slot-name { flex: 1; color: #e7e9ea; font-size: 10px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .slot-name.empty { color: #484f58; font-style: italic; }
+        
+        /* Infantry slots */
+        .infantry-slot {
+            display: grid; grid-template-columns: 14px 1fr 40px 45px 18px 18px; gap: 3px;
+            align-items: center; background: #0f1419; border: 1px solid #30363d;
+            border-radius: 3px; padding: 3px 5px; margin-bottom: 2px;
+            cursor: pointer; font-size: 10px; transition: all 0.15s;
+        }
+        .infantry-slot:hover { border-color: #f5a623; background: #1c2128; }
+        .infantry-slot.filled { border-color: #238636; background: #0d1117; }
+        .infantry-slot.no-show { border-color: #f85149; background: #f8514922; }
+        .infantry-slot.no-show .slot-name { text-decoration: line-through; color: #f85149; }
+        .infantry-slot select {
+            background: #0f1419; border: 1px solid #30363d; border-radius: 3px;
+            color: #8b949e; font-size: 9px; padding: 2px; cursor: pointer;
+        }
+        .infantry-slot select:focus { outline: none; border-color: #f5a623; }
+        .add-slot-inline-btn, .remove-slot-btn {
+            background: transparent; border: none;
+            font-size: 14px; cursor: pointer; padding: 0; line-height: 1;
+            transition: color 0.15s; font-weight: 700;
+        }
+        .add-slot-inline-btn { color: #3fb950; }
+        .add-slot-inline-btn:hover { color: #56d364; }
+        .remove-slot-btn { color: #f85149; }
+        .remove-slot-btn:hover { color: #ff7b72; }
+        
+        /* Node slots */
+        .node-slot {
+            display: grid; grid-template-columns: 14px 32px 1fr 20px; gap: 3px;
+            align-items: center; background: #0f1419; border: 1px solid #30363d;
+            border-radius: 3px; padding: 3px 5px; margin-bottom: 2px;
+            cursor: pointer; font-size: 10px; transition: all 0.15s;
+        }
+        .node-slot:hover { border-color: #f5a623; background: #1c2128; }
+        .node-slot.filled { border-color: #238636; background: #0d1117; }
+        .node-slot.no-show { border-color: #f85149; background: #f8514922; }
+        .node-slot.no-show .slot-name { text-decoration: line-through; color: #f85149; }
+        .node-slot .sl-check { width: 12px; height: 12px; accent-color: #f5a623; }
+        
+        /* Add slot button */
+        .add-slot-btn {
+            background: transparent; border: 1px dashed #30363d; border-radius: 3px;
+            color: #484f58; font-size: 9px; padding: 4px; width: 100%;
+            cursor: pointer; margin-top: 2px; transition: all 0.2s;
+        }
+        .add-slot-btn:hover { border-color: #f5a623; color: #f5a623; background: #f5a62311; }
+        
+        /* Bottom sections */
+        .bottom-row { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-bottom: 6px; }
+        .reserves-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 3px; }
+        .reserve-slot {
+            background: #0f1419; border: 1px solid #30363d; border-radius: 3px;
+            padding: 4px 6px; font-size: 9px; cursor: pointer; transition: all 0.15s;
+            white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+        }
+        .reserve-slot:hover { border-color: #f5a623; }
+        .reserve-slot.empty { color: #484f58; border-style: dashed; }
+        .dropout-item {
+            display: grid; grid-template-columns: 1fr 1fr 75px; gap: 4px;
+            align-items: center; background: #0f1419; border-radius: 3px;
+            padding: 4px 6px; margin-bottom: 2px; font-size: 9px;
+        }
+        .dropout-item .dropout-name { color: #f85149; text-decoration: line-through; }
+        .dropout-item .replacement-name { color: #3fb950; }
+        .dropout-item .replacement-name.empty { color: #484f58; font-style: italic; }
+        .dropout-item select {
+            background: #0f1419; border: 1px solid #30363d; border-radius: 3px;
+            color: #8b949e; font-size: 9px; padding: 2px;
+        }
+        
+        /* Actions */
+        .actions { display: flex; gap: 8px; margin-top: 8px; flex-wrap: wrap; }
+        .btn {
+            padding: 8px 16px; border-radius: 6px; font-weight: 600;
+            font-size: 11px; cursor: pointer; border: none; transition: all 0.2s;
+        }
+        .btn:active { transform: scale(0.98); }
+        .btn-primary { background: linear-gradient(135deg, #f5a623 0%, #d4910f 100%); color: #0f1419; }
+        .btn-primary:hover { box-shadow: 0 2px 8px rgba(245, 166, 35, 0.3); }
+        .btn-secondary { background: linear-gradient(135deg, #30363d 0%, #252a30 100%); color: #e7e9ea; }
+        .btn-secondary:hover { background: linear-gradient(135deg, #3d444d 0%, #30363d 100%); }
+        .btn-danger { background: #f8514922; color: #f85149; border: 1px solid #f8514944; }
+        .btn-danger:hover { background: #f8514933; }
+        .btn-submit { background: linear-gradient(135deg, #238636 0%, #1a7f2e 100%); color: white; }
+        .btn-submit:hover { box-shadow: 0 2px 8px rgba(35, 134, 54, 0.4); }
+        .btn-save { background: linear-gradient(135deg, #388bfd 0%, #2d7be6 100%); color: white; }
+        .btn-save:hover { box-shadow: 0 2px 8px rgba(56, 139, 253, 0.4); }
+        .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+        
+        .column { display: flex; flex-direction: column; gap: 3px; }
+        
+        /* Player Dropdown */
+        .player-dropdown {
+            position: fixed; background: #1c2128; border: 2px solid #f5a623;
+            border-radius: 8px; box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+            z-index: 1000; width: 160px; max-height: 220px; display: none; overflow: hidden;
+        }
+        .player-dropdown.active { display: block; animation: dropdownFade 0.15s ease-out; }
+        @keyframes dropdownFade { from { opacity: 0; transform: translateY(-5px); } to { opacity: 1; transform: translateY(0); } }
+        .dropdown-search {
+            width: 100%; padding: 8px 10px; background: #0f1419;
+            border: none; border-bottom: 1px solid #30363d;
+            color: #e7e9ea; font-size: 11px; outline: none;
+        }
+        .dropdown-search::placeholder { color: #6e7681; }
+        .dropdown-list { max-height: 160px; overflow-y: auto; }
+        .dropdown-list::-webkit-scrollbar { width: 6px; }
+        .dropdown-list::-webkit-scrollbar-track { background: #0f1419; }
+        .dropdown-list::-webkit-scrollbar-thumb { background: #30363d; border-radius: 3px; }
+        .dropdown-item {
+            padding: 6px 10px; cursor: pointer; font-size: 11px;
+            display: flex; justify-content: space-between;
+            border-bottom: 1px solid #21262d; transition: background 0.1s;
+        }
+        .dropdown-item:hover { background: #30363d; }
+        .dropdown-item .player-team { font-size: 9px; color: #8b949e; }
+        .dropdown-item.already-assigned { opacity: 0.4; cursor: not-allowed; }
+        .dropdown-clear {
+            padding: 6px 10px; text-align: center; color: #f85149;
+            cursor: pointer; font-size: 10px; border-top: 1px solid #30363d; transition: background 0.1s;
+        }
+        .dropdown-clear:hover { background: #f8514922; }
+        
+        /* Conflict Modal */
+        .modal-overlay {
+            position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0,0,0,0.7); z-index: 2000;
+            display: none; justify-content: center; align-items: center;
+        }
+        .modal-overlay.active { display: flex; }
+        .modal {
+            background: #1c2128; border-radius: 8px; padding: 20px;
+            max-width: 500px; width: 90%; max-height: 80vh; overflow-y: auto;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+        }
+        .modal-header {
+            display: flex; justify-content: space-between; align-items: center;
+            margin-bottom: 16px; padding-bottom: 12px; border-bottom: 1px solid #30363d;
+        }
+        .modal-title { font-size: 16px; font-weight: 700; color: #f5a623; }
+        .modal-close {
+            background: none; border: none; color: #8b949e; font-size: 20px;
+            cursor: pointer; padding: 0; line-height: 1;
+        }
+        .modal-close:hover { color: #e7e9ea; }
+        .conflict-item {
+            background: #0f1419; border: 1px solid #f85149; border-radius: 6px;
+            padding: 12px; margin-bottom: 12px;
+        }
+        .conflict-player { font-weight: 600; color: #f85149; margin-bottom: 8px; }
+        .conflict-locations { font-size: 11px; color: #8b949e; margin-bottom: 10px; }
+        .conflict-location-tag {
+            display: inline-block; background: #30363d; padding: 2px 8px;
+            border-radius: 4px; margin: 2px; font-size: 10px;
+        }
+        .conflict-location-tag.other-lineup { background: #f8514944; color: #f85149; }
+        .conflict-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+        .conflict-btn {
+            padding: 4px 10px; border-radius: 4px; font-size: 10px;
+            cursor: pointer; border: none; transition: all 0.2s;
+        }
+        .conflict-btn.keep { background: #238636; color: white; }
+        .conflict-btn.remove { background: #f85149; color: white; }
+        .conflict-btn.move-reserve { background: #388bfd; color: white; }
+        .no-conflicts { text-align: center; padding: 20px; color: #3fb950; }
+        
+        /* Highlight conflicting slots */
+        .player-slot.conflict, .infantry-slot.conflict, .node-slot.conflict {
+            border-color: #f85149 !important;
+            animation: conflictPulse 1s ease-in-out infinite;
+        }
+        @keyframes conflictPulse {
+            0%, 100% { box-shadow: 0 0 0 0 rgba(248, 81, 73, 0.4); }
+            50% { box-shadow: 0 0 0 4px rgba(248, 81, 73, 0.2); }
+        }
+        
+        /* Touch improvements */
+        @media (hover: none) {
+            .player-slot, .infantry-slot, .node-slot, .reserve-slot { padding: 6px 8px; }
+            .btn { padding: 12px 20px; }
+            .tab { padding: 8px 16px; }
+        }
+        
+        /* Mobile Column Tabs */
+        .column-tabs {
+            display: none;
+            background: #1c2128;
+            border-radius: 6px;
+            padding: 4px;
+            margin-bottom: 8px;
+            gap: 4px;
+        }
+        
+        .column-tab {
+            flex: 1;
+            padding: 8px 4px;
+            background: transparent;
+            border: none;
+            color: #8b949e;
+            font-size: 10px;
+            font-weight: 600;
+            cursor: pointer;
+            border-radius: 4px;
+            transition: all 0.2s;
+        }
+        
+        .column-tab.active {
+            background: #f5a623;
+            color: #0f1419;
+        }
+        
+        .column-tab:hover:not(.active) {
+            background: #30363d;
+            color: #e7e9ea;
+        }
+        
+        /* Collapsible Sections */
+        .section-header {
+            cursor: pointer;
+            user-select: none;
+            position: relative;
+        }
+        
+        .section-header::after {
+            content: '▼';
+            position: absolute;
+            right: 8px;
+            font-size: 8px;
+            transition: transform 0.2s;
+        }
+        
+        .section.collapsed .section-header::after {
+            transform: rotate(-90deg);
+        }
+        
+        .section.collapsed .section-content,
+        .section.collapsed .add-slot-btn {
+            display: none;
+        }
+        
+        /* Bottom Sheet Dropdown (Mobile) */
+        .bottom-sheet {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            background: #1c2128;
+            border-radius: 16px 16px 0 0;
+            box-shadow: 0 -4px 24px rgba(0,0,0,0.5);
+            z-index: 2000;
+            transform: translateY(100%);
+            transition: transform 0.3s ease-out;
+            max-height: 70vh;
+            display: flex;
+            flex-direction: column;
+        }
+        
+        .bottom-sheet.active {
+            transform: translateY(0);
+        }
+        
+        .bottom-sheet-handle {
+            width: 40px;
+            height: 4px;
+            background: #484f58;
+            border-radius: 2px;
+            margin: 10px auto;
+        }
+        
+        .bottom-sheet-header {
+            padding: 0 16px 12px;
+            border-bottom: 1px solid #30363d;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .bottom-sheet-title {
+            font-weight: 600;
+            color: #f5a623;
+        }
+        
+        .bottom-sheet-close {
+            background: none;
+            border: none;
+            color: #8b949e;
+            font-size: 24px;
+            cursor: pointer;
+            padding: 0;
+            line-height: 1;
+        }
+        
+        .bottom-sheet-search {
+            padding: 12px 16px;
+            border-bottom: 1px solid #30363d;
+        }
+        
+        .bottom-sheet-search input {
+            width: 100%;
+            padding: 10px 14px;
+            background: #0f1419;
+            border: 1px solid #30363d;
+            border-radius: 8px;
+            color: #e7e9ea;
+            font-size: 14px;
+            outline: none;
+        }
+        
+        .bottom-sheet-search input:focus {
+            border-color: #f5a623;
+        }
+        
+        .bottom-sheet-list {
+            flex: 1;
+            overflow-y: auto;
+            padding: 8px 0;
+        }
+        
+        .bottom-sheet-item {
+            padding: 12px 16px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            cursor: pointer;
+            transition: background 0.1s;
+        }
+        
+        .bottom-sheet-item:hover {
+            background: #30363d;
+        }
+        
+        .bottom-sheet-item.already-assigned {
+            opacity: 0.4;
+            cursor: not-allowed;
+        }
+        
+        .bottom-sheet-item .player-name {
+            font-size: 14px;
+            color: #e7e9ea;
+        }
+        
+        .bottom-sheet-item .player-team {
+            font-size: 11px;
+            color: #8b949e;
+        }
+        
+        .bottom-sheet-clear {
+            padding: 14px 16px;
+            text-align: center;
+            color: #f85149;
+            cursor: pointer;
+            border-top: 1px solid #30363d;
+            font-weight: 600;
+        }
+        
+        .bottom-sheet-clear:hover {
+            background: #f8514922;
+        }
+        
+        .bottom-sheet-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0,0,0,0.5);
+            z-index: 1999;
+            display: none;
+        }
+        
+        .bottom-sheet-overlay.active {
+            display: block;
+        }
+        
+        /* Mobile-specific layout */
+        @media (max-width: 600px) {
+            .lineup-grid { grid-template-columns: 1fr; }
+            .page-header { flex-direction: column; align-items: flex-start; }
+            .match-info { flex-direction: column; align-items: stretch; }
+            .vs-display { justify-content: center; }
+            .vs-display select, .vs-display input { width: 100px; }
+            .stats-row { justify-content: center; }
+            .bottom-row { grid-template-columns: 1fr !important; }
+            .share-toggle { top: auto; bottom: 70px; right: 10px; padding: 10px 16px; font-size: 12px; }
+            
+            /* Show column tabs on mobile */
+            .column-tabs { display: flex; }
+            
+            /* Hide non-active columns on mobile */
+            .lineup-grid .column { display: none; }
+            .lineup-grid .column.active-column { display: flex; }
+            
+            /* Use bottom sheet instead of dropdown on mobile */
+            .player-dropdown { display: none !important; }
+            
+            /* Larger touch targets */
+            .section-header { padding: 8px 12px; font-size: 11px; }
+            .player-slot, .infantry-slot, .node-slot { padding: 8px 10px; }
+            
+            /* Actions wrap better */
+            .actions { 
+                flex-wrap: wrap; 
+                position: fixed;
+                bottom: 0;
+                left: 0;
+                right: 0;
+                background: #0f1419;
+                padding: 10px;
+                border-top: 1px solid #30363d;
+                justify-content: center;
+                gap: 6px;
+                z-index: 100;
+            }
+            .actions .btn { padding: 8px 12px; font-size: 10px; }
+            
+            /* Add bottom padding for fixed actions */
+            body { padding-bottom: 70px; }
+        }
+            /* Navigation Bar */
+        .nav-bar {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 10px 16px;
+            background: #1c2128;
+            border-bottom: 1px solid #30363d;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            z-index: 200;
+        }
+        .nav-logo {
+            font-size: 18px;
+            font-weight: 700;
+            color: #f5a623;
+            text-decoration: none;
+            margin-right: 16px;
+        }
+        .nav-links {
+            display: flex;
+            gap: 4px;
+        }
+        .nav-link {
+            padding: 6px 12px;
+            color: #8b949e;
+            text-decoration: none;
+            border-radius: 6px;
+            font-size: 13px;
+            font-weight: 500;
+            transition: 0.15s ease;
+        }
+        .nav-link:hover {
+            background: #2d333b;
+            color: #e7e9ea;
+        }
+        .nav-link.active {
+            background: #f5a623;
+            color: #0f1419;
+        }
+        .nav-spacer { flex: 1; }
+        .nav-status {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            font-size: 11px;
+            color: #8b949e;
+        }
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: #6e7681;
+        }
+        .status-dot.connected { background: #3fb950; }
+        .status-dot.connecting { background: #d29922; animation: pulse 1s infinite; }
+        .status-dot.error { background: #f85149; }
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+        
+        body.has-banner { padding-top: 60px; }
+        
+        @media (max-width: 600px) {
+            .nav-links { display: none; }
+            body.has-banner { padding-top: 50px; }
+        }
+    </style>
+</head>
+<body class="has-banner">
+    <!-- Navigation -->
+    <nav class="nav-bar">
+        <a href="../index.html" class="nav-logo">HLL Tool</a>
+        <div class="nav-links">
+            <a href="../index.html" class="nav-link">Home</a>
+            <a href="lineup.html" class="nav-link active">Lineups</a>
+            <a href="roster.html" class="nav-link">Roster</a>
+            <a href="stats.html" class="nav-link">Stats</a>
+            <a href="matches.html" class="nav-link">Matches</a>
+            <a href="admin.html" class="nav-link">Admin</a>
+        </div>
+        <div class="nav-spacer"></div>
+        <div class="nav-status">
+            <span class="status-dot" id="navStatusDot"></span>
+            <span id="navStatusText">Connecting...</span>
+        </div>
+    </nav>
+
+    <!-- Connection Status Banner -->
+    <div class="connection-banner connecting" id="connectionBanner">Connecting to database...</div>
+    
+    <!-- Loading Overlay -->
+    <div class="loading-overlay" id="loadingOverlay">
+        <div class="loading-spinner"></div>
+        <div class="loading-text" id="loadingText">Loading...</div>
+    </div>
+    
+    <!-- Config Modal -->
+    <div class="config-modal hidden" id="configModal">
+        <h2>⚙️ Supabase Configuration</h2>
+        <p style="color: #8b949e; margin-bottom: 16px; font-size: 11px;">
+            Enter your Supabase project details to connect to the database.
+        </p>
+        <label for="supabaseUrl">Project URL</label>
+        <input type="text" id="supabaseUrl" value="https://mtcfoncuegnokymtebpg.supabase.co">
+        <label for="supabaseKey">Anon/Public Key</label>
+        <input type="text" id="supabaseKey" value="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im10Y2ZvbmN1ZWdub2t5bXRlYnBnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njk5NjAzODAsImV4cCI6MjA4NTUzNjM4MH0.-i2hVz1jDGSrm0pOsUrKUfdsip1gg8wpcOx7k75j8pc">
+        <label for="defaultTeam">Default Team</label>
+        <select id="defaultTeam">
+            <option value="Circle">Circle</option>
+            <option value="DKB">DKB</option>
+            <option value="Unity">Unity</option>
+        </select>
+        <div class="btn-row">
+            <button class="btn btn-secondary" onclick="useOfflineMode()">Use Offline</button>
+            <button class="btn btn-primary" onclick="saveConfig()">Connect</button>
+        </div>
+    </div>
+    
+    <button class="share-toggle" onclick="toggleShareMode()">📷 Share</button>
+    
+    <div class="match-info-share">
+        <span class="team-name">Circle</span>
+        <span class="vs">vs</span>
+        <span class="team-name">Oktogon</span>
+        <span class="match-details">• Kursk • Axis • 2026-02-15</span>
+    </div>
+    
+    <div class="page-header">
+        <h1 class="page-title">Lineups</h1>
+        <span class="version-badge">v0.3.7</span>
+        <div class="sync-indicator" id="syncIndicator">
+            <span class="sync-dot"></span>
+            <span class="sync-text">Offline</span>
+        </div>
+        <div class="tabs">
+            <button class="tab active">Lineup 1</button>
+            <button class="tab">Lineup 2</button>
+            <button class="tab">Lineup 3</button>
+            <button class="tab">Lineup 4</button>
+        </div>
+    </div>
+    
+    <div class="match-info">
+        <div class="match-field vs-display">
+            <select><option>Circle</option><option>DKB</option><option>Unity</option></select>
+            <span class="vs-badge">vs</span>
+            <input type="text" value="Oktogon" placeholder="Enemy...">
+        </div>
+        <div class="match-field">
+            <label>Map</label>
+            <select>
+                <option>Carentan</option><option>SME</option><option>SMDM</option><option>Purple Heart Lane</option>
+                <option>Hill 400</option><option>Hurtgen Forest</option><option>Foy</option><option selected>Kursk</option>
+                <option>Stalingrad</option><option>Remagen</option><option>Kharkov</option><option>Driel</option>
+                <option>El Alamein</option><option>Omaha Beach</option><option>Utah Beach</option><option>Mortain</option>
+            </select>
+        </div>
+        <div class="match-field">
+            <label>Faction</label>
+            <select><option>Allies</option><option selected>Axis</option></select>
+        </div>
+        <div class="match-field">
+            <label>Date</label>
+            <input type="date" value="2026-02-15">
+        </div>
+        <div class="match-field">
+            <label>Status</label>
+            <span class="status-badge draft">Draft</span>
+        </div>
+    </div>
+    
+    <div class="stats-row">
+        <div class="stat-box"><span class="stat-value" id="rosterTotal">0</span><span class="stat-label">Roster</span></div>
+        <div class="stat-box" id="slBox"><span class="stat-value" id="slTotal">0</span><span class="stat-label">SL Total</span></div>
+        <div class="stat-box ok" id="dkbBox"><span class="stat-value" id="dkbCount">0</span><span class="stat-label">DKB</span></div>
+        <div class="stat-box" id="circleBox"><span class="stat-value" id="circleCount">0</span><span class="stat-label">Circle</span></div>
+        <div class="stat-box"><span class="stat-value" id="mercCount">0</span><span class="stat-label">Merc</span></div>
+        <div class="stat-box ok"><span class="stat-value" id="conflictCount">0</span><span class="stat-label">Conflicts</span></div>
+    </div>
+    
+    <!-- Mobile Column Tabs -->
+    <div class="column-tabs" id="columnTabs">
+        <button class="column-tab active" onclick="showColumn(0)">Special</button>
+        <button class="column-tab" onclick="showColumn(1)">North</button>
+        <button class="column-tab" onclick="showColumn(2)">Middle</button>
+        <button class="column-tab" onclick="showColumn(3)">South</button>
+    </div>
+    
+    <div class="lineup-grid">
+        <!-- COLUMN 1 -->
+        <div class="column active-column">
+            <div class="section"><div class="section-header gray">Commander</div><div class="section-content">
+                <div class="player-slot" data-role="Commander" data-cell="cmd-1"><input type="checkbox" class="here-check"><span class="slot-name empty">Empty</span></div>
+            </div></div>
+            <div class="section"><div class="section-header gray">Artillery (TC)</div><div class="section-content">
+                <div class="player-slot" data-role="Artillery" data-cell="art-1"><input type="checkbox" class="here-check"><span class="slot-name empty">Empty</span></div>
+            </div></div>
+            <div class="section"><div class="section-header gray">Streamer</div><div class="section-content">
+                <div class="player-slot" data-role="Streamer" data-counts-sl="true" data-cell="str-1"><input type="checkbox" class="here-check"><span class="slot-name empty">Empty</span></div>
+            </div></div>
+            <div class="section"><div class="section-header blue">Tank 1</div><div class="section-content">
+                <div class="player-slot" data-cell="t1-tc"><input type="checkbox" class="here-check"><span class="slot-role">TC</span><span class="slot-name empty">Empty</span></div>
+                <div class="player-slot" data-cell="t1-gun"><input type="checkbox" class="here-check"><span class="slot-role">Gunner</span><span class="slot-name empty">Empty</span></div>
+                <div class="player-slot" data-cell="t1-drv"><input type="checkbox" class="here-check"><span class="slot-role">Driver</span><span class="slot-name empty">Empty</span></div>
+            </div></div>
+            <div class="section"><div class="section-header blue">Tank 2</div><div class="section-content">
+                <div class="player-slot" data-cell="t2-tc"><input type="checkbox" class="here-check"><span class="slot-role">TC</span><span class="slot-name empty">Empty</span></div>
+                <div class="player-slot" data-cell="t2-gun"><input type="checkbox" class="here-check"><span class="slot-role">Gunner</span><span class="slot-name empty">Empty</span></div>
+                <div class="player-slot" data-cell="t2-drv"><input type="checkbox" class="here-check"><span class="slot-role">Driver</span><span class="slot-name empty">Empty</span></div>
+            </div></div>
+            <div class="section"><div class="section-header blue">Tank 3</div><div class="section-content">
+                <div class="player-slot" data-cell="t3-tc"><input type="checkbox" class="here-check"><span class="slot-role">TC</span><span class="slot-name empty">Empty</span></div>
+                <div class="player-slot" data-cell="t3-gun"><input type="checkbox" class="here-check"><span class="slot-role">Gunner</span><span class="slot-name empty">Empty</span></div>
+                <div class="player-slot" data-cell="t3-drv"><input type="checkbox" class="here-check"><span class="slot-role">Driver</span><span class="slot-name empty">Empty</span></div>
+            </div></div>
+            <div class="section"><div class="section-header blue">Tank 4</div><div class="section-content">
+                <div class="player-slot" data-cell="t4-tc"><input type="checkbox" class="here-check"><span class="slot-role">TC</span><span class="slot-name empty">Empty</span></div>
+                <div class="player-slot" data-cell="t4-gun"><input type="checkbox" class="here-check"><span class="slot-role">Gunner</span><span class="slot-name empty">Empty</span></div>
+                <div class="player-slot" data-cell="t4-drv"><input type="checkbox" class="here-check"><span class="slot-role">Driver</span><span class="slot-name empty">Empty</span></div>
+            </div></div>
+            <div class="section"><div class="section-header gray">Recon 1</div><div class="section-content">
+                <div class="player-slot" data-cell="r1-spot"><input type="checkbox" class="here-check"><span class="slot-role">Spotter</span><span class="slot-name empty">Empty</span></div>
+                <div class="player-slot" data-cell="r1-snip"><input type="checkbox" class="here-check"><span class="slot-role">Sniper</span><span class="slot-name empty">Empty</span></div>
+            </div></div>
+            <div class="section"><div class="section-header gray">Recon 2</div><div class="section-content">
+                <div class="player-slot" data-cell="r2-spot"><input type="checkbox" class="here-check"><span class="slot-role">Spotter</span><span class="slot-name empty">Empty</span></div>
+                <div class="player-slot" data-cell="r2-snip"><input type="checkbox" class="here-check"><span class="slot-role">Sniper</span><span class="slot-name empty">Empty</span></div>
+            </div></div>
+        </div>
+        
+        <!-- COLUMN 2 -->
+        <div class="column">
+            <div class="section"><div class="section-header dark-red">North/West Squad</div><div class="section-content" id="northWestSlots"></div>
+                <button class="add-slot-btn" onclick="addInfantrySlot('northWestSlots',10)">+ Add (max 10)</button></div>
+            <div class="section"><div class="section-header orange">Defence</div><div class="section-content" id="defenceSlots"></div>
+                <button class="add-slot-btn" onclick="addInfantrySlot('defenceSlots',10)">+ Add (max 10)</button></div>
+            <div class="section"><div class="section-header dark-red">Nodes North</div><div class="section-content">
+                <div class="node-slot" data-cell="nn-eng"><input type="checkbox" class="here-check"><span class="slot-role">Eng</span><span class="slot-name empty">Empty</span><input type="checkbox" class="sl-check"></div>
+                <div class="node-slot" data-cell="nn-s1"><input type="checkbox" class="here-check"><span class="slot-role">Supp</span><span class="slot-name empty">Empty</span><span></span></div>
+                <div class="node-slot" data-cell="nn-s2"><input type="checkbox" class="here-check"><span class="slot-role">Supp</span><span class="slot-name empty">Empty</span><span></span></div>
+                <div class="node-slot" data-cell="nn-s3"><input type="checkbox" class="here-check"><span class="slot-role">Supp</span><span class="slot-name empty">Empty</span><span></span></div>
+            </div></div>
+        </div>
+        
+        <!-- COLUMN 3 -->
+        <div class="column">
+            <div class="section"><div class="section-header bright-green">Meat Grind</div><div class="section-content" id="meatGrindSlots"></div>
+                <button class="add-slot-btn" onclick="addInfantrySlot('meatGrindSlots',10)">+ Add (max 10)</button></div>
+            <div class="section"><div class="section-header gray">Flex</div><div class="section-content" id="flexSlots"></div>
+                <button class="add-slot-btn" onclick="addInfantrySlot('flexSlots',10)">+ Add (max 10)</button></div>
+            <div class="section"><div class="section-header bright-green">Nodes Middle</div><div class="section-content">
+                <div class="node-slot" data-cell="nm-eng"><input type="checkbox" class="here-check"><span class="slot-role">Eng</span><span class="slot-name empty">Empty</span><input type="checkbox" class="sl-check"></div>
+                <div class="node-slot" data-cell="nm-s1"><input type="checkbox" class="here-check"><span class="slot-role">Supp</span><span class="slot-name empty">Empty</span><span></span></div>
+                <div class="node-slot" data-cell="nm-s2"><input type="checkbox" class="here-check"><span class="slot-role">Supp</span><span class="slot-name empty">Empty</span><span></span></div>
+                <div class="node-slot" data-cell="nm-s3"><input type="checkbox" class="here-check"><span class="slot-role">Supp</span><span class="slot-name empty">Empty</span><span></span></div>
+            </div></div>
+        </div>
+        
+        <!-- COLUMN 4 -->
+        <div class="column">
+            <div class="section"><div class="section-header blue">South/East Squad</div><div class="section-content" id="southEastSlots"></div>
+                <button class="add-slot-btn" onclick="addInfantrySlot('southEastSlots',10)">+ Add (max 10)</button></div>
+            <div class="section"><div class="section-header yellow">Infiltration</div><div class="section-content" id="infiltrationSlots"></div>
+                <button class="add-slot-btn" onclick="addInfantrySlot('infiltrationSlots',10)">+ Add (max 10)</button></div>
+            <div class="section"><div class="section-header blue">Nodes South</div><div class="section-content">
+                <div class="node-slot" data-cell="ns-eng"><input type="checkbox" class="here-check"><span class="slot-role">Eng</span><span class="slot-name empty">Empty</span><input type="checkbox" class="sl-check"></div>
+                <div class="node-slot" data-cell="ns-s1"><input type="checkbox" class="here-check"><span class="slot-role">Supp</span><span class="slot-name empty">Empty</span><input type="checkbox" class="sl-check"></div>
+                <div class="node-slot" data-cell="ns-s2"><input type="checkbox" class="here-check"><span class="slot-role">Supp</span><span class="slot-name empty">Empty</span><span></span></div>
+                <div class="node-slot" data-cell="ns-s3"><input type="checkbox" class="here-check"><span class="slot-role">Supp</span><span class="slot-name empty">Empty</span><span></span></div>
+            </div></div>
+        </div>
+    </div>
+    
+    <div class="bottom-row">
+        <div class="section"><div class="section-header tan">Reserves (<span id="reserveCount">0</span>)</div>
+            <div class="section-content"><div class="reserves-grid" id="reservesGrid"></div></div></div>
+        <div class="section"><div class="section-header gray">Dropouts</div>
+            <div class="section-content" id="dropoutsSection"></div></div>
+    </div>
+    
+    <div class="actions">
+        <button class="btn btn-save" onclick="saveLineup()" id="saveBtn">💾 Save</button>
+        <button class="btn btn-secondary" onclick="checkConflicts()">🔍 Check Conflicts</button>
+        <button class="btn btn-secondary" onclick="autoPopulateNodes()" style="display:none;">⚡ Auto-fill Nodes</button>
+        <button class="btn btn-primary" id="lockBtn" onclick="toggleLock()">🔒 Lock Lineup</button>
+        <button class="btn btn-secondary" onclick="exportLineup()">📤 Export</button>
+        <button class="btn btn-secondary" onclick="processAttendance()">📋 Process Attendance</button>
+        <button class="btn btn-danger" onclick="clearLineup()">🗑️ Clear</button>
+        <button class="btn btn-submit" onclick="submitLineup()">✅ Submit</button>
+    </div>
+    
+    <div id="playerDropdown" class="player-dropdown">
+        <input type="text" class="dropdown-search" placeholder="Search..." id="dropdownSearch">
+        <div class="dropdown-list" id="dropdownList"></div>
+        <div class="dropdown-clear" id="dropdownClear">✕ Clear</div>
+    </div>
+    
+    <!-- Conflict Resolution Modal -->
+    <div class="modal-overlay" id="conflictModal">
+        <div class="modal">
+            <div class="modal-header">
+                <span class="modal-title">⚠️ Conflict Resolution</span>
+                <button class="modal-close" onclick="closeConflictModal()">×</button>
+            </div>
+            <div id="conflictList"></div>
+            <div style="margin-top: 16px; display: flex; gap: 8px; justify-content: flex-end;">
+                <button class="btn btn-secondary" onclick="closeConflictModal()">Close</button>
+                <button class="btn btn-danger" onclick="clearAllConflicts()">Clear All Conflicts</button>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Bottom Sheet Overlay -->
+    <div class="bottom-sheet-overlay" id="bottomSheetOverlay" onclick="closeBottomSheet()"></div>
+    
+    <!-- Bottom Sheet Player Picker (Mobile) -->
+    <div class="bottom-sheet" id="bottomSheet">
+        <div class="bottom-sheet-handle"></div>
+        <div class="bottom-sheet-header">
+            <span class="bottom-sheet-title">Select Player</span>
+            <button class="bottom-sheet-close" onclick="closeBottomSheet()">×</button>
+        </div>
+        <div class="bottom-sheet-search">
+            <input type="text" placeholder="Search players..." id="bottomSheetSearch">
+        </div>
+        <div class="bottom-sheet-list" id="bottomSheetList"></div>
+        <div class="bottom-sheet-clear" onclick="clearSlotFromBottomSheet()">✕ Clear Slot</div>
+    </div>
+    
+    <script>
+        // ========================================
+        // SUPABASE CONFIGURATION & STATE
+        // ========================================
+        
+        let supabaseClient = null;
+        let isOnline = false;
+        let currentTeamId = null;
+        let currentLineupNumber = 1;
+        let lineupModified = false;
+        let lineupData = { 1: null, 2: null, 3: null, 4: null };
+        
+        // Players array - loaded from database or fallback
+        let players = [];
+        
+        // Fallback players for offline mode
+        const fallbackPlayers = [
+            { steam_id: "OFFLINE_1", name: "PlayerOne", team: "Circle" },
+            { steam_id: "OFFLINE_2", name: "TankCommander1", team: "Circle" },
+            { steam_id: "OFFLINE_3", name: "SquadLeader1", team: "DKB" },
+            { steam_id: "OFFLINE_4", name: "InfantryPro", team: "Circle" },
+            { steam_id: "OFFLINE_5", name: "SniperElite", team: "DKB" },
+            { steam_id: "OFFLINE_6", name: "NodeBuilder", team: "Circle" },
+            { steam_id: "OFFLINE_7", name: "DefenceKing", team: "DKB" },
+            { steam_id: "OFFLINE_8", name: "FlexMaster", team: "Circle" },
+            { steam_id: "OFFLINE_9", name: "CommanderX", team: "Merc" },
+        ];
+        
+        // ========================================
+        // INITIALIZATION
+        // ========================================
+        
+        async function init() {
+            showLoading('Initializing...');
+            
+            const savedUrl = localStorage.getItem('hll_supabase_url');
+            const savedKey = localStorage.getItem('hll_supabase_key');
+            const savedTeam = localStorage.getItem('hll_default_team');
+            
+            if (savedUrl && savedKey) {
+                await connectToSupabase(savedUrl, savedKey, savedTeam || 'Circle');
+            } else {
+                hideLoading();
+                showConfigModal();
+            }
+        }
+        
+        function showConfigModal() {
+            document.getElementById('configModal').classList.remove('hidden');
+        }
+        
+        function hideConfigModal() {
+            document.getElementById('configModal').classList.add('hidden');
+        }
+        
+        async function saveConfig() {
+            const url = document.getElementById('supabaseUrl').value.trim();
+            const key = document.getElementById('supabaseKey').value.trim();
+            const team = document.getElementById('defaultTeam').value;
+            
+            if (!url || !key) {
+                alert('Please enter both Supabase URL and Key');
+                return;
+            }
+            
+            localStorage.setItem('hll_supabase_url', url);
+            localStorage.setItem('hll_supabase_key', key);
+            localStorage.setItem('hll_default_team', team);
+            
+            hideConfigModal();
+            showLoading('Connecting...');
+            await connectToSupabase(url, key, team);
+        }
+        
+        function useOfflineMode() {
+            hideConfigModal();
+            setOfflineMode();
+            initializeUI();
+            hideLoading();
+        }
+        
+        async function connectToSupabase(url, key, defaultTeam) {
+            updateConnectionBanner('connecting', 'Connecting to database...');
+            
+            try {
+                supabaseClient = window.supabase.createClient(url, key);
+                
+                // Test connection by fetching teams
+                const { data: teams, error } = await supabaseClient
+                    .from('teams')
+                    .select('id, name, tag')
+                    .limit(5);
+                
+                if (error) throw error;
+                
+                // Find team ID
+                const team = teams?.find(t => t.name === defaultTeam || t.tag === defaultTeam);
+                if (team) {
+                    currentTeamId = team.id;
+                }
+                
+                isOnline = true;
+                updateConnectionBanner('connected', 'Connected');
+                updateSyncIndicator('synced', 'Connected');
+                
+                // Load players
+                await loadPlayersFromDatabase(defaultTeam);
+                
+                // Initialize UI
+                initializeUI();
+                
+                // Load existing lineups
+                await loadLineupsFromDatabase();
+                
+                hideLoading();
+                
+                // Hide banner after 2s
+                setTimeout(() => {
+                    document.getElementById('connectionBanner').classList.add('hidden');
+                }, 2000);
+                
+            } catch (err) {
+                console.error('Supabase connection error:', err);
+                updateConnectionBanner('error', 'Connection failed: ' + err.message);
+                updateSyncIndicator('error', 'Connection failed');
+                
+                setTimeout(() => {
+                    setOfflineMode();
+                    initializeUI();
+                    hideLoading();
+                }, 3000);
+            }
+        }
+        
+        function setOfflineMode() {
+            isOnline = false;
+            players = [...fallbackPlayers];
+            updateConnectionBanner('offline', 'Offline Mode - Using sample data');
+            updateSyncIndicator('error', 'Offline');
+        }
+        
+        function updateConnectionBanner(status, text) {
+            const banner = document.getElementById('connectionBanner');
+            banner.className = 'connection-banner ' + status;
+            banner.textContent = text;
+        }
+        
+        function updateSyncIndicator(status, text) {
+            const indicator = document.getElementById('syncIndicator');
+            indicator.className = 'sync-indicator ' + status;
+            indicator.querySelector('.sync-text').textContent = text;
+            
+            // Also update nav status
+            const navDot = document.getElementById('navStatusDot');
+            const navText = document.getElementById('navStatusText');
+            if (navDot && navText) {
+                navDot.classList.remove('connected', 'connecting', 'error');
+                if (status === 'synced') navDot.classList.add('connected');
+                else if (status === 'syncing') navDot.classList.add('connecting');
+                else navDot.classList.add('error');
+                navText.textContent = text;
+            }
+        }
+        
+        function showLoading(text) {
+            document.getElementById('loadingText').textContent = text;
+            document.getElementById('loadingOverlay').classList.remove('hidden');
+        }
+        
+        function hideLoading() {
+            document.getElementById('loadingOverlay').classList.add('hidden');
+        }
+        
+        // ========================================
+        // DATABASE OPERATIONS
+        // ========================================
+        
+        async function loadPlayersFromDatabase(teamFilter = null) {
+            if (!supabaseClient || !isOnline) {
+                players = [...fallbackPlayers];
+                return;
+            }
+            
+            showLoading('Loading players...');
+            
+            try {
+                let query = supabaseClient
+                    .from('players')
+                    .select('steam_id, name, team')
+                    .order('name');
+                
+                const { data, error } = await query;
+                
+                if (error) throw error;
+                
+                players = data || [];
+                console.log('Loaded ' + players.length + ' players from database');
+                
+            } catch (err) {
+                console.error('Error loading players:', err);
+                players = [...fallbackPlayers];
+            }
+        }
+        
+        async function loadLineupsFromDatabase() {
+            if (!supabaseClient || !isOnline || !currentTeamId) return;
+            
+            try {
+                const { data, error } = await supabaseClient
+                    .from('lineups')
+                    .select('*')
+                    .eq('team_id', currentTeamId)
+                    .order('lineup_number');
+                
+                if (error) throw error;
+                
+                // Group by lineup number
+                data?.forEach(slot => {
+                    const num = slot.lineup_number;
+                    if (!lineupData[num]) {
+                        lineupData[num] = { slots: [], metadata: {} };
+                    }
+                    lineupData[num].slots.push(slot);
+                });
+                
+                updateTabIndicators();
+                
+                // Load current lineup
+                if (lineupData[currentLineupNumber]?.slots?.length > 0) {
+                    populateUIFromLineupData(lineupData[currentLineupNumber]);
+                }
+                
+            } catch (err) {
+                console.error('Error loading lineups:', err);
+            }
+            
+            // Subscribe to realtime changes
+            subscribeToRealtimeChanges();
+        }
+        
+        // Realtime subscription for live collaboration
+        let realtimeChannel = null;
+        
+        function subscribeToRealtimeChanges() {
+            if (!supabaseClient || !isOnline || !currentTeamId) return;
+            
+            // Unsubscribe from previous channel if exists
+            if (realtimeChannel) {
+                supabaseClient.removeChannel(realtimeChannel);
+            }
+            
+            realtimeChannel = supabaseClient
+                .channel('lineup-changes')
+                .on('postgres_changes', 
+                    { 
+                        event: '*', 
+                        schema: 'public', 
+                        table: 'lineups',
+                        filter: `team_id=eq.${currentTeamId}`
+                    }, 
+                    (payload) => {
+                        console.log('Realtime update:', payload);
+                        handleRealtimeChange(payload);
+                    }
+                )
+                .subscribe((status) => {
+                    console.log('Realtime subscription status:', status);
+                    if (status === 'SUBSCRIBED') {
+                        updateSyncIndicator('synced', 'Live');
+                    }
+                });
+        }
+        
+        function handleRealtimeChange(payload) {
+            // Only process if it's not our own change
+            const { eventType, new: newRecord, old: oldRecord } = payload;
+            
+            // Refresh the lineup data
+            if (newRecord?.lineup_number === currentLineupNumber || oldRecord?.lineup_number === currentLineupNumber) {
+                // Show brief notification
+                const indicator = document.getElementById('syncIndicator');
+                indicator.querySelector('.sync-text').textContent = 'Syncing...';
+                
+                // Reload lineup data (simplified - could be more granular)
+                setTimeout(async () => {
+                    await loadLineupsFromDatabase();
+                    updateSyncIndicator('synced', 'Live');
+                }, 500);
+            }
+        }
+        
+        async function saveLineup() {
+            if (!isOnline || !supabaseClient) {
+                alert('Cannot save in offline mode. Connect to Supabase first.');
+                return;
+            }
+            
+            updateSyncIndicator('syncing', 'Saving...');
+            
+            try {
+                const slots = collectLineupSlots();
+                
+                // Delete existing slots for this lineup
+                await supabaseClient
+                    .from('lineups')
+                    .delete()
+                    .eq('team_id', currentTeamId)
+                    .eq('lineup_number', currentLineupNumber);
+                
+                // Insert new slots
+                if (slots.length > 0) {
+                    const records = slots.map(slot => ({
+                        team_id: currentTeamId,
+                        lineup_number: currentLineupNumber,
+                        cell_position: slot.cell || '',
+                        steam_id: slot.steam_id,
+                        player_name: slot.name,
+                        role: slot.role,
+                        sl_role: slot.slRole,
+                        note: slot.note,
+                        is_here: slot.here
+                    }));
+                    
+                    const { error } = await supabaseClient
+                        .from('lineups')
+                        .insert(records);
+                    
+                    if (error) throw error;
+                }
+                
+                lineupModified = false;
+                updateSyncIndicator('synced', 'Saved');
+                updateStatusBadge('saved');
+                updateTabIndicators();
+                
+                console.log('Saved ' + slots.length + ' slots to Lineup ' + currentLineupNumber);
+                
+            } catch (err) {
+                console.error('Error saving lineup:', err);
+                updateSyncIndicator('error', 'Save failed');
+                alert('Save failed: ' + err.message);
+            }
+        }
+        
+        function collectLineupSlots() {
+            const slots = [];
+            
+            document.querySelectorAll('.player-slot, .infantry-slot, .node-slot').forEach(slot => {
+                const nameEl = slot.querySelector('.slot-name');
+                if (!nameEl || nameEl.classList.contains('empty')) return;
+                
+                // Use dataset.player (clean name) if available, otherwise strip tag from display
+                const playerName = slot.dataset.player || getRawPlayerName(nameEl.textContent);
+                if (!playerName || playerName === 'Empty') return;
+                
+                const player = players.find(p => p.name === playerName);
+                const hereCheck = slot.querySelector('.here-check');
+                const slDropdown = slot.querySelector('.sl-dropdown');
+                const noteDropdown = slot.querySelector('.note-dropdown');
+                const roleSpan = slot.querySelector('.slot-role');
+                
+                slots.push({
+                    cell: slot.dataset.cell || '',
+                    steam_id: player?.steam_id || null,
+                    name: playerName,
+                    role: slot.dataset.role || roleSpan?.textContent || '',
+                    slRole: slDropdown?.value || '',
+                    note: noteDropdown?.value || '',
+                    here: hereCheck?.checked || false
+                });
+            });
+            
+            return slots;
+        }
+        
+        async function checkConflictsFromDatabase() {
+            if (!supabaseClient || !isOnline) return [];
+            
+            try {
+                const { data, error } = await supabaseClient
+                    .from('lineups')
+                    .select('lineup_number, player_name, cell_position')
+                    .eq('team_id', currentTeamId)
+                    .neq('lineup_number', currentLineupNumber);
+                
+                if (error) throw error;
+                
+                return data || [];
+                
+            } catch (err) {
+                console.error('Error checking conflicts:', err);
+                return [];
+            }
+        }
+        
+        // ========================================
+        // UI HELPERS
+        // ========================================
+        
+        function initializeUI() {
+            initializeInfantrySections();
+            initializeReserves();
+            initializeDropouts();
+            attachSlotListeners();
+            initCollapsibleSections();
+            updateCounters();
+            
+            // Set today's date
+            const today = new Date().toISOString().split('T')[0];
+            document.querySelector('.match-field input[type="date"]').value = today;
+        }
+        
+        function markModified() {
+            lineupModified = true;
+            updateStatusBadge('unsaved');
+            debouncedAutoSave();
+        }
+        
+        let autoSaveTimer = null;
+        function debouncedAutoSave() {
+            clearTimeout(autoSaveTimer);
+            autoSaveTimer = setTimeout(async () => {
+                if (isOnline && supabaseClient) await saveLineup();
+            }, 1000);
+        }
+        
+        function updateStatusBadge(status) {
+            const badge = document.querySelector('.status-badge');
+            badge.className = 'status-badge ' + status;
+            badge.textContent = status.charAt(0).toUpperCase() + status.slice(1);
+        }
+        
+        function updateTabIndicators() {
+            document.querySelectorAll('.tab').forEach((tab, i) => {
+                const num = i + 1;
+                const hasData = lineupData[num]?.slots?.length > 0;
+                tab.classList.toggle('has-data', hasData);
+            });
+        }
+        
+        function populateUIFromLineupData(data) {
+            console.log('Populating UI from saved data:', data);
+            if (!data?.slots || data.slots.length === 0) return;
+            
+            // First pass: ensure infantry sections have enough slots
+            // Group saved infantry slots by section prefix
+            const infantrySections = {
+                'nw': 'northWestSlots',
+                'def': 'defenceSlots',
+                'mg': 'meatGrindSlots',
+                'flx': 'flexSlots',
+                'se': 'southEastSlots',
+                'inf': 'infiltrationSlots'
+            };
+            
+            // Count how many slots each infantry section needs
+            const sectionCounts = {};
+            data.slots.forEach(saved => {
+                const cell = saved.cell_position || saved.cell || '';
+                const prefix = cell.split('-')[0];
+                if (infantrySections[prefix]) {
+                    sectionCounts[prefix] = (sectionCounts[prefix] || 0) + 1;
+                }
+            });
+            
+            // Add extra infantry slots if needed (default is 6)
+            Object.entries(sectionCounts).forEach(([prefix, needed]) => {
+                const sectionId = infantrySections[prefix];
+                const container = document.getElementById(sectionId);
+                if (!container) return;
+                const current = container.querySelectorAll('.infantry-slot').length;
+                for (let i = current; i < needed; i++) {
+                    container.innerHTML += createInfantrySlotHTML(sectionId, i + 1);
+                }
+            });
+            
+            // Re-attach listeners after adding slots
+            attachSlotListeners();
+            
+            // Second pass: populate each slot
+            data.slots.forEach(saved => {
+                const cell = saved.cell_position || saved.cell || '';
+                const playerName = saved.player_name || saved.name || '';
+                if (!playerName || !cell) return;
+                
+                const slot = document.querySelector(`[data-cell="${cell}"]`);
+                if (!slot) {
+                    console.warn('Could not find slot for cell:', cell, 'player:', playerName);
+                    return;
+                }
+                
+                const nameEl = slot.querySelector('.slot-name');
+                if (!nameEl) return;
+                
+                // Set player name (formatted with team tag)
+                const team = getPlayerTeam(playerName);
+                slot.dataset.player = playerName;
+                nameEl.textContent = formatPlayerName(playerName, team);
+                nameEl.classList.remove('empty');
+                slot.classList.add('filled');
+                
+                // Set here checkbox
+                const hereCheck = slot.querySelector('.here-check');
+                if (hereCheck) hereCheck.checked = saved.is_here || saved.here || false;
+                
+                // Set SL dropdown (infantry slots)
+                const slDropdown = slot.querySelector('.sl-dropdown');
+                if (slDropdown && (saved.sl_role || saved.slRole)) {
+                    slDropdown.value = saved.sl_role || saved.slRole || '';
+                }
+                
+                // Set note dropdown (infantry slots)
+                const noteDropdown = slot.querySelector('.note-dropdown');
+                if (noteDropdown && (saved.note)) {
+                    noteDropdown.value = saved.note || '';
+                }
+            });
+            
+            // Update counters and buttons
+            updateCounters();
+            updateAddButtons();
+        }
+        
+        async function switchLineup(num) {
+            if (num === currentLineupNumber) return;
+            
+            // Auto-save current lineup to Supabase before switching
+            if (lineupModified && isOnline && supabaseClient) {
+                await saveLineup();
+            }
+            
+            // Save current state to memory
+            lineupData[currentLineupNumber] = {
+                slots: collectLineupSlots(),
+                matchInfo: getMatchInfo()
+            };
+            
+            // Update tabs
+            document.querySelectorAll('.tab').forEach((tab, i) => {
+                tab.classList.toggle('active', i === num - 1);
+            });
+            
+            currentLineupNumber = num;
+            
+            // Clear and load new lineup
+            clearLineupUI();
+            
+            if (lineupData[num]?.slots?.length > 0) {
+                populateUIFromLineupData(lineupData[num]);
+            }
+            
+            lineupModified = false;
+            updateStatusBadge('draft');
+        }
+        
+        function clearLineupUI() {
+            // Clear all static slots (player-slot, node-slot)
+            document.querySelectorAll('.slot-name').forEach(el => {
+                el.textContent = 'Empty';
+                el.classList.add('empty');
+            });
+            document.querySelectorAll('.player-slot, .infantry-slot, .node-slot').forEach(slot => {
+                slot.classList.remove('filled', 'conflict');
+                delete slot.dataset.player;
+            });
+            document.querySelectorAll('.here-check, .sl-check').forEach(cb => {
+                cb.checked = false;
+            });
+            document.querySelectorAll('.sl-dropdown, .note-dropdown').forEach(sel => {
+                sel.value = '';
+            });
+            
+            // Reset infantry sections back to default 6 slots
+            ['northWestSlots','defenceSlots','meatGrindSlots','flexSlots','southEastSlots','infiltrationSlots'].forEach(id => {
+                const c = document.getElementById(id);
+                c.innerHTML = '';
+                for (let i = 0; i < 6; i++) c.innerHTML += createInfantrySlotHTML(id, i + 1);
+            });
+            attachSlotListeners();
+            updateAddButtons();
+            updateCounters();
+        }
+        
+        function getMatchInfo() {
+            return {
+                team: document.querySelector('.vs-display select').value,
+                enemy: document.querySelector('.vs-display input').value,
+                map: document.querySelectorAll('.match-field select')[1].value,
+                faction: document.querySelectorAll('.match-field select')[2].value,
+                date: document.querySelector('.match-field input[type="date"]').value
+            };
+        }
+        
+        // ========================================
+        // ORIGINAL FUNCTIONS (UPDATED)
+        // ========================================
+        
+        function toggleShareMode() {
+            document.body.classList.toggle('share-mode');
+            document.querySelector('.share-toggle').textContent = document.body.classList.contains('share-mode') ? '✏️ Edit' : '📷 Share';
+        }
+        
+        // Mobile: Column tab navigation
+        function showColumn(index) {
+            const columns = document.querySelectorAll('.lineup-grid .column');
+            const tabs = document.querySelectorAll('.column-tab');
+            
+            columns.forEach((col, i) => {
+                col.classList.toggle('active-column', i === index);
+            });
+            
+            tabs.forEach((tab, i) => {
+                tab.classList.toggle('active', i === index);
+            });
+        }
+        
+        // Collapsible sections
+        function initCollapsibleSections() {
+            document.querySelectorAll('.section-header').forEach(header => {
+                header.addEventListener('click', (e) => {
+                    // Don't collapse if clicking on something else
+                    if (e.target !== header) return;
+                    
+                    const section = header.closest('.section');
+                    section.classList.toggle('collapsed');
+                });
+            });
+        }
+        
+        // Mobile detection
+        function isMobile() {
+            return window.innerWidth <= 600;
+        }
+        
+        // Bottom sheet functions
+        let bottomSheetSlot = null;
+        const bottomSheet = document.getElementById('bottomSheet');
+        const bottomSheetOverlay = document.getElementById('bottomSheetOverlay');
+        const bottomSheetSearch = document.getElementById('bottomSheetSearch');
+        const bottomSheetList = document.getElementById('bottomSheetList');
+        
+        function openBottomSheet(slot) {
+            bottomSheetSlot = slot;
+            renderBottomSheetList();
+            bottomSheet.classList.add('active');
+            bottomSheetOverlay.classList.add('active');
+            bottomSheetSearch.value = '';
+            bottomSheetSearch.focus();
+        }
+        
+        function closeBottomSheet() {
+            bottomSheet.classList.remove('active');
+            bottomSheetOverlay.classList.remove('active');
+            bottomSheetSlot = null;
+        }
+        
+        function renderBottomSheetList(filter = '') {
+            const assigned = getAssignedPlayers();
+            const filtered = players.filter(p => 
+                p.name.toLowerCase().includes(filter.toLowerCase()) || 
+                p.team.toLowerCase().includes(filter.toLowerCase())
+            );
+            
+            bottomSheetList.innerHTML = filtered.map(p => {
+                const isAssigned = assigned.includes(p.name);
+                return `<div class="bottom-sheet-item ${isAssigned ? 'already-assigned' : ''}" data-name="${p.name}" data-team="${p.team}">
+                    <span class="player-name">${formatPlayerName(p.name, p.team)}</span>
+                    <span class="player-team">${p.team}</span>
+                </div>`;
+            }).join('');
+            
+            bottomSheetList.querySelectorAll('.bottom-sheet-item:not(.already-assigned)').forEach(item => {
+                item.addEventListener('click', () => {
+                    selectPlayerFromBottomSheet(item.dataset.name, item.dataset.team);
+                });
+            });
+        }
+        
+        function selectPlayerFromBottomSheet(name, team) {
+            if (bottomSheetSlot) {
+                const nameEl = bottomSheetSlot.querySelector('.slot-name');
+                bottomSheetSlot.dataset.player = name;
+                nameEl.textContent = formatPlayerName(name, team || getPlayerTeam(name));
+                nameEl.classList.remove('empty');
+                bottomSheetSlot.classList.add('filled');
+            }
+            closeBottomSheet();
+            updateCounters();
+            markModified();
+        }
+        
+        function clearSlotFromBottomSheet() {
+            if (bottomSheetSlot) {
+                const nameEl = bottomSheetSlot.querySelector('.slot-name');
+                nameEl.textContent = 'Empty';
+                nameEl.classList.add('empty');
+                bottomSheetSlot.classList.remove('filled');
+                delete bottomSheetSlot.dataset.player;
+            }
+            closeBottomSheet();
+            updateCounters();
+            markModified();
+        }
+        
+        bottomSheetSearch.addEventListener('input', (e) => renderBottomSheetList(e.target.value));
+        
+        // Players array is now loaded dynamically - see init() and loadPlayersFromDatabase()
+        
+        // Cell ID prefix map for infantry sections
+        const infantryCellPrefix = {
+            'northWestSlots': 'nw',
+            'defenceSlots': 'def',
+            'meatGrindSlots': 'mg',
+            'flexSlots': 'flx',
+            'southEastSlots': 'se',
+            'infiltrationSlots': 'inf'
+        };
+        
+        function createInfantrySlotHTML(sectionId, index) {
+            const prefix = infantryCellPrefix[sectionId] || sectionId;
+            const cellId = prefix + '-' + index;
+            return `<div class="infantry-slot" data-cell="${cellId}"><input type="checkbox" class="here-check"><span class="slot-name empty">Empty</span>
+                <select class="sl-dropdown"><option value=""></option><option>SL-1</option><option>SL-2</option><option>SL-3</option></select>
+                <select class="note-dropdown"><option value=""></option><option>Rocket</option><option>AT</option><option>MG</option><option>Supp</option><option>Eng</option><option>Driver</option></select>
+                <button class="add-slot-inline-btn" onclick="addSlotAfter(this)" title="Add row">+</button>
+                <button class="remove-slot-btn" onclick="removeSlot(this)" title="Remove">−</button></div>`;
+        }
+        
+        function initializeInfantrySections() {
+            ['northWestSlots','defenceSlots','meatGrindSlots','flexSlots','southEastSlots','infiltrationSlots'].forEach(id => {
+                const c = document.getElementById(id); for (let i = 0; i < 6; i++) c.innerHTML += createInfantrySlotHTML(id, i + 1);
+            });
+        }
+        
+        function addInfantrySlot(sectionId, max) {
+            const c = document.getElementById(sectionId);
+            const currentCount = c.querySelectorAll('.infantry-slot').length;
+            if (currentCount < max) {
+                c.innerHTML += createInfantrySlotHTML(sectionId, currentCount + 1); attachSlotListeners(); updateAddButtons();
+            }
+        }
+        
+        function removeSlot(btn) {
+            const slot = btn.closest('.infantry-slot');
+            const container = slot.parentElement;
+            const minSlots = 1; // Minimum slots to keep
+            if (container.querySelectorAll('.infantry-slot').length > minSlots) {
+                slot.remove();
+                updateAddButtons();
+                updateCounters();
+                markModified();
+            }
+        }
+        
+        function addSlotAfter(btn) {
+            const slot = btn.closest('.infantry-slot');
+            const container = slot.parentElement;
+            const sectionId = container.id;
+            const maxSlots = 10;
+            if (container.querySelectorAll('.infantry-slot').length < maxSlots) {
+                const newIndex = container.querySelectorAll('.infantry-slot').length + 1;
+                const newSlot = document.createElement('div');
+                newSlot.innerHTML = createInfantrySlotHTML(sectionId, newIndex);
+                const newSlotElement = newSlot.firstElementChild;
+                slot.after(newSlotElement);
+                attachSlotListeners();
+                updateAddButtons();
+                updateCounters();
+                markModified();
+            }
+        }
+        
+        function updateAddButtons() {
+            ['northWestSlots','defenceSlots','meatGrindSlots','flexSlots','southEastSlots','infiltrationSlots'].forEach(id => {
+                const c = document.getElementById(id);
+                const btn = c.nextElementSibling;
+                if (btn && btn.classList.contains('add-slot-btn')) {
+                    btn.style.display = c.querySelectorAll('.infantry-slot').length >= 10 ? 'none' : 'block';
+                }
+            });
+        }
+        
+        function initializeReserves() { const g = document.getElementById('reservesGrid'); for (let i = 0; i < 30; i++) g.innerHTML += `<div class="reserve-slot empty">Empty</div>`; }
+        function initializeDropouts() {
+            const c = document.getElementById('dropoutsSection');
+            for (let i = 0; i < 10; i++) c.innerHTML += `<div class="dropout-item" style="display:none;">
+                <span class="dropout-name">-</span>
+                <span class="replacement-name empty" onclick="openDropdownForReplacement(this)">+ Replacement</span>
+                <select class="excuse-dropdown"><option value=""></option><option>Excused</option><option>Not Excused</option></select></div>`;
+        }
+        
+        let currentSlot = null;
+        const dropdown = document.getElementById('playerDropdown'), searchInput = document.getElementById('dropdownSearch'), dropdownList = document.getElementById('dropdownList');
+        
+        // Format player name with team tag for display
+        function formatPlayerName(name, team) {
+            if (team === 'Circle') return '◯ | ' + name;
+            if (team === 'DKB') return '[DKB] ' + name;
+            return name; // Merc or other - no tag
+        }
+        
+        // Get raw name from formatted display name
+        function getRawPlayerName(displayName) {
+            if (displayName.startsWith('◯ | ')) return displayName.substring(4);
+            if (displayName.startsWith('[DKB] ')) return displayName.substring(6);
+            return displayName;
+        }
+        
+        // Helper to get team from players array
+        function getPlayerTeam(name) {
+            const player = players.find(p => p.name === name);
+            return player?.team || '';
+        }
+        
+        function getAssignedPlayers() { 
+            return [...document.querySelectorAll('.slot-name:not(.empty)')].map(e => {
+                const slot = e.closest('.player-slot, .infantry-slot, .node-slot, .reserve-slot');
+                return slot?.dataset.player || getRawPlayerName(e.textContent);
+            }).filter(t => t && t !== 'Empty'); 
+        }
+        function renderDropdown(filter = '') {
+            const assigned = getAssignedPlayers();
+            dropdownList.innerHTML = players.filter(p => p.name.toLowerCase().includes(filter.toLowerCase()) || p.team.toLowerCase().includes(filter.toLowerCase()))
+                .map(p => `<div class="dropdown-item ${assigned.includes(p.name) ? 'already-assigned' : ''}" data-name="${p.name}" data-team="${p.team}"><span>${formatPlayerName(p.name, p.team)}</span><span class="player-team">${p.team}</span></div>`).join('');
+            dropdownList.querySelectorAll('.dropdown-item:not(.already-assigned)').forEach(i => i.addEventListener('click', () => selectPlayer(i.dataset.name, i.dataset.team)));
+        }
+        function selectPlayer(name, team) { 
+            if (currentSlot) { 
+                const n = currentSlot.querySelector('.slot-name'); 
+                currentSlot.dataset.player = name;
+                n.textContent = formatPlayerName(name, team || getPlayerTeam(name)); 
+                n.classList.remove('empty'); 
+                currentSlot.classList.add('filled'); 
+            } 
+            closeDropdown(); updateCounters(); markModified(); 
+        }
+        function clearSlot() { if (currentSlot) { const n = currentSlot.querySelector('.slot-name'); n.textContent = 'Empty'; n.classList.add('empty'); currentSlot.classList.remove('filled'); delete currentSlot.dataset.player; } closeDropdown(); updateCounters(); markModified(); }
+        function openDropdown(slot) {
+            if (currentSlot === slot && dropdown.classList.contains('active')) { closeDropdown(); return; }
+            currentSlot = slot; const r = slot.getBoundingClientRect();
+            dropdown.style.top = (r.bottom + 2) + 'px'; dropdown.style.left = Math.min(r.left, window.innerWidth - 170) + 'px';
+            dropdown.classList.add('active'); searchInput.value = ''; searchInput.focus(); renderDropdown();
+        }
+        function closeDropdown() { dropdown.classList.remove('active'); currentSlot = null; }
+        function attachSlotListeners() {
+            document.querySelectorAll('.player-slot, .infantry-slot, .node-slot, .reserve-slot, .dropout-item').forEach(s => {
+                s.onclick = function(e) { 
+                    if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT' || e.target.tagName === 'BUTTON') return;
+                    e.stopPropagation();
+                    
+                    // Use bottom sheet on mobile, dropdown on desktop
+                    if (isMobile()) {
+                        openBottomSheet(this);
+                    } else {
+                        openDropdown(this);
+                    }
+                };
+            });
+        }
+        searchInput.addEventListener('input', e => renderDropdown(e.target.value));
+        document.getElementById('dropdownClear').addEventListener('click', clearSlot);
+        document.addEventListener('click', e => { if (!dropdown.contains(e.target)) closeDropdown(); });
+        document.addEventListener('keydown', e => { if (e.key === 'Escape') closeDropdown(); });
+        
+        function updateCounters() {
+            let roster = 0, sl = 0, dkb = 0, circle = 0, merc = 0;
+            document.querySelectorAll('.slot-name:not(.empty)').forEach(e => {
+                if (e.textContent !== 'Empty') { 
+                    roster++; 
+                    const slot = e.closest('.player-slot, .infantry-slot, .node-slot, .reserve-slot');
+                    const rawName = slot?.dataset.player || getRawPlayerName(e.textContent);
+                    const p = players.find(x => x.name === rawName);
+                    if (p) { if (p.team === 'DKB') dkb++; else if (p.team === 'Circle') circle++; else if (p.team === 'Merc') merc++; } 
+                }
+            });
+            document.querySelectorAll('.sl-dropdown').forEach(s => { if (s.value && s.value.startsWith('SL-')) sl++; });
+            const streamer = document.querySelector('[data-counts-sl="true"]');
+            if (streamer && !streamer.querySelector('.slot-name').classList.contains('empty')) sl++;
+            document.getElementById('rosterTotal').textContent = roster;
+            document.getElementById('slTotal').textContent = sl;
+            document.getElementById('dkbCount').textContent = dkb;
+            document.getElementById('circleCount').textContent = circle;
+            document.getElementById('mercCount').textContent = merc;
+            document.getElementById('slBox').classList.toggle('warning', sl >= 19);
+            document.getElementById('dkbBox').classList.toggle('warning', dkb > 20);
+            document.getElementById('dkbBox').classList.toggle('ok', dkb <= 20);
+            document.getElementById('circleBox').classList.toggle('warning', circle > 29);
+            let rc = 0; document.querySelectorAll('.reserve-slot:not(.empty)').forEach(e => { if (e.textContent !== 'Empty') rc++; });
+            document.getElementById('reserveCount').textContent = rc;
+        }
+        
+        function autoPopulateNodes() {
+            // Get all assigned players (in non-node slots)
+            const assignedPlayers = new Set();
+            document.querySelectorAll('.player-slot .slot-name:not(.empty), .infantry-slot .slot-name:not(.empty)').forEach(el => {
+                if (el.textContent !== 'Empty') assignedPlayers.add(el.textContent);
+            });
+            
+            // Get all available players not yet assigned
+            const availablePlayers = players.filter(p => !assignedPlayers.has(p.name));
+            
+            if (availablePlayers.length === 0) {
+                alert('No unassigned players available for nodes.');
+                return;
+            }
+            
+            // Get all empty node slots
+            const emptyNodeSlots = [];
+            document.querySelectorAll('.node-slot').forEach(slot => {
+                const nameEl = slot.querySelector('.slot-name');
+                if (nameEl && nameEl.classList.contains('empty')) {
+                    emptyNodeSlots.push(slot);
+                }
+            });
+            
+            if (emptyNodeSlots.length === 0) {
+                alert('All node slots are already filled.');
+                return;
+            }
+            
+            // Auto-populate empty node slots
+            let playerIndex = 0;
+            emptyNodeSlots.forEach(slot => {
+                if (playerIndex < availablePlayers.length) {
+                    const nameEl = slot.querySelector('.slot-name');
+                    const player = availablePlayers[playerIndex];
+                    
+                    nameEl.textContent = player.name;
+                    nameEl.classList.remove('empty');
+                    slot.classList.add('filled');
+                    
+                    // Set role dropdown to "Supp" if this slot has a note dropdown
+                    // For nodes, we mark the role in a data attribute
+                    slot.dataset.autoRole = 'Supp';
+                    
+                    playerIndex++;
+                }
+            });
+            
+            updateCounters();
+            alert(`Auto-filled ${playerIndex} node slots with "Supp" role.`);
+        }
+        
+        function processAttendance() {
+            const noShows = [];
+            const allSlots = document.querySelectorAll('.player-slot, .infantry-slot, .node-slot');
+            
+            allSlots.forEach(slot => {
+                const nameEl = slot.querySelector('.slot-name');
+                const hereCheck = slot.querySelector('.here-check');
+                
+                // Skip empty slots
+                if (!nameEl || nameEl.classList.contains('empty') || nameEl.textContent === 'Empty') return;
+                
+                // If player assigned but NOT checked as here = no-show
+                if (hereCheck && !hereCheck.checked) {
+                    const playerName = nameEl.textContent;
+                    noShows.push({ name: playerName, slot: slot });
+                }
+            });
+            
+            if (noShows.length === 0) {
+                alert('All assigned players are marked as present!');
+                return;
+            }
+            
+            // Add no-shows to dropout list and clear their slots
+            const dropoutItems = document.querySelectorAll('.dropout-item');
+            noShows.forEach((noShow, index) => {
+                if (index < dropoutItems.length) {
+                    // Add to dropouts
+                    const item = dropoutItems[index];
+                    item.style.display = 'grid';
+                    item.querySelector('.dropout-name').textContent = noShow.name;
+                    
+                    // Clear the original slot so a new player can be added
+                    const nameEl = noShow.slot.querySelector('.slot-name');
+                    nameEl.textContent = 'Empty';
+                    nameEl.classList.add('empty');
+                    noShow.slot.classList.remove('filled', 'no-show');
+                    
+                    // Uncheck the here checkbox
+                    const hereCheck = noShow.slot.querySelector('.here-check');
+                    if (hereCheck) hereCheck.checked = false;
+                    
+                    // Clear dropdowns if infantry slot
+                    const slDropdown = noShow.slot.querySelector('.sl-dropdown');
+                    const noteDropdown = noShow.slot.querySelector('.note-dropdown');
+                    if (slDropdown) slDropdown.value = '';
+                    if (noteDropdown) noteDropdown.value = '';
+                }
+            });
+            
+            updateCounters();
+            alert(`${noShows.length} no-show(s) moved to Dropouts.\nTheir slots are now empty - assign replacements from the player list.`);
+        }
+        
+        function toggleLock() {
+            const isLocked = document.body.classList.toggle('lineup-locked');
+            const lockBtn = document.getElementById('lockBtn');
+            const statusBadge = document.querySelector('.status-badge');
+            
+            if (isLocked) {
+                lockBtn.textContent = 'Unlock Lineup';
+                lockBtn.classList.remove('btn-primary');
+                lockBtn.classList.add('btn-secondary');
+                statusBadge.textContent = 'Locked';
+                statusBadge.classList.remove('draft');
+                statusBadge.classList.add('locked');
+            } else {
+                lockBtn.textContent = 'Lock Lineup';
+                lockBtn.classList.remove('btn-secondary');
+                lockBtn.classList.add('btn-primary');
+                statusBadge.textContent = 'Draft';
+                statusBadge.classList.remove('locked');
+                statusBadge.classList.add('draft');
+            }
+        }
+        
+        function exportLineup() {
+            // Generate unique filename
+            const team = document.querySelector('.vs-display select').value || 'Team';
+            const enemy = document.querySelector('.vs-display input').value || 'Enemy';
+            const date = document.querySelector('.match-field input[type="date"]').value || '';
+            const lineupNum = document.querySelector('.tab.active')?.textContent.replace('Lineup ', '') || '1';
+            const timestamp = new Date().toISOString().slice(0, 19).replace(/[T:]/g, '-');
+            
+            const filename = `HLL_Lineup${lineupNum}_${team}_vs_${enemy}_${date}_${timestamp}`.replace(/[^a-zA-Z0-9_-]/g, '_');
+            
+            // Switch to share mode temporarily
+            const wasShareMode = document.body.classList.contains('share-mode');
+            if (!wasShareMode) {
+                document.body.classList.add('share-mode');
+            }
+            
+            // Store filename for later use
+            window.exportFilename = filename;
+            
+            // Manual export instructions for now
+            alert(`Export filename: ${filename}\n\nOptions:\n1. Take screenshot now (Print Screen / Snipping Tool)\n2. Right-click > Save as image\n\nThe view is now in Share Mode for clean screenshot.\n\nNote: Automatic PNG export will be added later.`);
+            
+            // Keep in share mode for manual screenshot
+            document.querySelector('.share-toggle').textContent = '✏️ Edit';
+        }
+        
+        async function getConflicts() {
+            const conflicts = [];
+            const playerSlots = new Map();
+            
+            const currentLineup = document.querySelector('.tab.active')?.textContent || 'Lineup 1';
+            
+            // Get real data from other lineups (DB + in-memory fallback)
+            const otherLineupsData = {};
+            const dbData = await checkConflictsFromDatabase();
+            dbData.forEach(row => {
+                const key = 'Lineup ' + row.lineup_number;
+                if (!otherLineupsData[key]) otherLineupsData[key] = [];
+                otherLineupsData[key].push(row.player_name);
+            });
+            
+            // Also check in-memory data for unsaved lineups
+            for (let i = 1; i <= 4; i++) {
+                if (i === currentLineupNumber) continue;
+                const key = 'Lineup ' + i;
+                if (!otherLineupsData[key]) otherLineupsData[key] = [];
+                if (lineupData[i]?.slots?.length > 0) {
+                    lineupData[i].slots.forEach(s => {
+                        const name = s.player_name || s.name || '';
+                        if (name && !otherLineupsData[key].includes(name)) {
+                            otherLineupsData[key].push(name);
+                        }
+                    });
+                }
+            }
+            
+            // Collect all assigned players in current lineup (using clean names)
+            document.querySelectorAll('.player-slot, .infantry-slot, .node-slot').forEach(slot => {
+                const nameEl = slot.querySelector('.slot-name');
+                if (nameEl && !nameEl.classList.contains('empty') && nameEl.textContent !== 'Empty') {
+                    const playerName = slot.dataset.player || getRawPlayerName(nameEl.textContent);
+                    const section = slot.closest('.section');
+                    const sectionHeader = section ? section.querySelector('.section-header')?.textContent.trim() : 'Unknown';
+                    
+                    if (!playerSlots.has(playerName)) {
+                        playerSlots.set(playerName, []);
+                    }
+                    playerSlots.get(playerName).push({
+                        location: sectionHeader,
+                        slot: slot,
+                        lineup: currentLineup
+                    });
+                }
+            });
+            
+            // Check for cross-lineup conflicts
+            playerSlots.forEach((locations, playerName) => {
+                Object.entries(otherLineupsData).forEach(([lineupName, players]) => {
+                    if (players.includes(playerName)) {
+                        locations.push({
+                            location: lineupName,
+                            slot: null,
+                            lineup: lineupName
+                        });
+                    }
+                });
+            });
+            
+            // Find duplicates (same player in multiple places)
+            playerSlots.forEach((locations, playerName) => {
+                if (locations.length > 1) {
+                    conflicts.push({
+                        player: playerName,
+                        locations: locations
+                    });
+                    
+                    locations.forEach(loc => {
+                        if (loc.slot) {
+                            loc.slot.classList.add('conflict');
+                        }
+                    });
+                }
+            });
+            
+            return conflicts;
+        }
+        
+        async function checkConflicts() {
+            const currentLineup = document.querySelector('.tab.active')?.textContent || 'Lineup 1';
+            const conflicts = await getConflicts();
+            
+            // Update conflict counter
+            document.getElementById('conflictCount').textContent = conflicts.length;
+            const conflictBox = document.getElementById('conflictCount').closest('.stat-box');
+            if (conflicts.length > 0) {
+                conflictBox.classList.add('warning');
+                conflictBox.classList.remove('ok');
+            } else {
+                conflictBox.classList.remove('warning');
+                conflictBox.classList.add('ok');
+            }
+            
+            // Show modal with results
+            showConflictModal(conflicts, currentLineup);
+        }
+        
+        function showConflictModal(conflicts, currentLineup) {
+            const modal = document.getElementById('conflictModal');
+            const conflictList = document.getElementById('conflictList');
+            
+            if (conflicts.length === 0) {
+                conflictList.innerHTML = `
+                    <div class="no-conflicts">
+                        <div style="font-size: 32px; margin-bottom: 8px;">✓</div>
+                        <div>No conflicts found!</div>
+                        <div style="font-size: 11px; color: #8b949e; margin-top: 4px;">All players are assigned to only one position.</div>
+                    </div>
+                `;
+            } else {
+                conflictList.innerHTML = conflicts.map((conflict, idx) => {
+                    const sameSheet = conflict.locations.filter(l => l.lineup === currentLineup);
+                    const otherSheets = conflict.locations.filter(l => l.lineup !== currentLineup);
+                    
+                    return `
+                        <div class="conflict-item" data-player="${conflict.player}">
+                            <div class="conflict-player">${conflict.player}</div>
+                            <div class="conflict-locations">
+                                Found in: 
+                                ${sameSheet.map(l => `<span class="conflict-location-tag">${l.location}</span>`).join('')}
+                                ${otherSheets.map(l => `<span class="conflict-location-tag other-lineup">${l.location}</span>`).join('')}
+                            </div>
+                            <div class="conflict-actions">
+                                ${sameSheet.length > 1 ? `<button class="conflict-btn keep" onclick="keepFirst('${conflict.player}')">Keep First Only</button>` : ''}
+                                ${sameSheet.length > 0 ? `<button class="conflict-btn remove" onclick="removeFromCurrent('${conflict.player}')">Remove from This Lineup</button>` : ''}
+                                ${sameSheet.length > 0 ? `<button class="conflict-btn move-reserve" onclick="moveToReserve('${conflict.player}')">Move to Reserves</button>` : ''}
+                            </div>
+                        </div>
+                    `;
+                }).join('');
+            }
+            
+            modal.classList.add('active');
+        }
+        
+        function closeConflictModal() {
+            document.getElementById('conflictModal').classList.remove('active');
+            // Remove conflict highlights
+            document.querySelectorAll('.conflict').forEach(el => el.classList.remove('conflict'));
+        }
+        
+        function keepFirst(playerName) {
+            // Find all slots with this player, keep only the first one
+            const slots = document.querySelectorAll('.player-slot, .infantry-slot, .node-slot');
+            let foundFirst = false;
+            
+            slots.forEach(slot => {
+                const slotName = slot.dataset.player || getRawPlayerName(slot.querySelector('.slot-name')?.textContent || '');
+                if (slotName === playerName) {
+                    if (foundFirst) {
+                        clearSlotByElement(slot);
+                    } else {
+                        foundFirst = true;
+                    }
+                }
+            });
+            
+            updateCounters();
+            checkConflicts(); // Refresh
+        }
+        
+        function removeFromCurrent(playerName) {
+            // Remove player from all slots in current lineup
+            document.querySelectorAll('.player-slot, .infantry-slot, .node-slot').forEach(slot => {
+                const slotName = slot.dataset.player || getRawPlayerName(slot.querySelector('.slot-name')?.textContent || '');
+                if (slotName === playerName) {
+                    clearSlotByElement(slot);
+                }
+            });
+            
+            updateCounters();
+            checkConflicts(); // Refresh
+        }
+        
+        function moveToReserve(playerName) {
+            // Find first empty reserve slot and move player there
+            const emptyReserve = document.querySelector('.reserve-slot.empty');
+            if (emptyReserve) {
+                const team = getPlayerTeam(playerName);
+                emptyReserve.textContent = formatPlayerName(playerName, team);
+                emptyReserve.dataset.player = playerName;
+                emptyReserve.classList.remove('empty');
+            }
+            
+            // Remove from current slots
+            removeFromCurrent(playerName);
+        }
+        
+        function clearSlotByElement(slot) {
+            const nameEl = slot.querySelector('.slot-name');
+            if (nameEl) {
+                nameEl.textContent = 'Empty';
+                nameEl.classList.add('empty');
+            }
+            slot.classList.remove('filled', 'conflict');
+            
+            const hereCheck = slot.querySelector('.here-check');
+            if (hereCheck) hereCheck.checked = false;
+            
+            const slDropdown = slot.querySelector('.sl-dropdown');
+            if (slDropdown) slDropdown.value = '';
+            
+            const noteDropdown = slot.querySelector('.note-dropdown');
+            if (noteDropdown) noteDropdown.value = '';
+        }
+        
+        function clearAllConflicts() {
+            if (!confirm('This will remove ALL conflicting players from this lineup.\n\nAre you sure?')) {
+                return;
+            }
+            
+            // Get all conflict player names
+            const conflictItems = document.querySelectorAll('.conflict-item');
+            conflictItems.forEach(item => {
+                const playerName = item.dataset.player;
+                removeFromCurrent(playerName);
+            });
+            
+            closeConflictModal();
+        }
+        
+        function clearLineup() {
+            if (!confirm('Are you sure you want to clear the entire lineup?\n\nThis will remove all players from all slots.')) {
+                return;
+            }
+            
+            // Clear all player slots
+            document.querySelectorAll('.player-slot, .infantry-slot, .node-slot').forEach(slot => {
+                const nameEl = slot.querySelector('.slot-name');
+                if (nameEl) {
+                    nameEl.textContent = 'Empty';
+                    nameEl.classList.add('empty');
+                }
+                slot.classList.remove('filled', 'no-show');
+                
+                // Uncheck checkboxes
+                const hereCheck = slot.querySelector('.here-check');
+                if (hereCheck) hereCheck.checked = false;
+                
+                const slCheck = slot.querySelector('.sl-check');
+                if (slCheck) slCheck.checked = false;
+                
+                // Reset dropdowns
+                const slDropdown = slot.querySelector('.sl-dropdown');
+                if (slDropdown) slDropdown.value = '';
+                
+                const noteDropdown = slot.querySelector('.note-dropdown');
+                if (noteDropdown) noteDropdown.value = '';
+            });
+            
+            // Clear reserves
+            document.querySelectorAll('.reserve-slot').forEach(slot => {
+                slot.textContent = 'Empty';
+                slot.classList.add('empty');
+            });
+            
+            // Clear dropouts
+            document.querySelectorAll('.dropout-item').forEach(item => {
+                item.style.display = 'none';
+                item.querySelector('.dropout-name').textContent = '-';
+                const replacement = item.querySelector('.replacement-name');
+                if (replacement) {
+                    replacement.textContent = '+ Replacement';
+                    replacement.classList.add('empty');
+                }
+                const excuse = item.querySelector('.excuse-dropdown');
+                if (excuse) excuse.value = '';
+            });
+            
+            // Reset infantry sections to 6 slots each
+            ['northWestSlots','defenceSlots','meatGrindSlots','flexSlots','southEastSlots','infiltrationSlots'].forEach(id => {
+                const container = document.getElementById(id);
+                const currentSlots = container.querySelectorAll('.infantry-slot').length;
+                
+                // Remove extra slots (keep 6)
+                if (currentSlots > 6) {
+                    const slots = container.querySelectorAll('.infantry-slot');
+                    for (let i = currentSlots - 1; i >= 6; i--) {
+                        slots[i].remove();
+                    }
+                }
+                
+                // Show add button again
+                const addBtn = container.nextElementSibling;
+                if (addBtn && addBtn.classList.contains('add-slot-btn')) {
+                    addBtn.style.display = 'block';
+                }
+            });
+            
+            updateCounters();
+            alert('Lineup cleared.');
+        }
+        
+        async function submitLineup() {
+            // Run conflict detection before submitting
+            const conflicts = await getConflicts();
+            if (conflicts.length > 0) {
+                showConflictModal(conflicts, document.querySelector('.tab.active')?.textContent || 'Lineup 1');
+                return; // Block submission until conflicts resolved
+            }
+            
+            // Collect all lineup data for submission
+            const lineupData = {
+                matchInfo: {
+                    team: document.querySelector('.vs-display select').value,
+                    enemy: document.querySelector('.vs-display input').value,
+                    map: document.querySelectorAll('.match-field select')[1].value,
+                    faction: document.querySelectorAll('.match-field select')[2].value,
+                    date: document.querySelector('.match-field input[type="date"]').value
+                },
+                players: [],
+                noShows: [],
+                reserves: []
+            };
+            
+            // Collect all assigned players with roles
+            document.querySelectorAll('.player-slot, .infantry-slot, .node-slot').forEach(slot => {
+                const nameEl = slot.querySelector('.slot-name');
+                const hereCheck = slot.querySelector('.here-check');
+                
+                if (nameEl && !nameEl.classList.contains('empty') && nameEl.textContent !== 'Empty') {
+                    const playerData = {
+                        name: nameEl.textContent,
+                        here: hereCheck ? hereCheck.checked : false,
+                        role: slot.dataset.role || '',
+                        slRole: '',
+                        note: ''
+                    };
+                    
+                    // Get SL dropdown value
+                    const slDropdown = slot.querySelector('.sl-dropdown');
+                    if (slDropdown) playerData.slRole = slDropdown.value;
+                    
+                    // Get note dropdown value
+                    const noteDropdown = slot.querySelector('.note-dropdown');
+                    if (noteDropdown) playerData.note = noteDropdown.value;
+                    
+                    // Get role from slot-role span
+                    const roleSpan = slot.querySelector('.slot-role');
+                    if (roleSpan) playerData.role = roleSpan.textContent;
+                    
+                    lineupData.players.push(playerData);
+                }
+            });
+            
+            // Collect no-shows from dropouts
+            document.querySelectorAll('.dropout-item').forEach(item => {
+                if (item.style.display !== 'none') {
+                    const dropoutName = item.querySelector('.dropout-name');
+                    const excuseDropdown = item.querySelector('.excuse-dropdown');
+                    const replacementName = item.querySelector('.replacement-name');
+                    
+                    if (dropoutName && dropoutName.textContent !== '-') {
+                        lineupData.noShows.push({
+                            name: dropoutName.textContent,
+                            excused: excuseDropdown ? excuseDropdown.value : '',
+                            replacement: replacementName && !replacementName.classList.contains('empty') ? replacementName.textContent : ''
+                        });
+                    }
+                }
+            });
+            
+            // Collect reserves
+            document.querySelectorAll('.reserve-slot').forEach(slot => {
+                if (!slot.classList.contains('empty') && slot.textContent !== 'Empty') {
+                    lineupData.reserves.push(slot.textContent);
+                }
+            });
+            
+            // Log data (in real app, this would send to Supabase)
+            console.log('=== LINEUP SUBMISSION ===');
+            console.log('Match Info:', lineupData.matchInfo);
+            console.log('Players:', lineupData.players);
+            console.log('No-Shows:', lineupData.noShows);
+            console.log('Reserves:', lineupData.reserves);
+            
+            // Summary alert
+            const summary = `
+LINEUP SUBMISSION SUMMARY
+========================
+Match: ${lineupData.matchInfo.team} vs ${lineupData.matchInfo.enemy}
+Map: ${lineupData.matchInfo.map} (${lineupData.matchInfo.faction})
+Date: ${lineupData.matchInfo.date}
+
+Players: ${lineupData.players.length}
+No-Shows: ${lineupData.noShows.length}
+Reserves: ${lineupData.reserves.length}
+
+Data logged to console.
+In production, this will:
+• Save to Match_Lineups
+• Update No_Shows sheet
+• Record role assignments
+            `.trim();
+            
+            alert(summary);
+        }
+        
+        function openDropdownForReplacement(el) {
+            // Find the dropout item
+            const dropoutItem = el.closest('.dropout-item');
+            
+            // Create a mini dropdown for selecting from reserves
+            const reserveSlots = document.querySelectorAll('.reserve-slot:not(.empty)');
+            const availableReserves = [];
+            reserveSlots.forEach(slot => {
+                if (slot.textContent !== 'Empty') {
+                    availableReserves.push(slot.textContent);
+                }
+            });
+            
+            if (availableReserves.length === 0) {
+                alert('No reserves available. Add players to Reserves first.');
+                return;
+            }
+            
+            // Simple prompt for now (could be enhanced with proper dropdown)
+            const replacement = prompt(`Select replacement from reserves:\n${availableReserves.map((r, i) => `${i + 1}. ${r}`).join('\n')}\n\nEnter number:`);
+            
+            if (replacement && !isNaN(replacement)) {
+                const idx = parseInt(replacement) - 1;
+                if (idx >= 0 && idx < availableReserves.length) {
+                    const replacementName = availableReserves[idx];
+                    el.textContent = replacementName;
+                    el.classList.remove('empty');
+                    
+                    // Mark reserve as used
+                    reserveSlots.forEach(slot => {
+                        if (slot.textContent === replacementName) {
+                            slot.textContent = 'Empty';
+                            slot.classList.add('empty');
+                        }
+                    });
+                    
+                    updateCounters();
+                }
+            }
+        }
+        
+        initializeInfantrySections(); initializeReserves(); initializeDropouts(); attachSlotListeners(); updateCounters(); initCollapsibleSections();
+        document.addEventListener('change', e => { if (e.target.classList.contains('sl-dropdown')) { updateCounters(); markModified(); } });
+        
+        // Add lineup tab click handlers
+        document.querySelectorAll('.tab').forEach((tab, i) => {
+            tab.addEventListener('click', () => switchLineup(i + 1));
+        });
+        
+        // Start the application
+        init();
+    </script>
+</body>
+</html>

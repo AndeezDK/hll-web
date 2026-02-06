@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Matches - HLL Tool v0.3.0</title>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <link rel="stylesheet" href="../css/styles.css">
+    <style>
+        .faction-badge {
+            display: inline-flex;
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 11px;
+            font-weight: 600;
+        }
+        .faction-allies {
+            background: rgba(56, 139, 253, 0.2);
+            color: var(--accent-blue);
+        }
+        .faction-axis {
+            background: rgba(248, 81, 73, 0.2);
+            color: var(--accent-red);
+        }
+    </style>
+</head>
+<body>
+    <nav class="nav-bar">
+        <a href="../index.html" class="nav-logo">HLL Tool</a>
+        <div class="nav-links">
+            <a href="../index.html" class="nav-link">Home</a>
+            <a href="lineup.html" class="nav-link">Lineups</a>
+            <a href="roster.html" class="nav-link">Roster</a>
+            <a href="stats.html" class="nav-link">Stats</a>
+            <a href="matches.html" class="nav-link active">Matches</a>
+            <a href="admin.html" class="nav-link">Admin</a>
+        </div>
+        <div class="nav-spacer"></div>
+        <div class="nav-status">
+            <span class="status-dot"></span>
+            <span>Connecting...</span>
+        </div>
+    </nav>
+
+    <div class="app-container">
+        <div class="page-header">
+            <h1 class="page-title">Match History</h1>
+            <span class="version-badge">v0.3.0</span>
+        </div>
+
+        <div class="search-bar">
+            <div class="filter-group">
+                <button class="filter-btn active" data-filter="all">All</button>
+                <button class="filter-btn" data-filter="W">Wins</button>
+                <button class="filter-btn" data-filter="L">Losses</button>
+            </div>
+            <select class="form-select" id="mapFilter" style="width: auto;">
+                <option value="">All Maps</option>
+            </select>
+            <select class="form-select" id="factionFilter" style="width: auto;">
+                <option value="">All Factions</option>
+                <option value="Allies">Allies</option>
+                <option value="Axis">Axis</option>
+            </select>
+        </div>
+
+        <div class="card">
+            <div class="table-container">
+                <table class="data-table" id="matchesTable">
+                    <thead>
+                        <tr>
+                            <th>Date</th>
+                            <th>Match ID</th>
+                            <th>Map</th>
+                            <th>Enemy</th>
+                            <th>Faction</th>
+                            <th>Score</th>
+                            <th>Result</th>
+                            <th>Duration</th>
+                            <th>MVP</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="matchesBody">
+                        <tr><td colspan="10" class="text-center text-muted">Loading...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal-overlay" id="matchModal">
+        <div class="modal" style="max-width: 900px;">
+            <div class="modal-header">
+                <span class="modal-title" id="modalMatchTitle">Match Details</span>
+                <button class="modal-close" onclick="closeMatchModal()">×</button>
+            </div>
+            <div class="modal-body" id="modalBody"></div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="closeMatchModal()">Close</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="loading-overlay hidden" id="loadingOverlay">
+        <div class="loading-spinner"></div>
+        <div class="loading-text">Loading...</div>
+    </div>
+
+    <script src="../js/hll.js"></script>
+    <script>
+        let allMatches = [];
+        let filteredMatches = [];
+        let currentResultFilter = 'all';
+        let currentMapFilter = '';
+        let currentFactionFilter = '';
+        
+        async function init() {
+            HLL.showLoading('Loading matches...');
+            await HLL.init();
+            if (HLL.isOnline) {
+                await loadMatches();
+                populateMapFilter();
+            }
+            HLL.hideLoading();
+            setupEventListeners();
+        }
+        
+        function setupEventListeners() {
+            document.querySelectorAll('.filter-btn').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+                    btn.classList.add('active');
+                    currentResultFilter = btn.dataset.filter;
+                    filterAndRender();
+                });
+            });
+            document.getElementById('mapFilter').addEventListener('change', (e) => {
+                currentMapFilter = e.target.value;
+                filterAndRender();
+            });
+            document.getElementById('factionFilter').addEventListener('change', (e) => {
+                currentFactionFilter = e.target.value;
+                filterAndRender();
+            });
+        }
+        
+        async function loadMatches() {
+            allMatches = await HLL.loadMatches(500);
+            filterAndRender();
+        }
+        
+        function populateMapFilter() {
+            const maps = [...new Set(allMatches.map(m => m.map))].sort();
+            const select = document.getElementById('mapFilter');
+            maps.forEach(map => {
+                const option = document.createElement('option');
+                option.value = map;
+                option.textContent = map;
+                select.appendChild(option);
+            });
+        }
+        
+        function filterAndRender() {
+            filteredMatches = allMatches.filter(m => {
+                if (currentResultFilter !== 'all' && m.result !== currentResultFilter) return false;
+                if (currentMapFilter && m.map !== currentMapFilter) return false;
+                if (currentFactionFilter && m.my_faction !== currentFactionFilter) return false;
+                return true;
+            });
+            renderTable();
+        }
+        
+        function renderTable() {
+            const tbody = document.getElementById('matchesBody');
+            if (filteredMatches.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="10" class="text-center text-muted">No matches found</td></tr>';
+                return;
+            }
+            tbody.innerHTML = filteredMatches.map(m => `
+                <tr>
+                    <td>${HLL.formatDate(m.match_date)}</td>
+                    <td style="font-family: monospace; font-size: 11px;">${m.match_id}</td>
+                    <td>${m.map}</td>
+                    <td>${m.enemy_team}</td>
+                    <td><span class="faction-badge faction-${m.my_faction.toLowerCase()}">${m.my_faction}</span></td>
+                    <td><strong>${m.my_score}</strong> - ${m.enemy_score}</td>
+                    <td><span class="badge ${HLL.getResultBadgeClass(m.result)}">${m.result}</span></td>
+                    <td>${m.duration || '-'}</td>
+                    <td>${m.mvp_name || '-'}</td>
+                    <td><button class="btn btn-sm btn-secondary" onclick="openMatchModal('${m.match_id}')">View</button></td>
+                </tr>
+            `).join('');
+        }
+        
+        async function openMatchModal(matchId) {
+            HLL.showLoading('Loading match details...');
+            try {
+                const { data: match } = await HLL.supabase.from('matches').select('*').eq('match_id', matchId).single();
+                const { data: details } = await HLL.supabase.from('match_details').select('*').eq('match_id', matchId).order('team').order('kills', { ascending: false });
+                const { data: noShows } = await HLL.supabase.from('no_shows').select('*').eq('match_id', matchId);
+                
+                HLL.hideLoading();
+                renderMatchModal(match, details || [], noShows || []);
+                document.getElementById('matchModal').classList.add('active');
+            } catch (err) {
+                HLL.hideLoading();
+                HLL.showAlert('Failed to load match details', 'error');
+            }
+        }
+        
+        function renderMatchModal(match, details, noShows) {
+            document.getElementById('modalMatchTitle').textContent = `${match.my_team} vs ${match.enemy_team} - ${match.map}`;
+            const friendlyPlayers = details.filter(d => d.team === 'Friendly');
+            const enemyPlayers = details.filter(d => d.team === 'Enemy');
+            
+            document.getElementById('modalBody').innerHTML = `
+                <div class="stat-row" style="justify-content: center;">
+                    <div class="stat-box"><span class="stat-value">${HLL.formatDate(match.match_date)}</span><span class="stat-label">Date</span></div>
+                    <div class="stat-box"><span class="stat-value">${match.map}</span><span class="stat-label">Map</span></div>
+                    <div class="stat-box"><span class="stat-value">${match.my_faction}</span><span class="stat-label">Faction</span></div>
+                    <div class="stat-box ${match.result === 'W' ? 'ok' : 'warning'}"><span class="stat-value">${match.my_score} - ${match.enemy_score}</span><span class="stat-label">${match.result === 'W' ? 'Victory' : 'Defeat'}</span></div>
+                    <div class="stat-box"><span class="stat-value">${match.duration || '-'}</span><span class="stat-label">Duration</span></div>
+                    <div class="stat-box"><span class="stat-value">${match.mvp_name || '-'}</span><span class="stat-label">MVP</span></div>
+                </div>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 16px;">
+                    <div>
+                        <h4 style="margin-bottom: 8px; color: var(--accent-green);">${match.my_team} (${friendlyPlayers.length})</h4>
+                        <div class="table-container" style="max-height: 300px; overflow-y: auto;">
+                            <table class="data-table">
+                                <thead><tr><th>Player</th><th>Role</th><th class="numeric">K</th><th class="numeric">D</th><th class="numeric">CE</th></tr></thead>
+                                <tbody>${friendlyPlayers.length > 0 ? friendlyPlayers.map(p => `
+                                    <tr ${p.player_name === match.mvp_name ? 'style="background: rgba(245, 166, 35, 0.1);"' : ''}>
+                                        <td>${p.player_name} ${p.player_name === match.mvp_name ? '⭐' : ''}</td>
+                                        <td style="font-size: 11px;">${p.role || '-'}</td>
+                                        <td class="numeric">${p.kills}</td>
+                                        <td class="numeric">${p.deaths}</td>
+                                        <td class="numeric">${p.combat_eff}</td>
+                                    </tr>`).join('') : '<tr><td colspan="5" class="text-center text-muted">No data</td></tr>'}</tbody>
+                            </table>
+                        </div>
+                    </div>
+                    <div>
+                        <h4 style="margin-bottom: 8px; color: var(--accent-red);">${match.enemy_team} (${enemyPlayers.length})</h4>
+                        <div class="table-container" style="max-height: 300px; overflow-y: auto;">
+                            <table class="data-table">
+                                <thead><tr><th>Player</th><th class="numeric">K</th><th class="numeric">D</th><th class="numeric">CE</th></tr></thead>
+                                <tbody>${enemyPlayers.length > 0 ? enemyPlayers.map(p => `
+                                    <tr><td>${p.player_name}</td><td class="numeric">${p.kills}</td><td class="numeric">${p.deaths}</td><td class="numeric">${p.combat_eff}</td></tr>
+                                `).join('') : '<tr><td colspan="4" class="text-center text-muted">No data</td></tr>'}</tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+                ${noShows.length > 0 ? `<div style="margin-top: 16px;"><h4 style="margin-bottom: 8px; color: var(--accent-red);">No-Shows (${noShows.length})</h4><div style="display: flex; gap: 8px; flex-wrap: wrap;">${noShows.map(ns => `<span class="badge badge-team-merc">${ns.player_name}</span>`).join('')}</div></div>` : ''}
+            `;
+        }
+        
+        function closeMatchModal() { document.getElementById('matchModal').classList.remove('active'); }
+        document.getElementById('matchModal').addEventListener('click', (e) => { if (e.target.id === 'matchModal') closeMatchModal(); });
+        document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeMatchModal(); });
+        
+        init();
+    </script>
+</body>
+</html>
