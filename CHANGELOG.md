@@ -4,6 +4,10 @@ All notable changes to this project will be documented in this file.
 
 ---
 
+## [v0.4.1] - 2026-02-07
+### Fixed
+- **admin.html**: New `stripClanTag()` function removes clan tag prefixes (◯ |, 〇 I, [TAG], TAG |) when auto-adding new friendly players to roster — keeps names clean and consistent with original roster entries
+
 ## [v0.4.0] - 2026-02-07
 ### Added
 - **enemies.html**: New "Enemy Intel" page with team cards grid, mercenary alerts, and team detail view
