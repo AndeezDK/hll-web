@@ -24,7 +24,7 @@ hll-web-v0.3.0/
 │   ├── roster.html     # Player database
 │   ├── stats.html      # Team statistics
 │   ├── matches.html    # Match history
-│   └── admin.html      # Admin tools
+│   └── admin.html      # Admin tools 
 └── sql/
     └── 001_schema.sql  # Supabase database schema
 ```
