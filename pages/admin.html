@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Admin - HLL Tool v0.3.26</title>
+    <title>Admin - HLL Tool v0.3.27</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <link rel="stylesheet" href="../css/styles.css">
     <style>
@@ -80,7 +80,7 @@
         <!-- Header -->
         <div class="page-header">
             <h1 class="page-title">Admin</h1>
-            <span class="version-badge">v0.3.26</span>
+            <span class="version-badge">v0.3.27</span>
         </div>
 
         <div class="admin-grid">
@@ -397,25 +397,73 @@
                 return;
             }
             
-            // Extract summary for confirmation: faction (with count) and map
+            // --- CHECK FOR COMBINED "TEAM" TAB ---
+            // If paste has "Team\n" or "Team\r" as a standalone line before "Search for a player"
+            // AND does NOT have "Allies (XX)" or "Axis (XX)", they pasted the combined view
             const factionLineMatch = teamData.match(/(Allies|Axis)\s*\((\d+)\)/i);
-            const pasteTeamFaction = factionLineMatch ? factionLineMatch[1] : 'Unknown faction';
-            const pastePlayerCount = factionLineMatch ? factionLineMatch[2] : '?';
-            
-            // Detect map from paste for confirmation display
-            const knownMaps = ['Carentan', 'Foy', 'Hill 400', 'Hurtgen Forest', 'Hürtgen Forest', 'Kursk', 
-                'Omaha Beach', 'Purple Heart Lane', 'Remagen', 'Sainte-Mère-Église', 'St. Marie Du Mont', 
-                'Stalingrad', 'Utah Beach', 'Mortain', 'El Alamein', 'Driel', 'Kharkov'];
-            let pasteMap = 'Unknown map';
-            for (const map of knownMaps) {
-                if (lowerTeamData.includes(map.toLowerCase())) { pasteMap = map; break; }
+            if (!factionLineMatch) {
+                HLL.showAlert('Could not detect your faction. Make sure you paste from the "Allies" or "Axis" tab on helo-system.de, NOT the combined "Team" tab.', 'error');
+                return;
             }
             
-            // Show confirmation popup
-            const confirmMsg = `Team_Paste detected:\n\n` +
+            const pasteTeamFaction = factionLineMatch[1];
+            const pastePlayerCount = factionLineMatch[2];
+            
+            // --- EXTRACT MATCH INFO FOR DISPLAY ---
+            // Date: "November 23, 2025 8:02 PM" format
+            const longDateMatch = teamData.match(/(\w+ \d{1,2},\s*\d{4}\s+\d{1,2}:\d{2}\s*[AP]M)/i);
+            const isoDateMatch = teamData.match(/(\d{4}-\d{2}-\d{2})/);
+            let pasteDate = 'Unknown date';
+            if (longDateMatch) {
+                pasteDate = longDateMatch[1];
+            } else if (isoDateMatch) {
+                pasteDate = isoDateMatch[1];
+            }
+            
+            // Score: "5 : 0" with possible non-breaking spaces
+            const normalizedPaste = teamData.replace(/\u00a0/g, ' ');
+            const scoreMatch = normalizedPaste.match(/\b(\d)\s*[-–:]\s*(\d)\b/);
+            let pasteScore = 'Unknown score';
+            if (scoreMatch) {
+                pasteScore = `${scoreMatch[1]} - ${scoreMatch[2]}`;
+            }
+            
+            // Duration: H:MM:SS
+            const durationMatch = teamData.match(/(\d{1,2}:\d{2}:\d{2})/);
+            let pasteDuration = '';
+            if (durationMatch) {
+                pasteDuration = durationMatch[1];
+            }
+            
+            // Map: search between the score/date area and "Game statistics"
+            // Find the line that contains a map name AFTER the duration/date but BEFORE "Game statistics"
+            const knownMaps = {
+                'carentan': 'Carentan', 'foy': 'Foy', 'hill 400': 'Hill 400', 
+                'hurtgen forest': 'Hurtgen Forest', 'hürtgen forest': 'Hurtgen Forest',
+                'kursk': 'Kursk', 'omaha beach': 'Omaha Beach', 'purple heart lane': 'Purple Heart Lane',
+                'remagen': 'Remagen', 'sainte-mère-église': 'SME', 'sainte mère église': 'SME',
+                'st. marie du mont': 'SMDM', 'sainte-marie-du-mont': 'SMDM',
+                'stalingrad': 'Stalingrad', 'utah beach': 'Utah Beach', 'mortain': 'Mortain',
+                'el alamein': 'El Alamein', 'driel': 'Driel', 'kharkov': 'Kharkov'
+            };
+            // Get text between date and "Game statistics" for map detection
+            const gameStatsIdx = lowerTeamData.indexOf('game statistics');
+            const mapSearchArea = gameStatsIdx > 0 ? lowerTeamData.substring(0, gameStatsIdx) : lowerTeamData;
+            let pasteMap = 'Unknown map';
+            // Sort by length descending so longer matches win
+            const sortedMaps = Object.entries(knownMaps).sort((a, b) => b[0].length - a[0].length);
+            for (const [alias, mapName] of sortedMaps) {
+                if (mapSearchArea.includes(alias)) { pasteMap = mapName; break; }
+            }
+            
+            // --- SHOW CONFIRMATION POPUP (Step 1) ---
+            let confirmMsg = `Team_Paste detected:\n\n` +
                 `  Faction: ${pasteTeamFaction} (${pastePlayerCount} players)\n` +
-                `  Map: ${pasteMap}\n\n` +
-                `Is this the correct match data?`;
+                `  Map: ${pasteMap}\n` +
+                `  Score: ${pasteScore}\n` +
+                `  Date: ${pasteDate}\n`;
+            if (pasteDuration) confirmMsg += `  Duration: ${pasteDuration}\n`;
+            confirmMsg += `\nIs this the correct match data?`;
             
             if (!confirm(confirmMsg)) {
                 return;
@@ -433,6 +481,27 @@
                 reader.onerror = () => reject(new Error('Failed to read CSV file'));
                 reader.readAsText(csvFileInput.files[0]);
             });
+            
+            // --- PASTE/CSV CROSS-CHECK (Step 2) ---
+            // Parse paste names and CSV names, check overlap
+            const tempTeamInfo = parseTeamData(teamData);
+            const tempCsvPlayers = parseCSVData(csvData);
+            const csvNameSet = new Set(tempCsvPlayers.map(p => normalizeName(p.name)));
+            const pasteInCsv = tempTeamInfo.friendlyNames.filter(n => csvNameSet.has(normalizeName(n)));
+            const matchRate = tempTeamInfo.friendlyNames.length > 0 
+                ? Math.round((pasteInCsv.length / tempTeamInfo.friendlyNames.length) * 100) 
+                : 0;
+            
+            console.log(`[crossCheck] ${pasteInCsv.length}/${tempTeamInfo.friendlyNames.length} paste names found in CSV (${matchRate}%)`);
+            
+            if (pasteInCsv.length < 5) {
+                const crossCheckMsg = `⚠️ Only ${pasteInCsv.length} of ${tempTeamInfo.friendlyNames.length} paste players found in CSV.\n\n` +
+                    `This usually means the paste and CSV are from different games.\n\n` +
+                    `Do you want to continue anyway?`;
+                if (!confirm(crossCheckMsg)) {
+                    return;
+                }
+            }
             
             HLL.showLoading('Processing match data...');
             
