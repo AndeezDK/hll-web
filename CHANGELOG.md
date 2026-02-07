@@ -4,6 +4,10 @@ All notable changes to this project will be documented in this file.
 
 ---
 
+## [v0.3.30] - 2026-02-07
+### Added
+- **admin.html**: Optional "Streamers / Casters" text field on import form — comma-separated names are excluded from import entirely (no stats stored)
+
 ## [v0.3.29] - 2026-02-07
 ### Fixed
 - **admin.html**: Name parser now strips non-breaking spaces (U+00A0) and trailing whitespace from rank/kills/deaths lines — browser paste includes invisible trailing spaces that broke `/^\d+$/` regex
