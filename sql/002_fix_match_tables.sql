@@ -1,78 +1,26 @@
 -- ============================================================================
--- HLL Web Tool v0.3.0 - Database Schema
+-- HLL Web Tool v0.3.20 — Migration: Fix match tables
 -- Run this in Supabase SQL Editor
+-- 
+-- SAFE: These 4 tables are EMPTY (no data loss). Players/lineups/teams untouched.
 -- ============================================================================
 
--- ============================================================================
--- TEAMS TABLE (already exists, but ensure structure)
--- ============================================================================
-CREATE TABLE IF NOT EXISTS teams (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    name TEXT NOT NULL UNIQUE,
-    tag TEXT,
-    created_at TIMESTAMPTZ DEFAULT NOW()
-);
+-- Drop in correct order (match_details/match_lineups/no_shows depend on matches)
+DROP TABLE IF EXISTS match_details CASCADE;
+DROP TABLE IF EXISTS match_lineups CASCADE;
+DROP TABLE IF EXISTS no_shows CASCADE;
+DROP TABLE IF EXISTS matches CASCADE;
 
--- Insert default teams if not exist
-INSERT INTO teams (name, tag) VALUES 
-    ('Circle', '◯ |'),
-    ('DKB', '[DKB]'),
-    ('Merc', NULL)
-ON CONFLICT (name) DO NOTHING;
+-- Drop views that reference these tables
+DROP VIEW IF EXISTS team_stats_by_map;
+DROP VIEW IF EXISTS team_stats_by_enemy;
 
 -- ============================================================================
--- PLAYERS TABLE (expanded from current)
--- ============================================================================
-DROP TABLE IF EXISTS players CASCADE;
-
-CREATE TABLE players (
-    steam_id TEXT PRIMARY KEY,
-    name TEXT NOT NULL,
-    team TEXT DEFAULT 'Merc',
-    
-    -- Roles
-    primary_role TEXT,
-    secondary_role TEXT,
-    tertiary_role TEXT,
-    
-    -- Activity tracking
-    first_seen DATE,
-    last_seen DATE,
-    total_matches INTEGER DEFAULT 0,
-    no_shows INTEGER DEFAULT 0,
-    
-    -- Combat stats
-    total_kills INTEGER DEFAULT 0,
-    total_deaths INTEGER DEFAULT 0,
-    most_kills INTEGER DEFAULT 0,
-    avg_kills NUMERIC(5,1) DEFAULT 0,
-    avg_ce INTEGER DEFAULT 0,
-    
-    -- Support stats
-    total_support INTEGER DEFAULT 0,
-    avg_support INTEGER DEFAULT 0,
-    
-    -- MVP tracking
-    mvp_count INTEGER DEFAULT 0,
-    last_mvp DATE,
-    
-    -- Meta
-    notes TEXT,
-    previous_names TEXT[],
-    
-    created_at TIMESTAMPTZ DEFAULT NOW(),
-    updated_at TIMESTAMPTZ DEFAULT NOW()
-);
-
--- Index for fast lookups
-CREATE INDEX idx_players_team ON players(team);
-CREATE INDEX idx_players_name ON players(name);
-
--- ============================================================================
--- MATCHES TABLE (Match_Log equivalent)
+-- MATCHES (Match_Log equivalent)
+-- Fix: mvp_steam_id has NO FK constraint (MVP may not be in roster yet)
 -- ============================================================================
 CREATE TABLE matches (
-    match_id TEXT PRIMARY KEY,  -- Format: MTH-XXXXXX
+    match_id TEXT PRIMARY KEY,
     match_date DATE NOT NULL,
     
     my_team TEXT NOT NULL,
@@ -98,7 +46,8 @@ CREATE INDEX idx_matches_date ON matches(match_date DESC);
 CREATE INDEX idx_matches_map ON matches(map);
 
 -- ============================================================================
--- MATCH_DETAILS TABLE (per-player per-match stats)
+-- MATCH_DETAILS (per-player per-match stats)
+-- Fix: kd, kpm, dpm widened to NUMERIC(8,2); longest_life_min to NUMERIC(8,1)
 -- ============================================================================
 CREATE TABLE match_details (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -110,7 +59,6 @@ CREATE TABLE match_details (
     team TEXT CHECK (team IN ('Friendly', 'Enemy')),
     role TEXT,
     
-    -- Combat stats
     kills INTEGER DEFAULT 0,
     deaths INTEGER DEFAULT 0,
     kd NUMERIC(8,2),
@@ -121,11 +69,9 @@ CREATE TABLE match_details (
     max_tk_streak INTEGER DEFAULT 0,
     death_by_tk INTEGER DEFAULT 0,
     
-    -- Time stats
     longest_life_min NUMERIC(8,1),
     shortest_life_sec INTEGER,
     
-    -- Points
     combat_eff INTEGER DEFAULT 0,
     support_pts INTEGER DEFAULT 0,
     defensive_pts INTEGER DEFAULT 0,
@@ -142,7 +88,7 @@ CREATE INDEX idx_match_details_match ON match_details(match_id);
 CREATE INDEX idx_match_details_player ON match_details(steam_id);
 
 -- ============================================================================
--- MATCH_LINEUPS TABLE (role assignments per match)
+-- MATCH_LINEUPS (role assignments per match)
 -- ============================================================================
 CREATE TABLE match_lineups (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -157,7 +103,7 @@ CREATE TABLE match_lineups (
 CREATE INDEX idx_match_lineups_match ON match_lineups(match_id);
 
 -- ============================================================================
--- NO_SHOWS TABLE
+-- NO_SHOWS
 -- ============================================================================
 CREATE TABLE no_shows (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -175,41 +121,7 @@ CREATE TABLE no_shows (
 CREATE INDEX idx_no_shows_player ON no_shows(steam_id);
 
 -- ============================================================================
--- LINEUPS TABLE (live lineup planning - expanded from current)
--- ============================================================================
-DROP TABLE IF EXISTS lineups CASCADE;
-
-CREATE TABLE lineups (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    team_id UUID REFERENCES teams(id),
-    lineup_number INTEGER NOT NULL CHECK (lineup_number BETWEEN 1 AND 4),
-    
-    -- Match info
-    enemy_team TEXT,
-    map TEXT,
-    faction TEXT CHECK (faction IN ('Allies', 'Axis')),
-    match_date DATE,
-    status TEXT DEFAULT 'draft' CHECK (status IN ('draft', 'locked', 'submitted')),
-    
-    -- Slot data
-    cell_position TEXT NOT NULL,  -- e.g., 'commander', 'tank1_tc', 'north_1'
-    steam_id TEXT REFERENCES players(steam_id),
-    player_name TEXT,
-    role TEXT,
-    sl_role TEXT,
-    note TEXT,
-    is_here BOOLEAN DEFAULT FALSE,
-    
-    created_at TIMESTAMPTZ DEFAULT NOW(),
-    updated_at TIMESTAMPTZ DEFAULT NOW(),
-    
-    UNIQUE(team_id, lineup_number, cell_position)
-);
-
-CREATE INDEX idx_lineups_team ON lineups(team_id, lineup_number);
-
--- ============================================================================
--- TEAM_STATS VIEW (calculated from matches)
+-- RE-CREATE VIEWS
 -- ============================================================================
 CREATE OR REPLACE VIEW team_stats_by_map AS
 SELECT 
@@ -241,76 +153,26 @@ GROUP BY enemy_team
 ORDER BY matches DESC;
 
 -- ============================================================================
--- PLAYER STATS VIEW (calculated role percentages)
+-- RE-ENABLE RLS + POLICIES
 -- ============================================================================
-CREATE OR REPLACE VIEW player_stats AS
-SELECT 
-    p.steam_id,
-    p.name,
-    p.team,
-    p.total_matches,
-    p.no_shows,
-    CASE WHEN (p.total_matches + p.no_shows) > 0 
-        THEN ROUND(p.total_matches::NUMERIC / (p.total_matches + p.no_shows) * 100, 0)
-        ELSE NULL 
-    END as attendance_pct,
-    p.total_kills,
-    p.total_deaths,
-    CASE WHEN p.total_deaths > 0 
-        THEN ROUND(p.total_kills::NUMERIC / p.total_deaths, 2)
-        ELSE NULL 
-    END as kd_ratio,
-    p.avg_kills,
-    p.most_kills,
-    p.avg_ce,
-    p.avg_support,
-    p.mvp_count,
-    p.first_seen,
-    p.last_seen
-FROM players p;
-
--- ============================================================================
--- ENABLE REALTIME for lineups table
--- ============================================================================
-ALTER PUBLICATION supabase_realtime ADD TABLE lineups;
-
--- ============================================================================
--- ROW LEVEL SECURITY (basic - allow all for now)
--- ============================================================================
-ALTER TABLE players ENABLE ROW LEVEL SECURITY;
 ALTER TABLE matches ENABLE ROW LEVEL SECURITY;
 ALTER TABLE match_details ENABLE ROW LEVEL SECURITY;
 ALTER TABLE match_lineups ENABLE ROW LEVEL SECURITY;
 ALTER TABLE no_shows ENABLE ROW LEVEL SECURITY;
-ALTER TABLE lineups ENABLE ROW LEVEL SECURITY;
 
--- Allow anonymous read/write for now (tighten later with auth)
-CREATE POLICY "Allow all" ON players FOR ALL USING (true) WITH CHECK (true);
 CREATE POLICY "Allow all" ON matches FOR ALL USING (true) WITH CHECK (true);
 CREATE POLICY "Allow all" ON match_details FOR ALL USING (true) WITH CHECK (true);
 CREATE POLICY "Allow all" ON match_lineups FOR ALL USING (true) WITH CHECK (true);
 CREATE POLICY "Allow all" ON no_shows FOR ALL USING (true) WITH CHECK (true);
-CREATE POLICY "Allow all" ON lineups FOR ALL USING (true) WITH CHECK (true);
 
 -- ============================================================================
--- FUNCTION: Generate Match ID
--- ============================================================================
-CREATE OR REPLACE FUNCTION generate_match_id()
-RETURNS TEXT AS $$
-BEGIN
-    RETURN 'MTH-' || LPAD(FLOOR(RANDOM() * 1000000)::TEXT, 6, '0');
-END;
-$$ LANGUAGE plpgsql;
-
--- ============================================================================
--- FUNCTION: Update player stats after match import
+-- RE-CREATE FUNCTION (in case it references old column types)
 -- ============================================================================
 CREATE OR REPLACE FUNCTION update_player_stats_from_match(p_match_id TEXT)
 RETURNS void AS $$
 DECLARE
     r RECORD;
 BEGIN
-    -- Update stats for each friendly player in the match
     FOR r IN 
         SELECT 
             md.steam_id,

@@ -7,7 +7,7 @@
 // ============================================================================
 
 const HLL = {
-    version: '0.3.0',
+    version: '0.3.21',
     
     // Default Supabase config (can be overridden via localStorage)
     config: {
