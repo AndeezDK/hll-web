@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Admin - HLL Tool v0.3.21</title>
+    <title>Admin - HLL Tool v0.3.22</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <link rel="stylesheet" href="../css/styles.css">
     <style>
@@ -80,7 +80,7 @@
         <!-- Header -->
         <div class="page-header">
             <h1 class="page-title">Admin</h1>
-            <span class="version-badge">v0.3.21</span>
+            <span class="version-badge">v0.3.22</span>
         </div>
 
         <div class="admin-grid">
@@ -778,34 +778,41 @@
             // (mirrors VBA DetectEnemyTeam which scans [TAG] in enemy player names)
 
             // --- FRIENDLY PLAYER NAMES ---
-            // helo-system team page: rows with a numeric rank in first column, name in col C
-            // Tab-separated when pasted from browser
-            let debugTabLines = 0;
-            let debugRankLines = 0;
-            for (const line of lines) {
-                const parts = line.split('\t');
-                if (parts.length >= 2) {
-                    debugTabLines++;
-                    const rank = parts[0].trim();
-                    if (/^\d{1,3}$/.test(rank)) {
-                        debugRankLines++;
-                        // Name is typically in col C (index 2), fallback to col B (index 1)
-                        const name = (parts[2] || parts[1] || '').trim();
-                        if (name && name.length > 1 && !/^\d+$/.test(name)) {
-                            info.friendlyNames.push(name);
+            // Browser paste from helo-system: each player spans multiple lines
+            // Rank is on its own line ("1\t"), name is on the next non-empty line
+            // Track sequential ranks to avoid false matches from stats numbers
+            const allLines = text.split('\n');
+            let playerStartIdx = 0;
+            for (let si = 0; si < allLines.length; si++) {
+                if (allLines[si].toLowerCase().includes('search for a player')) {
+                    playerStartIdx = si + 1;
+                    break;
+                }
+            }
+            let expectedRank = 1;
+            for (let pi = playerStartIdx; pi < allLines.length; pi++) {
+                const stripped = allLines[pi].trim();
+                const lower = stripped.toLowerCase();
+                if (lower.includes('select a player') || lower.includes('made by')) break;
+                const cleaned = stripped.replace(/\t/g, '');
+                if (/^\d+$/.test(cleaned) && parseInt(cleaned) >= expectedRank && parseInt(cleaned) <= 50) {
+                    const rankNum = parseInt(cleaned);
+                    for (let nj = pi + 1; nj < Math.min(pi + 3, allLines.length); nj++) {
+                        const candidate = allLines[nj].trim();
+                        if (candidate && !/^\d+[\.\-]?\d*$/.test(candidate.replace(/\t/g, '')) && !candidate.includes('\t')) {
+                            info.friendlyNames.push(candidate);
+                            expectedRank = rankNum + 1;
+                            break;
                         }
                     }
                 }
             }
-            console.log(`[parseTeamData] Total lines: ${lines.length}, Tab-split lines (≥2 parts): ${debugTabLines}, Rank lines: ${debugRankLines}, Names extracted: ${info.friendlyNames.length}`);
+            console.log(`[parseTeamData] Total lines: ${allLines.length}, Names extracted: ${info.friendlyNames.length}`);
             if (info.friendlyNames.length > 0) {
                 console.log(`[parseTeamData] First 5 names:`, info.friendlyNames.slice(0, 5));
             }
-            if (info.friendlyNames.length === 0 && lines.length > 10) {
-                console.warn(`[parseTeamData] ⚠️ No friendly names extracted! Sample lines:`);
-                lines.slice(0, 5).forEach((l, i) => {
-                    console.log(`  Line ${i}: "${l.substring(0, 80)}" | tab-split parts: ${l.split('\t').length}`);
-                });
+            if (info.friendlyNames.length === 0 && allLines.length > 10) {
+                console.warn(`[parseTeamData] ⚠️ No friendly names extracted! Could not find "Search for a player" marker or rank pattern.`);
             }
 
             return info;
