@@ -1,0 +1,739 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Enemy Intel - HLL Tool v0.3.32</title>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <link rel="stylesheet" href="../css/styles.css">
+    <style>
+        /* Team cards grid */
+        .team-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+            gap: 16px;
+            margin-bottom: 24px;
+        }
+        .team-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 16px;
+            cursor: pointer;
+            transition: border-color 0.2s, transform 0.1s;
+        }
+        .team-card:hover {
+            border-color: var(--accent-orange);
+            transform: translateY(-1px);
+        }
+        .team-card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 12px;
+        }
+        .team-tag {
+            font-size: 1.3rem;
+            font-weight: 700;
+            color: var(--text-primary);
+        }
+        .team-name {
+            font-size: 0.85rem;
+            color: var(--text-secondary);
+            margin-top: 2px;
+        }
+        .team-record {
+            font-size: 0.9rem;
+            font-weight: 600;
+        }
+        .team-record .win { color: var(--accent-green); }
+        .team-record .loss { color: var(--accent-red); }
+        .team-record .draw { color: var(--text-secondary); }
+        .team-card-stats {
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr;
+            gap: 8px;
+            margin-top: 8px;
+            font-size: 0.8rem;
+            color: var(--text-secondary);
+        }
+        .team-card-stats .stat-mini {
+            text-align: center;
+        }
+        .team-card-stats .stat-mini-value {
+            font-weight: 600;
+            color: var(--text-primary);
+            display: block;
+        }
+        .last-played {
+            font-size: 0.75rem;
+            color: var(--text-muted, var(--text-secondary));
+            margin-top: 8px;
+        }
+
+        /* Detail view */
+        .detail-back {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            color: var(--accent-orange);
+            cursor: pointer;
+            font-size: 0.9rem;
+            margin-bottom: 16px;
+            text-decoration: none;
+        }
+        .detail-back:hover { text-decoration: underline; }
+
+        .detail-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+            gap: 12px;
+        }
+        .detail-title {
+            font-size: 1.6rem;
+            font-weight: 700;
+            color: var(--text-primary);
+        }
+        .detail-subtitle {
+            font-size: 0.9rem;
+            color: var(--text-secondary);
+        }
+
+        /* Stat sections */
+        .intel-sections {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+            gap: 16px;
+            margin-bottom: 24px;
+        }
+        .intel-section {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 16px;
+        }
+        .intel-section h3 {
+            font-size: 0.85rem;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            color: var(--accent-orange);
+            margin-bottom: 12px;
+        }
+        .intel-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 4px 0;
+            font-size: 0.9rem;
+        }
+        .intel-row .label { color: var(--text-secondary); }
+        .intel-row .value { color: var(--text-primary); font-weight: 600; }
+
+        /* Threat badges */
+        .threat-badge {
+            display: inline-flex;
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 0.75rem;
+            font-weight: 600;
+        }
+        .threat-extreme {
+            background: rgba(248, 81, 73, 0.25);
+            color: #f85149;
+        }
+        .threat-high {
+            background: rgba(227, 139, 44, 0.25);
+            color: #e38b2c;
+        }
+        .threat-medium {
+            background: rgba(187, 154, 56, 0.25);
+            color: #bb9a38;
+        }
+        .threat-low {
+            background: rgba(86, 166, 75, 0.2);
+            color: var(--accent-green);
+        }
+
+        /* Threat summary grid */
+        .threat-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 8px;
+        }
+        .threat-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 6px 10px;
+            border-radius: 6px;
+            font-size: 0.85rem;
+        }
+        .threat-item .count {
+            font-weight: 700;
+            font-size: 1.1rem;
+        }
+
+        /* Player intel table */
+        .player-intel-table {
+            width: 100%;
+            margin-top: 12px;
+        }
+        .player-intel-table th {
+            cursor: pointer;
+            user-select: none;
+        }
+        .player-intel-table th:hover {
+            color: var(--accent-orange);
+        }
+
+        /* Mercenary section */
+        .merc-alert {
+            background: rgba(227, 139, 44, 0.1);
+            border: 1px solid rgba(227, 139, 44, 0.3);
+            border-radius: 8px;
+            padding: 12px 16px;
+            margin-bottom: 12px;
+        }
+        .merc-name {
+            font-weight: 600;
+            color: var(--text-primary);
+        }
+        .merc-teams {
+            font-size: 0.85rem;
+            color: var(--text-secondary);
+            margin-top: 4px;
+        }
+
+        /* Tabs for detail view */
+        .intel-tabs {
+            display: flex;
+            gap: 0;
+            margin-bottom: 20px;
+            border-bottom: 1px solid var(--border);
+        }
+        .intel-tab {
+            padding: 10px 20px;
+            cursor: pointer;
+            font-size: 0.9rem;
+            color: var(--text-secondary);
+            border-bottom: 2px solid transparent;
+            transition: color 0.2s, border-color 0.2s;
+        }
+        .intel-tab:hover { color: var(--text-primary); }
+        .intel-tab.active {
+            color: var(--accent-orange);
+            border-bottom-color: var(--accent-orange);
+        }
+        .tab-content { display: none; }
+        .tab-content.active { display: block; }
+
+        /* View toggle */
+        .view-toggle {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 16px;
+        }
+        .view-toggle .btn { font-size: 0.85rem; padding: 6px 14px; }
+        .view-toggle .btn.active { background: var(--accent-orange); color: #000; }
+
+        /* Match history table in detail */
+        .match-result-W { color: var(--accent-green); font-weight: 600; }
+        .match-result-L { color: var(--accent-red); font-weight: 600; }
+        .match-result-D { color: var(--text-secondary); font-weight: 600; }
+
+        /* Mobile */
+        @media (max-width: 768px) {
+            .team-grid { grid-template-columns: 1fr; }
+            .intel-sections { grid-template-columns: 1fr; }
+            .detail-header { flex-direction: column; }
+            .threat-grid { grid-template-columns: 1fr; }
+        }
+    </style>
+</head>
+<body>
+    <nav class="nav-bar">
+        <a href="../index.html" class="nav-logo">HLL Tool</a>
+        <div class="nav-links">
+            <a href="../index.html" class="nav-link">Home</a>
+            <a href="lineup.html" class="nav-link">Lineups</a>
+            <a href="roster.html" class="nav-link">Roster</a>
+            <a href="stats.html" class="nav-link">Stats</a>
+            <a href="matches.html" class="nav-link">Matches</a>
+            <a href="enemies.html" class="nav-link active">Enemy Intel</a>
+            <a href="admin.html" class="nav-link">Admin</a>
+        </div>
+        <div class="nav-spacer"></div>
+        <div class="nav-status">
+            <span class="status-dot"></span>
+            <span>Connecting...</span>
+        </div>
+    </nav>
+
+    <div class="app-container">
+        <div class="page-header">
+            <h1 class="page-title">Enemy Intel</h1>
+            <span class="version-badge">v0.3.32</span>
+        </div>
+
+        <!-- TEAM LIST VIEW -->
+        <div id="teamListView">
+            <!-- Summary stats -->
+            <div class="match-summary" style="display: flex; gap: 12px; margin-bottom: 16px; flex-wrap: wrap;">
+                <div class="stat-box"><span class="stat-value" id="totalTeams">-</span><span class="stat-label">Enemy Teams</span></div>
+                <div class="stat-box"><span class="stat-value" id="totalEnemyPlayers">-</span><span class="stat-label">Enemy Players</span></div>
+                <div class="stat-box"><span class="stat-value" id="totalMercs">-</span><span class="stat-label">Mercenaries</span></div>
+                <div class="stat-box"><span class="stat-value" id="overallRecord">-</span><span class="stat-label">W-L Record</span></div>
+            </div>
+
+            <!-- Mercenary alerts -->
+            <div id="mercAlerts" style="display: none; margin-bottom: 20px;">
+                <h3 style="font-size: 0.9rem; color: var(--accent-orange); margin-bottom: 10px;">⚠️ Mercenary Alerts</h3>
+                <div id="mercAlertsList"></div>
+            </div>
+
+            <!-- Team grid -->
+            <div id="teamGrid" class="team-grid">
+                <div style="color: var(--text-secondary); padding: 40px; text-align: center;">Loading enemy teams...</div>
+            </div>
+        </div>
+
+        <!-- TEAM DETAIL VIEW (hidden by default) -->
+        <div id="teamDetailView" style="display: none;">
+            <a class="detail-back" onclick="showTeamList()">← Back to Enemy Teams</a>
+            
+            <div class="detail-header">
+                <div>
+                    <div class="detail-title" id="detailTeamTag"></div>
+                    <div class="detail-subtitle" id="detailTeamName"></div>
+                </div>
+                <div id="detailRecord" class="team-record" style="font-size: 1.2rem;"></div>
+            </div>
+
+            <!-- Tabs -->
+            <div class="intel-tabs">
+                <div class="intel-tab active" onclick="switchTab('overview')">Overview</div>
+                <div class="intel-tab" onclick="switchTab('players')">Player Intel</div>
+                <div class="intel-tab" onclick="switchTab('matches')">Match History</div>
+            </div>
+
+            <!-- Overview Tab -->
+            <div id="tab-overview" class="tab-content active">
+                <div class="intel-sections">
+                    <div class="intel-section">
+                        <h3>Match Stats</h3>
+                        <div id="matchStatsSection"></div>
+                    </div>
+                    <div class="intel-section">
+                        <h3>Combat Totals</h3>
+                        <div id="combatTotalsSection"></div>
+                    </div>
+                    <div class="intel-section">
+                        <h3>Threat Summary</h3>
+                        <div id="threatSummarySection"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Players Tab -->
+            <div id="tab-players" class="tab-content">
+                <table class="data-table player-intel-table">
+                    <thead>
+                        <tr>
+                            <th onclick="sortPlayers('name')">Name</th>
+                            <th onclick="sortPlayers('total_matches')">Matches</th>
+                            <th onclick="sortPlayers('total_kills')">Kills</th>
+                            <th onclick="sortPlayers('total_deaths')">Deaths</th>
+                            <th onclick="sortPlayers('kd_ratio')">K/D</th>
+                            <th onclick="sortPlayers('threat_score')">Threat</th>
+                            <th onclick="sortPlayers('avg_kills')">Avg Kills</th>
+                        </tr>
+                    </thead>
+                    <tbody id="playerIntelBody"></tbody>
+                </table>
+            </div>
+
+            <!-- Matches Tab -->
+            <div id="tab-matches" class="tab-content">
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th>Date</th>
+                            <th>Map</th>
+                            <th>Result</th>
+                            <th>Score</th>
+                            <th>Faction</th>
+                        </tr>
+                    </thead>
+                    <tbody id="matchHistoryBody"></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <script src="../js/hll.js"></script>
+    <script>
+        let allTeams = [];
+        let allMercs = [];
+        let currentTeamTag = null;
+        let currentPlayers = [];
+        let playerSortCol = 'threat_score';
+        let playerSortAsc = false;
+
+        // ============================================================================
+        // INIT
+        // ============================================================================
+        document.addEventListener('DOMContentLoaded', async () => {
+            await HLL.init();
+            await loadTeamList();
+        });
+
+        // ============================================================================
+        // LOAD TEAM LIST
+        // ============================================================================
+        async function loadTeamList() {
+            try {
+                // Load enemy team stats
+                const { data: teams, error: teamsErr } = await HLL.supabase
+                    .from('enemy_team_stats')
+                    .select('*')
+                    .order('total_matches', { ascending: false });
+
+                if (teamsErr) throw teamsErr;
+                allTeams = teams || [];
+
+                // Load mercenary data
+                const { data: mercs, error: mercsErr } = await HLL.supabase
+                    .from('mercenary_players')
+                    .select('*');
+
+                if (!mercsErr) allMercs = mercs || [];
+
+                // Load total enemy player count
+                const { count: playerCount } = await HLL.supabase
+                    .from('enemy_players')
+                    .select('*', { count: 'exact', head: true });
+
+                // Update summary stats
+                document.getElementById('totalTeams').textContent = allTeams.length;
+                document.getElementById('totalEnemyPlayers').textContent = playerCount || 0;
+                document.getElementById('totalMercs').textContent = allMercs.length;
+                
+                const totalW = allTeams.reduce((s, t) => s + (t.wins || 0), 0);
+                const totalL = allTeams.reduce((s, t) => s + (t.losses || 0), 0);
+                document.getElementById('overallRecord').textContent = `${totalW}-${totalL}`;
+
+                // Render mercenary alerts
+                renderMercAlerts();
+                
+                // Render team grid
+                renderTeamGrid();
+
+            } catch (err) {
+                console.error('Error loading enemy intel:', err);
+                document.getElementById('teamGrid').innerHTML = 
+                    `<div style="color: var(--accent-red); padding: 20px;">Error loading data: ${err.message}</div>`;
+            }
+        }
+
+        // ============================================================================
+        // RENDER TEAM GRID
+        // ============================================================================
+        function renderTeamGrid() {
+            const grid = document.getElementById('teamGrid');
+            
+            if (allTeams.length === 0) {
+                grid.innerHTML = `<div style="color: var(--text-secondary); padding: 40px; text-align: center; grid-column: 1/-1;">
+                    No enemy teams found. Import matches to start building enemy intel.
+                </div>`;
+                return;
+            }
+
+            grid.innerHTML = allTeams.map(t => {
+                const winRate = t.total_matches > 0 ? t.win_rate : '-';
+                const lastPlayed = t.last_played ? new Date(t.last_played).toLocaleDateString() : 'Never';
+                
+                return `
+                <div class="team-card" onclick="showTeamDetail('${t.tag}')">
+                    <div class="team-card-header">
+                        <div>
+                            <div class="team-tag">[${t.tag}]</div>
+                            ${t.name ? `<div class="team-name">${t.name}</div>` : ''}
+                        </div>
+                        <div class="team-record">
+                            <span class="win">${t.wins || 0}W</span> 
+                            <span class="loss">${t.losses || 0}L</span>
+                            ${t.draws ? `<span class="draw">${t.draws}D</span>` : ''}
+                        </div>
+                    </div>
+                    <div class="team-card-stats">
+                        <div class="stat-mini">
+                            <span class="stat-mini-value">${t.total_matches || 0}</span>
+                            Matches
+                        </div>
+                        <div class="stat-mini">
+                            <span class="stat-mini-value">${winRate}%</span>
+                            Win Rate
+                        </div>
+                        <div class="stat-mini">
+                            <span class="stat-mini-value">${t.points_for || 0}-${t.points_against || 0}</span>
+                            Score
+                        </div>
+                    </div>
+                    <div class="last-played">Last played: ${lastPlayed}</div>
+                </div>`;
+            }).join('');
+        }
+
+        // ============================================================================
+        // RENDER MERCENARY ALERTS
+        // ============================================================================
+        function renderMercAlerts() {
+            const container = document.getElementById('mercAlerts');
+            const list = document.getElementById('mercAlertsList');
+            
+            if (allMercs.length === 0) {
+                container.style.display = 'none';
+                return;
+            }
+
+            container.style.display = 'block';
+            list.innerHTML = allMercs.map(m => `
+                <div class="merc-alert">
+                    <div class="merc-name">${m.name}</div>
+                    <div class="merc-teams">Played for: ${(m.teams_with_counts || []).join(', ')}</div>
+                </div>
+            `).join('');
+        }
+
+        // ============================================================================
+        // SHOW TEAM DETAIL
+        // ============================================================================
+        async function showTeamDetail(tag) {
+            currentTeamTag = tag;
+            document.getElementById('teamListView').style.display = 'none';
+            document.getElementById('teamDetailView').style.display = 'block';
+
+            // Reset to overview tab
+            switchTab('overview');
+
+            const team = allTeams.find(t => t.tag === tag);
+            if (!team) return;
+
+            // Header
+            document.getElementById('detailTeamTag').textContent = `vs [${tag}]`;
+            document.getElementById('detailTeamName').textContent = team.name || '';
+            document.getElementById('detailRecord').innerHTML = 
+                `<span class="win">${team.wins || 0}W</span> <span class="loss">${team.losses || 0}L</span>` +
+                (team.draws ? ` <span class="draw">${team.draws}D</span>` : '');
+
+            // Load sections
+            await Promise.all([
+                loadMatchStats(tag, team),
+                loadCombatTotals(tag),
+                loadPlayerIntel(tag),
+                loadMatchHistory(tag)
+            ]);
+        }
+
+        // ============================================================================
+        // LOAD MATCH STATS SECTION
+        // ============================================================================
+        async function loadMatchStats(tag, team) {
+            const section = document.getElementById('matchStatsSection');
+            const winRate = team.total_matches > 0 ? team.win_rate + '%' : '-';
+            
+            section.innerHTML = `
+                <div class="intel-row"><span class="label">Total Matches</span><span class="value">${team.total_matches || 0}</span></div>
+                <div class="intel-row"><span class="label">Wins</span><span class="value" style="color: var(--accent-green)">${team.wins || 0}</span></div>
+                <div class="intel-row"><span class="label">Losses</span><span class="value" style="color: var(--accent-red)">${team.losses || 0}</span></div>
+                <div class="intel-row"><span class="label">Win Rate</span><span class="value">${winRate}</span></div>
+                <div class="intel-row"><span class="label">Points For/Against</span><span class="value">${team.points_for || 0} - ${team.points_against || 0}</span></div>
+                <div class="intel-row"><span class="label">First Played</span><span class="value">${team.first_played ? new Date(team.first_played).toLocaleDateString() : '-'}</span></div>
+                <div class="intel-row"><span class="label">Last Played</span><span class="value">${team.last_played ? new Date(team.last_played).toLocaleDateString() : '-'}</span></div>
+            `;
+        }
+
+        // ============================================================================
+        // LOAD COMBAT TOTALS
+        // ============================================================================
+        async function loadCombatTotals(tag) {
+            const section = document.getElementById('combatTotalsSection');
+            
+            const { data, error } = await HLL.supabase
+                .from('enemy_team_combat')
+                .select('*')
+                .eq('tag', tag)
+                .single();
+
+            if (error || !data) {
+                section.innerHTML = '<div style="color: var(--text-secondary)">No combat data yet</div>';
+                return;
+            }
+
+            section.innerHTML = `
+                <div class="intel-row"><span class="label">Their Total Kills</span><span class="value">${data.their_total_kills || 0}</span></div>
+                <div class="intel-row"><span class="label">Their Total Deaths</span><span class="value">${data.their_total_deaths || 0}</span></div>
+                <div class="intel-row"><span class="label">Our Total Kills</span><span class="value">${data.our_total_kills || 0}</span></div>
+                <div class="intel-row"><span class="label">Our Total Deaths</span><span class="value">${data.our_total_deaths || 0}</span></div>
+                <div class="intel-row"><span class="label">Our K/D vs Them</span><span class="value" style="color: ${(data.our_kd_vs_them || 0) >= 1 ? 'var(--accent-green)' : 'var(--accent-red)'}">${data.our_kd_vs_them || '-'}</span></div>
+            `;
+        }
+
+        // ============================================================================
+        // LOAD PLAYER INTEL
+        // ============================================================================
+        async function loadPlayerIntel(tag) {
+            // Get enemy players for this team from match_details
+            const { data: players, error } = await HLL.supabase
+                .from('enemy_player_stats')
+                .select('*')
+                .eq('primary_team_tag', tag);
+
+            if (error) {
+                console.error('Error loading player intel:', error);
+                return;
+            }
+
+            currentPlayers = players || [];
+            
+            // Threat summary
+            renderThreatSummary(currentPlayers);
+            
+            // Player table
+            sortAndRenderPlayers();
+        }
+
+        // ============================================================================
+        // RENDER THREAT SUMMARY
+        // ============================================================================
+        function renderThreatSummary(players) {
+            const section = document.getElementById('threatSummarySection');
+            
+            let extreme = 0, high = 0, medium = 0, low = 0;
+            let totalThreat = 0;
+            
+            for (const p of players) {
+                const t = p.threat_score || 0;
+                totalThreat += t;
+                if (t >= 75) extreme++;
+                else if (t >= 50) high++;
+                else if (t >= 25) medium++;
+                else low++;
+            }
+            
+            const avgThreat = players.length > 0 ? Math.round(totalThreat / players.length) : 0;
+
+            section.innerHTML = `
+                <div class="threat-grid">
+                    <div class="threat-item threat-extreme"><span>Extreme (75+)</span><span class="count">${extreme}</span></div>
+                    <div class="threat-item threat-high"><span>High (50-74)</span><span class="count">${high}</span></div>
+                    <div class="threat-item threat-medium"><span>Medium (25-49)</span><span class="count">${medium}</span></div>
+                    <div class="threat-item threat-low"><span>Low (&lt;25)</span><span class="count">${low}</span></div>
+                </div>
+                <div class="intel-row" style="margin-top: 12px; border-top: 1px solid var(--border); padding-top: 8px;">
+                    <span class="label">Avg Threat/100</span>
+                    <span class="value">${avgThreat}</span>
+                </div>
+                <div class="intel-row">
+                    <span class="label">Total Players</span>
+                    <span class="value">${players.length}</span>
+                </div>
+            `;
+        }
+
+        // ============================================================================
+        // SORT AND RENDER PLAYERS
+        // ============================================================================
+        function sortPlayers(col) {
+            if (playerSortCol === col) {
+                playerSortAsc = !playerSortAsc;
+            } else {
+                playerSortCol = col;
+                playerSortAsc = col === 'name'; // Name ascending, numbers descending
+            }
+            sortAndRenderPlayers();
+        }
+
+        function sortAndRenderPlayers() {
+            const sorted = [...currentPlayers].sort((a, b) => {
+                let va = a[playerSortCol], vb = b[playerSortCol];
+                if (va == null) va = playerSortAsc ? Infinity : -Infinity;
+                if (vb == null) vb = playerSortAsc ? Infinity : -Infinity;
+                if (typeof va === 'string') return playerSortAsc ? va.localeCompare(vb) : vb.localeCompare(va);
+                return playerSortAsc ? va - vb : vb - va;
+            });
+
+            const tbody = document.getElementById('playerIntelBody');
+            tbody.innerHTML = sorted.map(p => {
+                const threat = p.threat_score || 0;
+                const threatClass = threat >= 75 ? 'threat-extreme' : 
+                                    threat >= 50 ? 'threat-high' : 
+                                    threat >= 25 ? 'threat-medium' : 'threat-low';
+                const threatLabel = threat >= 75 ? 'EXTREME' : 
+                                    threat >= 50 ? 'HIGH' : 
+                                    threat >= 25 ? 'MEDIUM' : 'LOW';
+                const mercIcon = p.teams_played_for > 1 ? ' ⚠️' : '';
+                
+                return `<tr>
+                    <td>${p.name || '-'}${mercIcon}</td>
+                    <td>${p.total_matches || 0}</td>
+                    <td>${p.total_kills || 0}</td>
+                    <td>${p.total_deaths || 0}</td>
+                    <td>${p.kd_ratio || '-'}</td>
+                    <td><span class="threat-badge ${threatClass}">${threat} ${threatLabel}</span></td>
+                    <td>${p.avg_kills || '-'}</td>
+                </tr>`;
+            }).join('');
+        }
+
+        // ============================================================================
+        // LOAD MATCH HISTORY
+        // ============================================================================
+        async function loadMatchHistory(tag) {
+            const { data: matches, error } = await HLL.supabase
+                .from('matches')
+                .select('*')
+                .eq('enemy_team', tag)
+                .order('match_date', { ascending: false });
+
+            if (error) {
+                console.error('Error loading match history:', error);
+                return;
+            }
+
+            const tbody = document.getElementById('matchHistoryBody');
+            tbody.innerHTML = (matches || []).map(m => `
+                <tr>
+                    <td>${m.match_date ? new Date(m.match_date).toLocaleDateString() : '-'}</td>
+                    <td>${m.map || '-'}</td>
+                    <td class="match-result-${m.result || ''}">${m.result || '-'}</td>
+                    <td>${m.my_score != null ? `${m.my_score}-${m.enemy_score}` : '-'}</td>
+                    <td>${m.my_faction || '-'}</td>
+                </tr>
+            `).join('');
+        }
+
+        // ============================================================================
+        // TAB SWITCHING
+        // ============================================================================
+        function switchTab(tabName) {
+            document.querySelectorAll('.intel-tab').forEach(t => t.classList.remove('active'));
+            document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+            
+            document.querySelector(`.intel-tab[onclick="switchTab('${tabName}')"]`).classList.add('active');
+            document.getElementById(`tab-${tabName}`).classList.add('active');
+        }
+
+        // ============================================================================
+        // NAVIGATION
+        // ============================================================================
+        function showTeamList() {
+            document.getElementById('teamDetailView').style.display = 'none';
+            document.getElementById('teamListView').style.display = 'block';
+            currentTeamTag = null;
+        }
+    </script>
+</body>
+</html>
