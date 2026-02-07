@@ -4,6 +4,47 @@ All notable changes to this project will be documented in this file.
 
 ---
 
+## [v0.3.28] - 2026-02-07
+### Fixed
+- **admin.html**: Name extraction parser rewritten with strict rank matching — rank must be exactly `expectedRank` to prevent death/kill counts (e.g. 22, 30) from being confused with rank numbers
+- **admin.html**: Added kills-line verification: after rank→name, next numeric line must exist to confirm valid player entry
+- **admin.html**: Now extracts 49/49 names from Carentan test data (was 14/49 in v0.3.27)
+
+## [v0.3.27] - 2026-02-07
+### Added
+- **admin.html**: "Team" tab detection — blocks import if user pastes combined view instead of Allies/Axis tab
+- **admin.html**: Paste/CSV cross-check — verifies at least 5 paste names appear in CSV, warns if different games
+- **admin.html**: Improved confirmation popup with date, score, duration, and fixed map detection (now searches before "Game statistics" to avoid sidebar maps)
+
+## [v0.3.26] - 2026-02-07
+### Changed
+- **admin.html**: Reverted `matchPlayersToRoster()` to dual check matching VBA v5.5.23: SteamID in roster → friendly, then name in Team_Paste → friendly
+
+## [v0.3.25] - 2026-02-07
+### Added
+- **admin.html**: Debug logging for unmatched paste names vs CSV names in `matchPlayersToRoster()`
+
+## [v0.3.24] - 2026-02-07
+### Fixed
+- **admin.html**: `normalizeName()` now uses unicode-aware regex (`\p{L}\p{N}` with `u` flag) to preserve non-ASCII letters (ÖÖF, 𝓻𝓮𝓪𝓵, etc.)
+
+## [v0.3.23] - 2026-02-07
+### Changed
+- **admin.html**: `matchPlayersToRoster()` changed to use Team_Paste names as sole source of truth for friendly/enemy detection (later reverted in v0.3.26)
+
+## [v0.3.22] - 2026-02-07
+### Fixed
+- **admin.html**: `parseTeamData()` name extraction rewritten for browser paste format — multi-line parser with sequential rank tracking (replaced tab-delimited single-line logic)
+
+## [v0.3.21] - 2026-02-07
+### Added
+- **admin.html**: Team_Paste validation popup with faction, player count, map detection before import
+- **admin.html**: Keyword validation for helo-system.de markers ("Game statistics", "Search for a player")
+
+## [v0.3.20] - 2026-02-07
+### Fixed
+- **admin.html**: Match import database schema fixes (NUMERIC overflow, MVP FK constraint removal)
+
 ## [v0.3.19] - 2026-02-06
 ### Changed
 - **roster.html**: Replaced "Primary Role" column with two new columns:

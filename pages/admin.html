@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Admin - HLL Tool v0.3.27</title>
+    <title>Admin - HLL Tool v0.3.28</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <link rel="stylesheet" href="../css/styles.css">
     <style>
@@ -80,7 +80,7 @@
         <!-- Header -->
         <div class="page-header">
             <h1 class="page-title">Admin</h1>
-            <span class="version-badge">v0.3.27</span>
+            <span class="version-badge">v0.3.28</span>
         </div>
 
         <div class="admin-grid">
@@ -848,8 +848,9 @@
 
             // --- FRIENDLY PLAYER NAMES ---
             // Browser paste from helo-system: each player spans multiple lines
-            // Rank is on its own line ("1\t"), name is on the next non-empty line
-            // Track sequential ranks to avoid false matches from stats numbers
+            // Pattern: RANK → NAME → KILLS → KD → DEATHS → next RANK...
+            // STRICT: rank must be exactly expectedRank to avoid deaths/kills confusion
+            // Validate: after name, next numeric line must exist (kills count)
             const allLines = text.split('\n');
             let playerStartIdx = 0;
             for (let si = 0; si < allLines.length; si++) {
@@ -859,22 +860,40 @@
                 }
             }
             let expectedRank = 1;
-            for (let pi = playerStartIdx; pi < allLines.length; pi++) {
+            let pi = playerStartIdx;
+            while (pi < allLines.length) {
                 const stripped = allLines[pi].trim();
                 const lower = stripped.toLowerCase();
                 if (lower.includes('select a player') || lower.includes('made by')) break;
                 const cleaned = stripped.replace(/\t/g, '');
-                if (/^\d+$/.test(cleaned) && parseInt(cleaned) >= expectedRank && parseInt(cleaned) <= 50) {
+                // Strict: rank must be exactly expectedRank
+                if (/^\d+$/.test(cleaned) && parseInt(cleaned) === expectedRank && expectedRank <= 50) {
                     const rankNum = parseInt(cleaned);
-                    for (let nj = pi + 1; nj < Math.min(pi + 3, allLines.length); nj++) {
+                    let foundName = false;
+                    for (let nj = pi + 1; nj < Math.min(pi + 4, allLines.length); nj++) {
                         const candidate = allLines[nj].trim();
-                        if (candidate && !/^\d+[\.\-]?\d*$/.test(candidate.replace(/\t/g, '')) && !candidate.includes('\t')) {
-                            info.friendlyNames.push(candidate);
-                            expectedRank = rankNum + 1;
-                            break;
+                        if (!candidate) continue;
+                        const candClean = candidate.replace(/\t/g, '');
+                        // Skip pure numbers/decimals (stats values)
+                        if (/^[\d.]+$/.test(candClean)) continue;
+                        // Must contain at least one letter
+                        if (!/\p{L}/u.test(candidate)) continue;
+                        // Validate: next line after name should be numeric (kills)
+                        for (let vk = nj + 1; vk < Math.min(nj + 2, allLines.length); vk++) {
+                            const verify = allLines[vk].trim().replace(/\t/g, '');
+                            if (/^\d+$/.test(verify)) {
+                                info.friendlyNames.push(candidate);
+                                expectedRank = rankNum + 1;
+                                pi = vk + 1;
+                                foundName = true;
+                                break;
+                            }
                         }
+                        if (foundName) break;
                     }
+                    if (foundName) continue;
                 }
+                pi++;
             }
             console.log(`[parseTeamData] Total lines: ${allLines.length}, Names extracted: ${info.friendlyNames.length}`);
             if (info.friendlyNames.length > 0) {
