@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Admin - HLL Tool v0.3.23</title>
+    <title>Admin - HLL Tool v0.3.24</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <link rel="stylesheet" href="../css/styles.css">
     <style>
@@ -80,7 +80,7 @@
         <!-- Header -->
         <div class="page-header">
             <h1 class="page-title">Admin</h1>
-            <span class="version-badge">v0.3.23</span>
+            <span class="version-badge">v0.3.24</span>
         </div>
 
         <div class="admin-grid">
@@ -962,7 +962,7 @@
          * Mirrors VBA NormalizeName (line 661).
          */
         function normalizeName(name) {
-            return (name || '').replace(/[^a-z0-9]/gi, '').toLowerCase();
+            return (name || '').replace(/[^\p{L}\p{N}]/gu, '').toLowerCase();
         }
         
         /**
