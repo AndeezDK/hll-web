@@ -4,6 +4,10 @@ All notable changes to this project will be documented in this file.
 
 ---
 
+## [v0.4.2] - 2026-02-07
+### Fixed
+- **admin.html**: Bulk CSV player import now also uses `stripClanTag()` for consistent name cleaning across all import paths
+
 ## [v0.4.1] - 2026-02-07
 ### Fixed
 - **admin.html**: New `stripClanTag()` function removes clan tag prefixes (◯ |, 〇 I, [TAG], TAG |) when auto-adding new friendly players to roster — keeps names clean and consistent with original roster entries
