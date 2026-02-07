@@ -9,7 +9,7 @@ Built with plain HTML/CSS/JS + Supabase backend.
 - **Roster** - Full player database with stats, roles, filtering
 - **Stats** - Map win rates by faction, enemy records, leaderboards
 - **Matches** - Match history with detailed player stats
-- **Admin** - Player import, data management
+- **Admin** - Player import, data management 1
 
 ## File Structure
 ```
