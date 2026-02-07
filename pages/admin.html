@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Admin - HLL Tool v0.3.22</title>
+    <title>Admin - HLL Tool v0.3.23</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <link rel="stylesheet" href="../css/styles.css">
     <style>
@@ -80,7 +80,7 @@
         <!-- Header -->
         <div class="page-header">
             <h1 class="page-title">Admin</h1>
-            <span class="version-badge">v0.3.22</span>
+            <span class="version-badge">v0.3.23</span>
         </div>
 
         <div class="admin-grid">
@@ -907,22 +907,20 @@
         // ============================================================================
         
         /**
-         * Cross-reference CSV players with Supabase roster + Team_Paste friendly names.
+         * Cross-reference CSV players with Team_Paste friendly names.
          * Sets isFriendly flag on each player.
-         * Mirrors VBA v5.5.23 MatchPlayersToRoster (line 627):
-         *   Check 1: SteamID exists in roster → friendly
-         *   Check 2: Name matches Team_Paste friendly names → friendly
-         *   Everyone else → Enemy
+         * Team_Paste names = sole source of truth for friendly/enemy.
+         * SteamID check is only used to link friendly players to roster entries.
          */
         async function matchPlayersToRoster(players, friendlyNames) {
-            // Build roster SteamID set from Supabase
+            // Build roster SteamID set from Supabase (for linking, not detection)
             const { data: rosterPlayers } = await HLL.supabase
                 .from('players')
                 .select('steam_id, name');
             
             const rosterSteamIds = new Set((rosterPlayers || []).map(p => p.steam_id));
             
-            // Normalize friendly names from Team_Paste for fuzzy matching
+            // Normalize friendly names from Team_Paste
             const normalizedFriendly = new Set(
                 (friendlyNames || []).map(n => normalizeName(n))
             );
@@ -937,25 +935,25 @@
                 console.warn(`[matchPlayersToRoster] ⚠️ NO friendly names from Team_Paste! Check parseTeamData.`);
             }
             
-            let matchedBySteam = 0;
             let matchedByName = 0;
+            let alsoInRoster = 0;
             
             for (const player of players) {
-                // Check 1: SteamID exists in roster → friendly
-                if (rosterSteamIds.has(player.steamId)) {
-                    player.isFriendly = true;
-                    matchedBySteam++;
-                }
-                // Check 2: Name matches Team_Paste friendly names → friendly
-                else if (normalizedFriendly.has(normalizeName(player.name))) {
+                // Team_Paste name = sole source of truth for friendly
+                if (normalizedFriendly.has(normalizeName(player.name))) {
                     player.isFriendly = true;
                     matchedByName++;
+                    // Also note if they're already in the roster (for linking)
+                    if (rosterSteamIds.has(player.steamId)) {
+                        alsoInRoster++;
+                    }
                 }
+                // Everyone else = enemy (no SteamID-based detection)
             }
             
             const totalFriendly = players.filter(p => p.isFriendly).length;
             const totalEnemy = players.filter(p => !p.isFriendly).length;
-            console.log(`[matchPlayersToRoster] Matched: ${matchedBySteam} by SteamID, ${matchedByName} by name`);
+            console.log(`[matchPlayersToRoster] Matched by name: ${matchedByName} (${alsoInRoster} also in roster)`);
             console.log(`[matchPlayersToRoster] Result: ${totalFriendly} friendly, ${totalEnemy} enemy`);
         }
         
