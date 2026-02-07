@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Admin - HLL Tool v0.3.24</title>
+    <title>Admin - HLL Tool v0.3.25</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <link rel="stylesheet" href="../css/styles.css">
     <style>
@@ -80,7 +80,7 @@
         <!-- Header -->
         <div class="page-header">
             <h1 class="page-title">Admin</h1>
-            <span class="version-badge">v0.3.24</span>
+            <span class="version-badge">v0.3.25</span>
         </div>
 
         <div class="admin-grid">
@@ -955,6 +955,19 @@
             const totalEnemy = players.filter(p => !p.isFriendly).length;
             console.log(`[matchPlayersToRoster] Matched by name: ${matchedByName} (${alsoInRoster} also in roster)`);
             console.log(`[matchPlayersToRoster] Result: ${totalFriendly} friendly, ${totalEnemy} enemy`);
+            
+            // Debug: show unmatched paste names (friendly names not found in CSV)
+            const csvNormalized = new Set(players.map(p => normalizeName(p.name)));
+            const unmatchedPaste = (friendlyNames || []).filter(n => !csvNormalized.has(normalizeName(n)));
+            if (unmatchedPaste.length > 0) {
+                console.warn(`[matchPlayersToRoster] ⚠️ ${unmatchedPaste.length} paste names NOT found in CSV:`);
+                unmatchedPaste.forEach(n => console.log(`  Paste: "${n}" -> normalized: "${normalizeName(n)}"`));
+                // Also show CSV names that weren't matched by any paste name
+                const pasteNormalized = new Set((friendlyNames || []).map(n => normalizeName(n)));
+                const unmatchedCSV = players.filter(p => !p.isFriendly && !pasteNormalized.has(normalizeName(p.name)));
+                console.log(`[matchPlayersToRoster] CSV enemy players (first 10):`);
+                unmatchedCSV.slice(0, 10).forEach(p => console.log(`  CSV: "${p.name}" -> normalized: "${normalizeName(p.name)}"`));
+            }
         }
         
         /**
