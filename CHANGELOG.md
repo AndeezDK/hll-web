@@ -4,7 +4,7 @@ All notable changes to this project will be documented in this file.
 
 ---
 
-## [v0.3.32] - 2026-02-07
+## [v0.4.0] - 2026-02-07
 ### Added
 - **enemies.html**: New "Enemy Intel" page with team cards grid, mercenary alerts, and team detail view
 - **enemies.html**: Team detail has 3 tabs — Overview (match stats, combat totals, threat summary), Player Intel (sortable table with threat scores), Match History
@@ -12,6 +12,7 @@ All notable changes to this project will be documented in this file.
 - **enemies.html**: Mercenary detection — flags players seen on 2+ different enemy teams
 - **admin.html**: `updateEnemyIntel()` — auto-registers enemy teams and players during import, tracks team affiliations for mercenary detection
 - **sql/003_enemy_intel.sql**: New tables (enemy_teams, enemy_players, enemy_player_teams) and views (enemy_team_stats, enemy_player_stats, enemy_team_combat, mercenary_players)
+- **roster.html**: Added "No-Shows" column to roster table (sortable) and No-Shows stat to player detail modal
 - **all pages**: Added "Enemy Intel" nav link
 
 ## [v0.3.31] - 2026-02-07

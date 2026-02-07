@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Roster - HLL Tool v0.3.32</title>
+    <title>Roster - HLL Tool v0.4.0</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <link rel="stylesheet" href="../css/styles.css">
     <style>
@@ -52,7 +52,7 @@
         <!-- Header -->
         <div class="page-header">
             <h1 class="page-title">Roster</h1>
-            <span class="version-badge">v0.3.32</span>
+            <span class="version-badge">v0.4.0</span>
         </div>
 
         <!-- Stats Summary -->
@@ -105,6 +105,7 @@
                             <th>Played</th>
                             <th>Prefers</th>
                             <th class="sortable" data-column="total_matches">Matches</th>
+                            <th class="sortable" data-column="no_shows">No-Shows</th>
                             <th class="sortable" data-column="attendance_pct">Attend%</th>
                             <th class="sortable" data-column="avg_kills">Avg Kills</th>
                             <th class="sortable" data-column="kd_ratio">K/D</th>
@@ -116,7 +117,7 @@
                     </thead>
                     <tbody id="rosterBody">
                         <tr>
-                            <td colspan="12" class="text-center text-muted">Loading...</td>
+                            <td colspan="13" class="text-center text-muted">Loading...</td>
                         </tr>
                     </tbody>
                 </table>
@@ -173,7 +174,7 @@
                 await loadPlayerRoleData();
             } else {
                 document.getElementById('rosterBody').innerHTML = 
-                    '<tr><td colspan="12" class="text-center text-muted">Offline - Connect to database</td></tr>';
+                    '<tr><td colspan="13" class="text-center text-muted">Offline - Connect to database</td></tr>';
             }
             
             HLL.hideLoading();
@@ -347,7 +348,7 @@
             const tbody = document.getElementById('rosterBody');
             
             if (filteredPlayers.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="12" class="text-center text-muted">No players found</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="13" class="text-center text-muted">No players found</td></tr>';
                 return;
             }
             
@@ -369,6 +370,7 @@
                     <td>${getTopRolesChips(p.steam_id)}</td>
                     <td>${getPrefersTags(p)}</td>
                     <td class="numeric">${p.total_matches || 0}</td>
+                    <td class="numeric">${p.no_shows || 0}</td>
                     <td class="numeric ${getAttendanceClass(p.attendance_pct)}">
                         ${p.attendance_pct !== null ? p.attendance_pct + '%' : '-'}
                     </td>
@@ -452,6 +454,10 @@
                     <div class="stat-box">
                         <span class="stat-value">${player.total_matches || 0}</span>
                         <span class="stat-label">Matches</span>
+                    </div>
+                    <div class="stat-box">
+                        <span class="stat-value">${player.no_shows || 0}</span>
+                        <span class="stat-label">No-Shows</span>
                     </div>
                     <div class="stat-box">
                         <span class="stat-value">${player.attendance_pct !== null ? player.attendance_pct + '%' : '-'}</span>
