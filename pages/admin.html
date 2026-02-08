@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Admin - HLL Tool v0.6.6</title>
+    <title>Admin - HLL Tool v0.6.7</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <link rel="stylesheet" href="../css/styles.css">
     <style>
@@ -81,7 +81,7 @@
         <!-- Header -->
         <div class="page-header">
             <h1 class="page-title">Admin</h1>
-            <span class="version-badge">v0.6.6</span>
+            <span class="version-badge">v0.6.7</span>
         </div>
 
         <div class="admin-grid">
@@ -161,6 +161,42 @@
                 <button class="btn btn-secondary btn-sm" onclick="openMyTeamDivisionPicker()" style="margin-bottom: 24px;">
                     ✏️ Edit My Divisions
                 </button>
+            </div>
+
+            <!-- Manage Teams -->
+            <div class="action-card">
+                <h3>🏷️ Manage Teams</h3>
+                <p class="text-muted mt-sm mb-md" style="font-size: 11px;">
+                    Manage known team names used in import dropdowns. Removing a team here does not delete match history.
+                </p>
+                
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px;">
+                    <!-- My Teams -->
+                    <div>
+                        <h4 style="font-size: 0.9rem; margin-bottom: 8px; color: var(--accent-orange);">My Teams</h4>
+                        <div id="myTeamsList" style="margin-bottom: 8px;">
+                            <div style="color: var(--text-secondary); font-size: 0.85rem;">Loading...</div>
+                        </div>
+                        <div style="display: flex; gap: 6px;">
+                            <input type="text" id="addMyTeamInput" placeholder="New team name" 
+                                style="flex: 1; padding: 4px 8px; font-size: 12px; background: var(--bg-input, #1a1a2e); border: 1px solid var(--border-color); border-radius: 4px; color: var(--text-primary);">
+                            <button class="btn btn-secondary btn-sm" onclick="addMyTeam()" style="font-size: 11px; padding: 4px 8px;">+ Add</button>
+                        </div>
+                    </div>
+                    
+                    <!-- Enemy Teams -->
+                    <div>
+                        <h4 style="font-size: 0.9rem; margin-bottom: 8px; color: var(--accent-orange);">Enemy Teams</h4>
+                        <div id="enemyTeamsList" style="margin-bottom: 8px;">
+                            <div style="color: var(--text-secondary); font-size: 0.85rem;">Loading...</div>
+                        </div>
+                        <div style="display: flex; gap: 6px;">
+                            <input type="text" id="addEnemyTeamInput" placeholder="New team tag" 
+                                style="flex: 1; padding: 4px 8px; font-size: 12px; background: var(--bg-input, #1a1a2e); border: 1px solid var(--border-color); border-radius: 4px; color: var(--text-primary);">
+                            <button class="btn btn-secondary btn-sm" onclick="addEnemyTeam()" style="font-size: 11px; padding: 4px 8px;">+ Add</button>
+                        </div>
+                    </div>
+                </div>
             </div>
 
             <div class="card-body">
@@ -2064,9 +2100,130 @@
             }
         }
 
+        // ===================== MANAGE TEAMS =====================
+
+        async function loadManagedTeams() {
+            // My Teams: distinct team values from players table + my_team from matches
+            const myTeamsSet = new Set();
+            const { data: players } = await HLL.supabase.from('players').select('team');
+            if (players) players.forEach(p => { if (p.team) myTeamsSet.add(p.team); });
+            const { data: matches } = await HLL.supabase.from('matches').select('my_team');
+            if (matches) matches.forEach(m => { if (m.my_team) myTeamsSet.add(m.my_team); });
+            
+            const myTeams = [...myTeamsSet].sort();
+            const myList = document.getElementById('myTeamsList');
+            if (myTeams.length === 0) {
+                myList.innerHTML = '<div style="color: var(--text-secondary); font-size: 0.8rem;">No teams yet</div>';
+            } else {
+                myList.innerHTML = myTeams.map(t => `
+                    <div style="display: flex; justify-content: space-between; align-items: center; padding: 3px 0; border-bottom: 1px solid rgba(255,255,255,0.05);">
+                        <span style="font-size: 0.85rem;">${t}</span>
+                        <button onclick="removeMyTeam('${t.replace(/'/g, "\\'")}')" 
+                            style="background: none; border: none; color: #f87171; cursor: pointer; font-size: 11px; padding: 2px 6px;" title="Remove">✕</button>
+                    </div>
+                `).join('');
+            }
+            
+            // Enemy Teams: from enemy_teams table + distinct enemy_team from matches
+            const enemyTeamsSet = new Set();
+            const { data: enemyTeams } = await HLL.supabase.from('enemy_teams').select('team_tag');
+            if (enemyTeams) enemyTeams.forEach(t => { if (t.team_tag) enemyTeamsSet.add(t.team_tag); });
+            const { data: matches2 } = await HLL.supabase.from('matches').select('enemy_team');
+            if (matches2) matches2.forEach(m => { if (m.enemy_team) enemyTeamsSet.add(m.enemy_team); });
+            
+            const allEnemy = [...enemyTeamsSet].sort();
+            const enemyList = document.getElementById('enemyTeamsList');
+            if (allEnemy.length === 0) {
+                enemyList.innerHTML = '<div style="color: var(--text-secondary); font-size: 0.8rem;">No teams yet</div>';
+            } else {
+                // Track which are in enemy_teams table vs only in matches
+                const inTable = new Set((enemyTeams || []).map(t => t.team_tag));
+                enemyList.innerHTML = allEnemy.map(t => `
+                    <div style="display: flex; justify-content: space-between; align-items: center; padding: 3px 0; border-bottom: 1px solid rgba(255,255,255,0.05);">
+                        <span style="font-size: 0.85rem;">${t} ${!inTable.has(t) ? '<span style="font-size:10px;color:var(--text-secondary);">(from matches)</span>' : ''}</span>
+                        <button onclick="removeEnemyTeam('${t.replace(/'/g, "\\'")}')" 
+                            style="background: none; border: none; color: #f87171; cursor: pointer; font-size: 11px; padding: 2px 6px;" title="Remove">✕</button>
+                    </div>
+                `).join('');
+            }
+        }
+
+        async function addMyTeam() {
+            const input = document.getElementById('addMyTeamInput');
+            const name = input.value.trim();
+            if (!name) return;
+            // Add a placeholder player entry to register the team, or just note it
+            // For now, we add it via a dummy roster entry check — but simpler: just insert a player with no steam_id
+            // Actually, my_team comes from players.team — we can't add without a player.
+            // Better approach: just inform user that my teams come from roster entries.
+            HLL.showAlert('My Teams are populated from your player roster. Add a player with this team name to register it.', 'info');
+            input.value = '';
+        }
+
+        async function addEnemyTeam() {
+            const input = document.getElementById('addEnemyTeamInput');
+            const tag = input.value.trim();
+            if (!tag) return;
+            
+            // Check if already exists
+            const { data: existing } = await HLL.supabase.from('enemy_teams').select('team_tag').eq('team_tag', tag);
+            if (existing && existing.length > 0) {
+                HLL.showAlert(`"${tag}" already exists`, 'error');
+                return;
+            }
+            
+            const { error } = await HLL.supabase.from('enemy_teams').insert({ team_tag: tag });
+            if (error) {
+                HLL.showAlert('Failed to add team: ' + error.message, 'error');
+            } else {
+                HLL.showAlert(`Added "${tag}"`, 'success');
+                input.value = '';
+                loadManagedTeams();
+            }
+        }
+
+        async function removeMyTeam(teamName) {
+            // Check if any players or matches use this team
+            const { data: playersUsing } = await HLL.supabase.from('players').select('steam_id').eq('team', teamName);
+            const { data: matchesUsing } = await HLL.supabase.from('matches').select('match_id').eq('my_team', teamName);
+            
+            const usageCount = (playersUsing?.length || 0) + (matchesUsing?.length || 0);
+            if (usageCount > 0) {
+                const proceed = confirm(
+                    `"${teamName}" is used by ${playersUsing?.length || 0} player(s) and ${matchesUsing?.length || 0} match(es).\n\n` +
+                    `To remove it from the dropdowns, you'd need to update those records first.\n\nThis action cannot remove it while it's in use.`
+                );
+                return;
+            }
+            
+            if (!confirm(`Remove "${teamName}" from my teams?`)) return;
+            HLL.showAlert('My Teams are derived from player roster and match data. Remove the underlying records to clear this team.', 'info');
+        }
+
+        async function removeEnemyTeam(teamTag) {
+            // Check if used in matches
+            const { data: matchesUsing } = await HLL.supabase.from('matches').select('match_id').eq('enemy_team', teamTag);
+            const matchCount = matchesUsing?.length || 0;
+            
+            let msg = `Remove "${teamTag}" from enemy teams?`;
+            if (matchCount > 0) {
+                msg = `"${teamTag}" appears in ${matchCount} match(es).\n\nThis will remove it from the enemy_teams table and the import dropdown, but won't delete match history.\n\nContinue?`;
+            }
+            if (!confirm(msg)) return;
+            
+            const { error } = await HLL.supabase.from('enemy_teams').delete().eq('team_tag', teamTag);
+            if (error) {
+                HLL.showAlert('Failed to remove: ' + error.message, 'error');
+            } else {
+                HLL.showAlert(`Removed "${teamTag}"`, 'success');
+                loadManagedTeams();
+            }
+        }
+
         // Start
         init();
         loadMyTeamDivisions();
+        loadManagedTeams();
     </script>
 </body>
 </html>
