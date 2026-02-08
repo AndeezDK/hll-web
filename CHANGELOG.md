@@ -4,6 +4,11 @@ All notable changes to this project will be documented in this file.
 
 ---
 
+## [v0.4.6] - 2026-02-08
+### Added
+- **enemies.html**: Player Intel table now shows Last Game (Kills, Deaths, K/D) and Average (Kills, Deaths, K/D) columns instead of just totals
+- **sql/003_enemy_intel.sql**: Updated `enemy_player_stats` view with `last_kills`, `last_deaths`, `last_kd`, `avg_deaths`, `avg_kd` fields using lateral join for last game data
+
 ## [v0.4.5] - 2026-02-08
 ### Fixed
 - **sql/003_enemy_intel.sql**: Fixed threat score bug — players with 0 kills no longer show as 100 EXTREME (now correctly score 0). Also fixed 0-deaths edge case (treats as 1 death instead of NULL)

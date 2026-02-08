@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Enemy Intel - HLL Tool v0.4.5</title>
+    <title>Enemy Intel - HLL Tool v0.4.6</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <link rel="stylesheet" href="../css/styles.css">
     <style>
@@ -274,7 +274,7 @@
     <div class="app-container">
         <div class="page-header">
             <h1 class="page-title">Enemy Intel</h1>
-            <span class="version-badge">v0.4.5</span>
+            <span class="version-badge">v0.4.6</span>
         </div>
 
         <!-- TEAM LIST VIEW -->
@@ -343,11 +343,13 @@
                         <tr>
                             <th onclick="sortPlayers('name')">Name</th>
                             <th onclick="sortPlayers('total_matches')">Matches</th>
-                            <th onclick="sortPlayers('total_kills')">Kills</th>
-                            <th onclick="sortPlayers('total_deaths')">Deaths</th>
-                            <th onclick="sortPlayers('kd_ratio')">K/D</th>
-                            <th onclick="sortPlayers('threat_score')">Threat</th>
+                            <th onclick="sortPlayers('last_kills')">Last Kills</th>
+                            <th onclick="sortPlayers('last_deaths')">Last Deaths</th>
+                            <th onclick="sortPlayers('last_kd')">Last K/D</th>
                             <th onclick="sortPlayers('avg_kills')">Avg Kills</th>
+                            <th onclick="sortPlayers('avg_deaths')">Avg Deaths</th>
+                            <th onclick="sortPlayers('avg_kd')">Avg K/D</th>
+                            <th onclick="sortPlayers('threat_score')">Threat</th>
                         </tr>
                     </thead>
                     <tbody id="playerIntelBody"></tbody>
@@ -679,11 +681,13 @@
                 return `<tr>
                     <td>${p.name || '-'}${mercIcon}</td>
                     <td>${p.total_matches || 0}</td>
-                    <td>${p.total_kills || 0}</td>
-                    <td>${p.total_deaths || 0}</td>
-                    <td>${p.kd_ratio || '-'}</td>
-                    <td><span class="threat-badge ${threatClass}">${threat} ${threatLabel}</span></td>
+                    <td>${p.last_kills != null ? p.last_kills : '-'}</td>
+                    <td>${p.last_deaths != null ? p.last_deaths : '-'}</td>
+                    <td>${p.last_kd || '-'}</td>
                     <td>${p.avg_kills || '-'}</td>
+                    <td>${p.avg_deaths || '-'}</td>
+                    <td>${p.avg_kd || '-'}</td>
+                    <td><span class="threat-badge ${threatClass}">${threat} ${threatLabel}</span></td>
                 </tr>`;
             }).join('');
         }

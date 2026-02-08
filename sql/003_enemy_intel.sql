@@ -108,6 +108,11 @@ SELECT
         SUM(md.kills)::NUMERIC / NULLIF(SUM(md.deaths), 0), 2
     ) as kd_ratio,
     ROUND(SUM(md.kills)::NUMERIC / NULLIF(COUNT(md.id), 0), 1) as avg_kills,
+    ROUND(SUM(md.deaths)::NUMERIC / NULLIF(COUNT(md.id), 0), 1) as avg_deaths,
+    ROUND(
+        (SUM(md.kills)::NUMERIC / NULLIF(COUNT(md.id), 0)) /
+        NULLIF(SUM(md.deaths)::NUMERIC / NULLIF(COUNT(md.id), 0), 0), 2
+    ) as avg_kd,
     MAX(md.kills) as most_kills,
     ROUND(SUM(md.combat_eff)::NUMERIC / NULLIF(COUNT(md.id), 0), 0) as avg_ce,
     -- Threat/100: (avg_kills * kd_ratio), capped at 100. 0 kills = 0 threat. 0 deaths = use kills as KD.
@@ -116,6 +121,10 @@ SELECT
         (SUM(md.kills)::NUMERIC / NULLIF(COUNT(md.id), 0)) *
         (SUM(md.kills)::NUMERIC / GREATEST(SUM(md.deaths), 1)),
     0)) END as threat_score,
+    -- Last game stats (from most recent match)
+    last_game.last_kills,
+    last_game.last_deaths,
+    last_game.last_kd,
     MAX(m.match_date) as last_seen,
     MIN(m.match_date) as first_seen,
     -- Count of distinct teams played for (for mercenary detection)
@@ -123,7 +132,19 @@ SELECT
 FROM enemy_players ep
 LEFT JOIN match_details md ON md.steam_id = ep.steam_id AND md.team = 'Enemy'
 LEFT JOIN matches m ON m.match_id = md.match_id
-GROUP BY ep.steam_id, ep.name, ep.primary_team_tag, ep.notes;
+LEFT JOIN LATERAL (
+    SELECT 
+        lg_md.kills as last_kills,
+        lg_md.deaths as last_deaths,
+        ROUND(lg_md.kills::NUMERIC / NULLIF(lg_md.deaths, 0), 2) as last_kd
+    FROM match_details lg_md
+    JOIN matches lg_m ON lg_m.match_id = lg_md.match_id
+    WHERE lg_md.steam_id = ep.steam_id AND lg_md.team = 'Enemy'
+    ORDER BY lg_m.match_date DESC
+    LIMIT 1
+) last_game ON true
+GROUP BY ep.steam_id, ep.name, ep.primary_team_tag, ep.notes, 
+         last_game.last_kills, last_game.last_deaths, last_game.last_kd;
 
 -- ============================================================================
 -- VIEW: Mercenary detection
