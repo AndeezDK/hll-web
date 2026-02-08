@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Admin - HLL Tool v0.6.7</title>
+    <title>Admin - HLL Tool v0.6.8</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <link rel="stylesheet" href="../css/styles.css">
     <style>
@@ -81,7 +81,7 @@
         <!-- Header -->
         <div class="page-header">
             <h1 class="page-title">Admin</h1>
-            <span class="version-badge">v0.6.7</span>
+            <span class="version-badge">v0.6.8</span>
         </div>
 
         <div class="admin-grid">
@@ -742,7 +742,19 @@
                             <span class="stat-label">Enemy Team</span>
                         </div>
                         <div class="stat-box">
-                            <span class="stat-value" style="font-size: 1rem; padding: 2px 8px; border-radius: 4px; background: ${window._pendingMatchType === 'Friendly' ? 'rgba(255,255,255,0.05)' : 'rgba(255,152,0,0.15)'}; color: ${window._pendingMatchType === 'Friendly' ? 'var(--text-secondary)' : '#ff9800'};">${window._pendingMatchType || 'Friendly'}</span>
+                            <select id="matchTypeInput" 
+                                style="background: var(--bg-input, #1a1a2e); border: 1px solid var(--border-color); border-radius: 4px; color: var(--text-primary); font-size: 1rem; font-weight: 700; text-align: center; width: 100%; padding: 4px 8px;">
+                                ${await (async () => {
+                                    let divs = [];
+                                    try {
+                                        const { data } = await HLL.supabase.from('divisions').select('name').order('sort_order', { ascending: true });
+                                        divs = data || [];
+                                    } catch(e) {}
+                                    const options = ['Friendly', ...divs.map(d => d.name)];
+                                    const selected = window._pendingMatchType || 'Friendly';
+                                    return options.map(o => `<option value="${o}" ${o === selected ? 'selected' : ''}>${o}</option>`).join('');
+                                })()}
+                            </select>
                             <span class="stat-label">Match Type</span>
                         </div>
                         <div class="stat-box">
@@ -1492,7 +1504,7 @@
                 const matchId = await generateMatchId();
                 
                 const matchTypeInput = document.getElementById('matchTypeInput');
-                const matchType = window._pendingMatchType || 'Friendly';
+                const matchType = matchTypeInput ? matchTypeInput.value : (window._pendingMatchType || 'Friendly');
                 
                 // --- 1. INSERT MATCH (Match_Log equivalent) ---
                 const { error: matchError } = await HLL.supabase
