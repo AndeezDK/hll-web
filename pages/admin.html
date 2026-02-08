@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Admin - HLL Tool v0.6.12</title>
+    <title>Admin - HLL Tool v0.6.13</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <link rel="stylesheet" href="../css/styles.css">
     <style>
@@ -81,7 +81,7 @@
         <!-- Header -->
         <div class="page-header">
             <h1 class="page-title">Admin</h1>
-            <span class="version-badge">v0.6.12</span>
+            <span class="version-badge">v0.6.13</span>
         </div>
 
         <div class="admin-grid">
@@ -2155,18 +2155,36 @@
             const { data: matches } = await HLL.supabase.from('matches').select('my_team');
             if (matches) matches.forEach(m => { if (m.my_team) myTeamsSet.add(m.my_team); });
             
+            // Count players and matches per team
+            const playerCounts = {};
+            const matchCounts = {};
+            if (players) players.forEach(p => { if (p.team) playerCounts[p.team] = (playerCounts[p.team] || 0) + 1; });
+            if (matches) matches.forEach(m => { if (m.my_team) matchCounts[m.my_team] = (matchCounts[m.my_team] || 0) + 1; });
+            
             const myTeams = [...myTeamsSet].sort();
             const myList = document.getElementById('myTeamsList');
             if (myTeams.length === 0) {
                 myList.innerHTML = '<div style="color: var(--text-secondary); font-size: 0.8rem;">No teams yet</div>';
             } else {
-                myList.innerHTML = myTeams.map(t => `
+                myList.innerHTML = myTeams.map(t => {
+                    const pc = playerCounts[t] || 0;
+                    const mc = matchCounts[t] || 0;
+                    const isEmpty = pc === 0 && mc === 0;
+                    const escaped = t.replace(/'/g, "\\'");
+                    return `
                     <div style="display: flex; justify-content: space-between; align-items: center; padding: 3px 0; border-bottom: 1px solid rgba(255,255,255,0.05);">
-                        <span style="font-size: 0.85rem;">${t}</span>
-                        <button onclick="renameMyTeam('${t.replace(/'/g, "\\'")}')" 
-                            style="background: none; border: none; color: var(--accent-orange); cursor: pointer; font-size: 11px; padding: 2px 6px;" title="Rename / Merge">✏️</button>
-                    </div>
-                `).join('');
+                        <div style="display:flex;align-items:center;gap:6px;">
+                            <span style="font-size: 0.85rem;">${t}</span>
+                            <span style="font-size:10px;color:var(--text-secondary);">(${pc}p, ${mc}m)</span>
+                        </div>
+                        <div style="display:flex;gap:2px;">
+                            <button onclick="renameMyTeam('${escaped}')" 
+                                style="background: none; border: none; color: var(--accent-orange); cursor: pointer; font-size: 11px; padding: 2px 6px;" title="Migrate players / Rename">✏️</button>
+                            <button onclick="deleteMyTeam('${escaped}')" 
+                                style="background: none; border: none; color: #f87171; cursor: pointer; font-size: 11px; padding: 2px 6px;" title="Delete">✕</button>
+                        </div>
+                    </div>`;
+                }).join('');
             }
             
             // Enemy Teams: from enemy_teams table + distinct enemy_team from matches
@@ -2372,6 +2390,27 @@
                     loadManagedTeams();
                 }
             };
+        }
+
+        async function deleteMyTeam(teamName) {
+            // Check current usage
+            const { data: playersUsing } = await HLL.supabase.from('players').select('steam_id').eq('team', teamName);
+            const { data: matchesUsing } = await HLL.supabase.from('matches').select('match_id').eq('my_team', teamName);
+            const pc = playersUsing?.length || 0;
+            const mc = matchesUsing?.length || 0;
+            
+            if (pc > 0 || mc > 0) {
+                alert(`Cannot delete "${teamName}" — it still has ${pc} player(s) and ${mc} match(es).\n\nUse ✏️ to migrate them to another team first, then delete.`);
+                return;
+            }
+            
+            if (!confirm(`Delete "${teamName}"? This team has no players or matches.`)) return;
+            
+            // Nothing to delete in DB since my teams are derived from data.
+            // But if it's completely empty, it shouldn't appear in the list anymore.
+            // Force refresh to confirm it's gone.
+            HLL.showAlert(`"${teamName}" removed — no records remain.`, 'success');
+            loadManagedTeams();
         }
 
         async function removeEnemyTeam(teamTag) {
