@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Admin - HLL Tool v0.4.8</title>
+    <title>Admin - HLL Tool v0.4.9</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <link rel="stylesheet" href="../css/styles.css">
     <style>
@@ -81,7 +81,7 @@
         <!-- Header -->
         <div class="page-header">
             <h1 class="page-title">Admin</h1>
-            <span class="version-badge">v0.4.8</span>
+            <span class="version-badge">v0.4.9</span>
         </div>
 
         <div class="admin-grid">
@@ -151,6 +151,19 @@
 
             <!-- Database Tools -->
             <div class="action-card">
+                <h3>🏆 My Team Divisions</h3>
+                <p class="text-muted mt-sm mb-md" style="font-size: 11px;">
+                    Tag your team with the leagues/divisions you play in. Used for comparison stats.
+                </p>
+                <div id="myTeamDivisionsContainer" style="margin-bottom: 16px;">
+                    <div style="color: var(--text-secondary); font-size: 0.85rem;">Loading...</div>
+                </div>
+                <button class="btn btn-secondary btn-sm" onclick="openMyTeamDivisionPicker()" style="margin-bottom: 24px;">
+                    ✏️ Edit My Divisions
+                </button>
+            </div>
+
+            <div class="card-body">
                 <h3>🔧 Database Tools</h3>
                 
                 <div class="mb-md">
@@ -652,6 +665,13 @@
                             <span class="stat-label">Enemy Team (editable)</span>
                         </div>
                         <div class="stat-box">
+                            <select id="matchTypeInput" 
+                                style="background: var(--bg-input, #1a1a2e); border: 1px solid var(--accent-orange); border-radius: 4px; color: var(--text-primary); font-size: 0.95rem; font-weight: 700; text-align: center; width: 100%; padding: 5px 8px; cursor: pointer;">
+                                <option value="Friendly">Friendly</option>
+                            </select>
+                            <span class="stat-label">Match Type</span>
+                        </div>
+                        <div class="stat-box">
                             <span class="stat-value">${mvp ? mvp.name : '—'}</span>
                             <span class="stat-label">MVP (CE: ${mvp ? mvp.ce : '—'})</span>
                         </div>
@@ -745,6 +765,23 @@
                 
                 previewCard.classList.remove('hidden');
                 previewCard.scrollIntoView({ behavior: 'smooth' });
+                
+                // Populate match type dropdown with divisions
+                try {
+                    const { data: divs } = await HLL.supabase
+                        .from('divisions')
+                        .select('*')
+                        .order('sort_order', { ascending: true });
+                    const select = document.getElementById('matchTypeInput');
+                    if (select && divs) {
+                        divs.forEach(d => {
+                            const opt = document.createElement('option');
+                            opt.value = d.name;
+                            opt.textContent = d.name;
+                            select.appendChild(opt);
+                        });
+                    }
+                } catch (e) { console.warn('Could not load divisions for match type:', e); }
                 
             } catch (err) {
                 HLL.hideLoading();
@@ -1288,6 +1325,9 @@
                 const myTeamInput = document.getElementById('myTeamInput');
                 const myTeam = myTeamInput ? myTeamInput.value.trim() || HLL.currentTeam || 'Circle' : HLL.currentTeam || 'Circle';
                 
+                const matchTypeInput = document.getElementById('matchTypeInput');
+                const matchType = matchTypeInput ? matchTypeInput.value : 'Friendly';
+                
                 // --- 1. INSERT MATCH (Match_Log equivalent) ---
                 const { error: matchError } = await HLL.supabase
                     .from('matches')
@@ -1304,7 +1344,8 @@
                         enemy_score: matchInfo.enemyScore,
                         duration: matchInfo.duration,
                         mvp_steam_id: mvp ? mvp.steamId : null,
-                        mvp_name: mvp ? mvp.name : null
+                        mvp_name: mvp ? mvp.name : null,
+                        match_type: matchType
                     });
                 if (matchError) throw matchError;
                 
@@ -1739,8 +1780,96 @@
             }
         }
         
+        // ============================================================================
+        // MY TEAM DIVISIONS
+        // ============================================================================
+        async function loadMyTeamDivisions() {
+            const container = document.getElementById('myTeamDivisionsContainer');
+            if (!container) return;
+            
+            const myTeam = HLL.currentTeam || 'Circle';
+            
+            const { data: allDivs } = await HLL.supabase
+                .from('divisions')
+                .select('*')
+                .order('sort_order', { ascending: true });
+            
+            const { data: myDivs } = await HLL.supabase
+                .from('my_team_divisions')
+                .select('division_id')
+                .eq('team_name', myTeam);
+            
+            const myDivIds = new Set((myDivs || []).map(d => d.division_id));
+            const activeDivs = (allDivs || []).filter(d => myDivIds.has(d.id));
+            
+            if (activeDivs.length === 0) {
+                container.innerHTML = '<div style="color: var(--text-secondary); font-size: 0.85rem;">No divisions set. Click Edit to add.</div>';
+            } else {
+                container.innerHTML = '<div style="display: flex; flex-wrap: wrap; gap: 6px;">' +
+                    activeDivs.map(d => `<span style="display: inline-block; padding: 3px 10px; border-radius: 4px; font-size: 0.8rem; background: rgba(255,152,0,0.15); color: #ff9800;">${d.name}</span>`).join('') +
+                    '</div>';
+            }
+        }
+
+        async function openMyTeamDivisionPicker() {
+            const myTeam = HLL.currentTeam || 'Circle';
+            
+            const { data: allDivs } = await HLL.supabase
+                .from('divisions')
+                .select('*')
+                .order('sort_order', { ascending: true });
+            
+            const { data: myDivs } = await HLL.supabase
+                .from('my_team_divisions')
+                .select('division_id')
+                .eq('team_name', myTeam);
+            
+            const myDivIds = new Set((myDivs || []).map(d => d.division_id));
+            
+            const overlay = document.createElement('div');
+            overlay.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.7);z-index:1000;display:flex;align-items:center;justify-content:center;';
+            overlay.onclick = (e) => { if (e.target === overlay) { overlay.remove(); loadMyTeamDivisions(); } };
+            
+            const modal = document.createElement('div');
+            modal.style.cssText = 'background:var(--bg-secondary,#1a1a2e);border-radius:8px;padding:20px;min-width:320px;max-width:450px;max-height:80vh;overflow-y:auto;';
+            modal.innerHTML = `
+                <h3 style="margin:0 0 4px;font-size:1rem;">Divisions for ${myTeam}</h3>
+                <p style="font-size:0.8rem;color:var(--text-secondary);margin:0 0 12px;">Select the leagues/divisions your team plays in.</p>
+                <div id="myDivCheckboxes">
+                    ${(allDivs || []).map(d => `
+                        <div style="display:flex;align-items:center;gap:8px;padding:6px 0;cursor:pointer;">
+                            <input type="checkbox" id="mydiv_${d.id}" ${myDivIds.has(d.id) ? 'checked' : ''}
+                                onchange="toggleMyTeamDivision('${myTeam}', '${d.id}', this.checked)"
+                                style="accent-color:#ff9800;">
+                            <label for="mydiv_${d.id}" style="cursor:pointer;flex:1;">${d.name}</label>
+                        </div>
+                    `).join('')}
+                </div>
+                <div style="margin-top:12px;text-align:right;">
+                    <button class="btn btn-sm" onclick="this.closest('div[style*=fixed]').remove(); loadMyTeamDivisions();" style="padding:6px 16px;">Done</button>
+                </div>
+            `;
+            overlay.appendChild(modal);
+            document.body.appendChild(overlay);
+        }
+
+        async function toggleMyTeamDivision(teamName, divisionId, checked) {
+            if (checked) {
+                await HLL.supabase
+                    .from('my_team_divisions')
+                    .insert({ team_name: teamName, division_id: divisionId });
+            } else {
+                await HLL.supabase
+                    .from('my_team_divisions')
+                    .delete()
+                    .eq('team_name', teamName)
+                    .eq('division_id', divisionId);
+            }
+        }
+
         // Start
         init();
+        loadMyTeamDivisions();
     </script>
 </body>
 </html>

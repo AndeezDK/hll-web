@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 
 ---
 
+## [v0.4.9] - 2026-02-08
+### Added
+- **admin.html**: Match Type dropdown in import preview — tag matches as "Friendly" or any division (ECL Div. 1-6, HBL, HCA, Seasonals, etc.)
+- **admin.html**: "My Team Divisions" section — tag your own team with the divisions you play in
+- **matches.html**: Match Type column in match history table with color-coded badges
+- **sql/005_match_type.sql**: Added `match_type` column to matches table and `my_team_divisions` table
+
 ## [v0.4.8] - 2026-02-08
 ### Added
 - **enemies.html**: Multi-division system — teams can be tagged with multiple leagues/divisions (ECL Div. 1-6, HBL, HCA, Seasonals)
