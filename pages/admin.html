@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Admin - HLL Tool v0.6.10</title>
+    <title>Admin - HLL Tool v0.6.12</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <link rel="stylesheet" href="../css/styles.css">
     <style>
@@ -81,7 +81,7 @@
         <!-- Header -->
         <div class="page-header">
             <h1 class="page-title">Admin</h1>
-            <span class="version-badge">v0.6.10</span>
+            <span class="version-badge">v0.6.12</span>
         </div>
 
         <div class="admin-grid">
@@ -798,6 +798,35 @@
                     </div>
                     
                     <h4 style="margin-bottom: 8px;">Enemy Players: ${enemyPlayers.length}</h4>
+
+                    ${(() => {
+                        const newPlayers = friendlyPlayers.filter(p => p.isNew);
+                        if (newPlayers.length === 0) return '';
+                        return `
+                        <div style="background: rgba(251,191,36,0.08); border: 1px solid rgba(251,191,36,0.3); border-radius: 6px; padding: 12px; margin-bottom: 16px;">
+                            <h4 style="margin: 0 0 4px; color: #fbbf24;">⚠️ New Players: ${newPlayers.length}</h4>
+                            <p style="font-size: 11px; color: var(--text-secondary); margin: 0 0 10px;">These players are not yet in your roster. Assign them to a team before importing.</p>
+                            <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
+                                <span style="font-size: 11px; color: var(--text-secondary);">Set all to:</span>
+                                <select id="newPlayerBulkTeam" style="padding: 3px 6px; font-size: 12px; background: var(--bg-input, #1a1a2e); border: 1px solid var(--border-color); border-radius: 4px; color: var(--text-primary);"
+                                    onchange="document.querySelectorAll('.new-player-team').forEach(s => s.value = this.value)">
+                                    ${knownTeams.myTeams.map(t => `<option value="${t}" ${t === (HLL.currentTeam || 'Circle') ? 'selected' : ''}>${t}</option>`).join('')}
+                                </select>
+                            </div>
+                            <div style="max-height: 200px; overflow-y: auto;">
+                                ${newPlayers.map((p, i) => `
+                                    <div style="display: flex; align-items: center; justify-content: space-between; padding: 4px 0; border-bottom: 1px solid rgba(255,255,255,0.05);">
+                                        <span style="font-size: 0.85rem;">${p.name}</span>
+                                        <select class="new-player-team" data-steamid="${p.steamId}" 
+                                            style="padding: 3px 6px; font-size: 12px; background: var(--bg-input, #1a1a2e); border: 1px solid var(--border-color); border-radius: 4px; color: var(--text-primary); min-width: 100px;">
+                                            ${knownTeams.myTeams.map(t => `<option value="${t}" ${t === (HLL.currentTeam || 'Circle') ? 'selected' : ''}>${t}</option>`).join('')}
+                                        </select>
+                                    </div>
+                                `).join('')}
+                            </div>
+                        </div>
+                        `;
+                    })()}
                     <div class="table-container" style="max-height: 200px; overflow: auto; margin-bottom: 16px;">
                         <table class="data-table">
                             <thead>
@@ -1154,6 +1183,7 @@
                 // Check 2: Name in Team_Paste → friendly (catches new players)
                 else if (normalizedFriendly.has(normalizeName(player.name))) {
                     player.isFriendly = true;
+                    player.isNew = true; // Not in roster yet
                     matchedByName++;
                 }
             }
@@ -1681,11 +1711,14 @@
                 
                 const rosterPlayer = rosterMap[p.steamId];
                 if (!rosterPlayer) {
-                    // NEW PLAYER — add to roster with clan tag stripped
+                    // NEW PLAYER — check if a per-player team was assigned in the preview
+                    const playerTeamSelect = document.querySelector(`.new-player-team[data-steamid="${p.steamId}"]`);
+                    const assignedTeam = playerTeamSelect ? playerTeamSelect.value : (myTeam || HLL.currentTeam || 'Circle');
+                    
                     newPlayers.push({
                         steam_id: p.steamId,
                         name: stripClanTag(p.name),
-                        team: myTeam || HLL.currentTeam || 'Circle',
+                        team: assignedTeam,
                         first_seen: matchInfo.date,
                         last_seen: matchInfo.date
                     });
@@ -2196,8 +2229,11 @@
 
         async function renameMyTeam(oldName) {
             // Fetch players and matches using this team
-            const { data: playersUsing } = await HLL.supabase.from('players').select('steam_id, player_name').eq('team', oldName).order('player_name');
-            const { data: matchesUsing } = await HLL.supabase.from('matches').select('match_id').eq('my_team', oldName);
+            const { data: playersUsing, error: pErr } = await HLL.supabase.from('players').select('steam_id, player_name').eq('team', String(oldName)).order('player_name');
+            const { data: matchesUsing, error: mErr } = await HLL.supabase.from('matches').select('match_id').eq('my_team', String(oldName));
+            if (pErr) console.warn('Player query error:', pErr);
+            if (mErr) console.warn('Match query error:', mErr);
+            console.log(`[renameMyTeam] "${oldName}" → ${playersUsing?.length || 0} players, ${matchesUsing?.length || 0} matches`, playersUsing);
             const playerCount = playersUsing?.length || 0;
             const matchCount = matchesUsing?.length || 0;
             
@@ -2232,27 +2268,28 @@
                     </div>
                 </div>
                 
-                ${playerCount > 0 ? `
                 <div style="margin-bottom: 12px;">
                     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
-                        <label style="font-size:0.85rem;font-weight:600;">Players:</label>
+                        <label style="font-size:0.85rem;font-weight:600;">Players (${playerCount}):</label>
+                        ${playerCount > 0 ? `
                         <div style="display:flex;gap:8px;">
                             <button onclick="document.querySelectorAll('.team-edit-cb').forEach(c=>c.checked=true)" 
                                 style="background:none;border:none;color:var(--accent-orange);cursor:pointer;font-size:11px;">Select all</button>
                             <button onclick="document.querySelectorAll('.team-edit-cb').forEach(c=>c.checked=false)" 
                                 style="background:none;border:none;color:var(--text-secondary);cursor:pointer;font-size:11px;">Deselect all</button>
                         </div>
+                        ` : ''}
                     </div>
-                    <div style="max-height:200px;overflow-y:auto;border:1px solid rgba(255,255,255,0.05);border-radius:4px;padding:4px;">
-                        ${playersUsing.map(p => `
+                    <div style="max-height:250px;overflow-y:auto;border:1px solid rgba(255,255,255,0.05);border-radius:4px;padding:4px;">
+                        ${playerCount > 0 ? playersUsing.map(p => `
                             <label style="display:flex;align-items:center;gap:8px;padding:4px 6px;font-size:0.85rem;cursor:pointer;">
                                 <input type="checkbox" class="team-edit-cb" value="${p.steam_id}" checked>
                                 <span>${p.player_name || p.steam_id}</span>
+                                <span style="font-size:10px;color:var(--text-secondary);margin-left:auto;">${p.steam_id}</span>
                             </label>
-                        `).join('')}
+                        `).join('') : '<div style="color:var(--text-secondary);font-size:0.8rem;padding:8px;">No players found with this team value. It may exist only in match records.</div>'}
                     </div>
                 </div>
-                ` : ''}
                 
                 <div style="margin-bottom: 16px;">
                     <label style="display:flex;align-items:center;gap:8px;font-size:0.85rem;cursor:pointer;">
