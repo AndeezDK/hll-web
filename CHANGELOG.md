@@ -4,6 +4,10 @@ All notable changes to this project will be documented in this file.
 
 ---
 
+## [v0.4.5] - 2026-02-08
+### Fixed
+- **sql/003_enemy_intel.sql**: Fixed threat score bug — players with 0 kills no longer show as 100 EXTREME (now correctly score 0). Also fixed 0-deaths edge case (treats as 1 death instead of NULL)
+
 ## [v0.4.4] - 2026-02-07
 ### Added
 - **admin.html**: Editable "My Team" field in import preview — pre-filled from config but editable per match, supports importing for multiple teams (Circle, DKB, etc.)

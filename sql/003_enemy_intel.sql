@@ -110,11 +110,12 @@ SELECT
     ROUND(SUM(md.kills)::NUMERIC / NULLIF(COUNT(md.id), 0), 1) as avg_kills,
     MAX(md.kills) as most_kills,
     ROUND(SUM(md.combat_eff)::NUMERIC / NULLIF(COUNT(md.id), 0), 0) as avg_ce,
-    -- Threat/100: (avg_kills * kd_ratio), capped at 100
-    LEAST(100, ROUND(
+    -- Threat/100: (avg_kills * kd_ratio), capped at 100. 0 kills = 0 threat. 0 deaths = use kills as KD.
+    CASE WHEN COALESCE(SUM(md.kills), 0) = 0 THEN 0
+    ELSE LEAST(100, ROUND(
         (SUM(md.kills)::NUMERIC / NULLIF(COUNT(md.id), 0)) *
-        (SUM(md.kills)::NUMERIC / NULLIF(SUM(md.deaths), 0)),
-    0)) as threat_score,
+        (SUM(md.kills)::NUMERIC / GREATEST(SUM(md.deaths), 1)),
+    0)) END as threat_score,
     MAX(m.match_date) as last_seen,
     MIN(m.match_date) as first_seen,
     -- Count of distinct teams played for (for mercenary detection)
