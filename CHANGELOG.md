@@ -4,6 +4,14 @@ All notable changes to this project will be documented in this file.
 
 ---
 
+## [v0.4.4] - 2026-02-07
+### Added
+- **admin.html**: Editable "My Team" field in import preview — pre-filled from config but editable per match, supports importing for multiple teams (Circle, DKB, etc.)
+
+## [v0.4.3] - 2026-02-07
+### Changed
+- **admin.html**: Enemy team field in import preview is now an editable text input — auto-detected tag is pre-filled but user can correct it before confirming import
+
 ## [v0.4.2] - 2026-02-07
 ### Fixed
 - **admin.html**: Bulk CSV player import now also uses `stripClanTag()` for consistent name cleaning across all import paths

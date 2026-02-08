@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Admin - HLL Tool v0.4.2</title>
+    <title>Admin - HLL Tool v0.4.4</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <link rel="stylesheet" href="../css/styles.css">
     <style>
@@ -81,7 +81,7 @@
         <!-- Header -->
         <div class="page-header">
             <h1 class="page-title">Admin</h1>
-            <span class="version-badge">v0.4.2</span>
+            <span class="version-badge">v0.4.4</span>
         </div>
 
         <div class="admin-grid">
@@ -640,8 +640,16 @@
                             <span class="stat-label">Date</span>
                         </div>
                         <div class="stat-box">
-                            <span class="stat-value">${matchInfo.enemyTeam || '?'}</span>
-                            <span class="stat-label">Enemy Team</span>
+                            <input type="text" id="myTeamInput" value="${HLL.currentTeam || 'Circle'}" 
+                                style="background: var(--bg-input, #1a1a2e); border: 1px solid var(--accent-orange); border-radius: 4px; color: var(--text-primary); font-size: 1.1rem; font-weight: 700; text-align: center; width: 100%; padding: 4px 8px;"
+                                placeholder="Enter your team">
+                            <span class="stat-label">My Team (editable)</span>
+                        </div>
+                        <div class="stat-box">
+                            <input type="text" id="enemyTeamInput" value="${matchInfo.enemyTeam || ''}" 
+                                style="background: var(--bg-input, #1a1a2e); border: 1px solid var(--accent-orange); border-radius: 4px; color: var(--text-primary); font-size: 1.1rem; font-weight: 700; text-align: center; width: 100%; padding: 4px 8px;"
+                                placeholder="Enter enemy tag">
+                            <span class="stat-label">Enemy Team (editable)</span>
                         </div>
                         <div class="stat-box">
                             <span class="stat-value">${mvp ? mvp.name : '—'}</span>
@@ -1265,10 +1273,20 @@
                 }
                 
                 // --- 0. AUTO-ADD NEW FRIENDLY PLAYERS TO ROSTER (must be before match insert for FK) ---
-                await autoAddNewPlayers(friendlyPlayers, matchInfo);
+                await autoAddNewPlayers(friendlyPlayers, matchInfo, myTeam);
                 
                 // Generate match ID (MTH-XXXXXX format, sequential)
                 const matchId = await generateMatchId();
+                
+                // --- Read enemy team from editable input (user may have corrected it) ---
+                const enemyTeamInput = document.getElementById('enemyTeamInput');
+                if (enemyTeamInput) {
+                    matchInfo.enemyTeam = enemyTeamInput.value.trim() || matchInfo.enemyTeam || 'Unknown';
+                }
+                
+                // --- Read my team from editable input ---
+                const myTeamInput = document.getElementById('myTeamInput');
+                const myTeam = myTeamInput ? myTeamInput.value.trim() || HLL.currentTeam || 'Circle' : HLL.currentTeam || 'Circle';
                 
                 // --- 1. INSERT MATCH (Match_Log equivalent) ---
                 const { error: matchError } = await HLL.supabase
@@ -1276,7 +1294,7 @@
                     .insert({
                         match_id: matchId,
                         match_date: matchInfo.date,
-                        my_team: HLL.currentTeam || 'Circle',
+                        my_team: myTeam,
                         enemy_team: matchInfo.enemyTeam || 'Unknown',
                         my_faction: matchInfo.myFaction || 'Allies',
                         enemy_faction: matchInfo.enemyFaction || 'Axis',
@@ -1421,7 +1439,7 @@
          * Auto-add new friendly players to roster if not already present.
          * Mirrors VBA UpdateRosterStats new player logic (line 1064).
          */
-        async function autoAddNewPlayers(friendlyPlayers, matchInfo) {
+        async function autoAddNewPlayers(friendlyPlayers, matchInfo, myTeam) {
             if (!friendlyPlayers.length) return;
             
             // Get existing roster with names and previous_names
@@ -1444,7 +1462,7 @@
                     newPlayers.push({
                         steam_id: p.steamId,
                         name: stripClanTag(p.name),
-                        team: HLL.currentTeam || 'Circle',
+                        team: myTeam || HLL.currentTeam || 'Circle',
                         first_seen: matchInfo.date,
                         last_seen: matchInfo.date
                     });
