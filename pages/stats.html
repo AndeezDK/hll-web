@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Stats - HLL Tool v0.5.3</title>
+    <title>Stats - HLL Tool v0.6.4</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <link rel="stylesheet" href="../css/styles.css">
     <style>
@@ -179,8 +179,17 @@
         <!-- Header -->
         <div class="page-header">
             <h1 class="page-title">Team Stats</h1>
-            <span class="version-badge">v0.5.3</span>
+            <span class="version-badge">v0.6.4</span>
         </div>
+
+        <!-- Tabs -->
+        <div style="display: flex; gap: 0; margin-bottom: 20px; border-bottom: 2px solid rgba(255,255,255,0.1);">
+            <div class="stats-tab active" onclick="switchStatsTab('players')" id="tab-btn-players" style="padding: 10px 20px; cursor: pointer; color: var(--accent-orange); border-bottom: 2px solid var(--accent-orange); margin-bottom: -2px; font-weight: 600;">Player Stats</div>
+            <div class="stats-tab" onclick="switchStatsTab('compare')" id="tab-btn-compare" style="padding: 10px 20px; cursor: pointer; color: var(--text-secondary); border-bottom: 2px solid transparent; margin-bottom: -2px;">Team Compare</div>
+        </div>
+
+        <!-- PLAYER STATS TAB (existing content) -->
+        <div id="tab-players">
 
         <!-- Overall Stats -->
         <div class="stat-row" id="overallStats">
@@ -382,6 +391,80 @@
                 </div>
             </div>
         </div>
+
+        <!-- Role Leaderboards -->
+        <div class="card mt-lg">
+            <div class="card-header">
+                <span class="card-title">🎯 Role Leaderboards (PPS)</span>
+                <select id="roleGroupFilter" style="background: var(--bg-input, #1a1a2e); border: 1px solid rgba(255,255,255,0.15); border-radius: 4px; color: var(--text-primary); padding: 4px 8px; font-size: 0.85rem;">
+                    <option value="">Select role...</option>
+                    <option value="Infantry">Infantry</option>
+                    <option value="Squad Leader">Squad Leader</option>
+                    <option value="Defence">Defence</option>
+                    <option value="Defence SL">Defence SL</option>
+                    <option value="Spotter">Spotter</option>
+                    <option value="Sniper">Sniper</option>
+                    <option value="Tank Crew">Tank Crew</option>
+                    <option value="Commander">Commander</option>
+                    <option value="Artillery">Artillery</option>
+                </select>
+            </div>
+            <div class="card-body" id="roleLeaderboard">
+                <div class="text-center text-muted">Select a role to see player rankings by PPS</div>
+            </div>
+        </div>
+
+        </div><!-- end tab-players -->
+
+        <!-- TEAM COMPARE TAB -->
+        <div id="tab-compare" style="display: none;">
+            
+            <!-- My Team Summary -->
+            <div class="card">
+                <div class="card-header"><span class="card-title">📊 My Team Summary</span></div>
+                <div class="card-body" id="myTeamSummary">
+                    <div class="text-center text-muted">Loading...</div>
+                </div>
+            </div>
+
+            <!-- Division Rankings -->
+            <div class="card mt-lg">
+                <div class="card-header">
+                    <span class="card-title">🏆 Division Rankings</span>
+                    <select id="divisionFilter" style="background: var(--bg-input, #1a1a2e); border: 1px solid rgba(255,255,255,0.15); border-radius: 4px; color: var(--text-primary); padding: 4px 8px; font-size: 0.85rem;">
+                        <option value="">Select division...</option>
+                    </select>
+                </div>
+                <div class="card-body" id="divisionRankings">
+                    <div class="text-center text-muted">Select a division to see rankings</div>
+                </div>
+            </div>
+
+            <!-- Head-to-Head -->
+            <div class="card mt-lg">
+                <div class="card-header">
+                    <span class="card-title">⚔️ Head-to-Head</span>
+                    <select id="h2hTeamSelect" style="background: var(--bg-input, #1a1a2e); border: 1px solid rgba(255,255,255,0.15); border-radius: 4px; color: var(--text-primary); padding: 4px 8px; font-size: 0.85rem;">
+                        <option value="">Select enemy team...</option>
+                    </select>
+                </div>
+                <div class="card-body" id="headToHead">
+                    <div class="text-center text-muted">Select an enemy team for head-to-head comparison</div>
+                </div>
+            </div>
+
+            <!-- Player-level Comparison -->
+            <div id="playerCompareSection" style="display: none;">
+                <div class="card mt-lg">
+                    <div class="card-header"><span class="card-title">👥 Player Comparison — Top 10</span></div>
+                    <div class="card-body" id="playerCompare">
+                        <div class="text-center text-muted">Loading...</div>
+                    </div>
+                </div>
+            </div>
+
+        </div><!-- end tab-compare -->
+
     </div>
 
     <!-- Loading Overlay -->
@@ -404,6 +487,7 @@
                     loadPlayerLeaderboards(),
                     loadRoleStats()
                 ]);
+                initRoleLeaderboard();
             }
             
             HLL.hideLoading();
@@ -693,6 +777,477 @@
             }
         }
         
+        // ============================================================================
+        // ROLE LEADERBOARDS
+        // ============================================================================
+        function initRoleLeaderboard() {
+            document.getElementById('roleGroupFilter').addEventListener('change', (e) => {
+                loadRoleLeaderboard(e.target.value);
+            });
+        }
+
+        async function loadRoleLeaderboard(roleGroup) {
+            const section = document.getElementById('roleLeaderboard');
+            if (!roleGroup) {
+                section.innerHTML = '<div class="text-center text-muted">Select a role to see player rankings by PPS</div>';
+                return;
+            }
+            
+            section.innerHTML = '<div class="text-center text-muted">Loading...</div>';
+
+            const { data, error } = await HLL.supabase
+                .from('role_leaderboard')
+                .select('*')
+                .eq('role_group', roleGroup)
+                .order('avg_pps', { ascending: false });
+
+            if (error) {
+                section.innerHTML = `<div class="text-center text-muted">Error: ${error.message}</div>`;
+                return;
+            }
+
+            if (!data || data.length === 0) {
+                section.innerHTML = '<div class="text-center text-muted">No data for this role yet. Import matches with lineup data to populate.</div>';
+                return;
+            }
+
+            // Choose which columns to emphasize based on role
+            const isDefence = roleGroup === 'Defence' || roleGroup === 'Defence SL';
+            const isSupport = roleGroup === 'Spotter' || roleGroup === 'Commander';
+            const isTank = roleGroup === 'Tank Crew';
+
+            section.innerHTML = `
+                <table class="data-table" style="font-size: 0.85rem;">
+                    <thead><tr>
+                        <th>#</th>
+                        <th>Player</th>
+                        <th>Matches</th>
+                        <th>Avg PPS</th>
+                        <th>Best PPS</th>
+                        <th>Avg K</th>
+                        <th>Avg D</th>
+                        <th>Avg K/D</th>
+                        <th>Avg CE</th>
+                        ${isDefence ? '<th style="color: #4ade80">Avg Def</th>' : '<th>Avg Def</th>'}
+                        <th>Avg Off</th>
+                        ${isSupport ? '<th style="color: #4ade80">Avg Sup</th>' : '<th>Avg Sup</th>'}
+                    </tr></thead>
+                    <tbody>
+                        ${data.map((p, i) => `<tr>
+                            <td>${i + 1}</td>
+                            <td>${p.player_name}</td>
+                            <td>${p.matches_in_role}</td>
+                            <td><strong>${p.avg_pps}</strong></td>
+                            <td>${p.best_pps}</td>
+                            <td>${p.avg_kills}</td>
+                            <td>${p.avg_deaths}</td>
+                            <td>${p.avg_kd}</td>
+                            <td>${p.avg_ce}</td>
+                            <td>${p.avg_def}</td>
+                            <td>${p.avg_off}</td>
+                            <td>${p.avg_sup}</td>
+                        </tr>`).join('')}
+                    </tbody>
+                </table>
+                <p style="font-size: 0.75rem; color: var(--text-secondary); margin-top: 8px;">
+                    PPS = Performance Score based on combat, offense, defense, and support metrics weighted by K/D and KPM factors.
+                    ${isDefence ? ' Defence players are expected to have higher defensive_pts.' : ''}
+                    ${isSupport ? ' Support-oriented roles weight support_pts more heavily.' : ''}
+                </p>`;
+        }
+
+        // ============================================================================
+        // TAB SWITCHING
+        // ============================================================================
+        function switchStatsTab(tab) {
+            document.getElementById('tab-players').style.display = tab === 'players' ? 'block' : 'none';
+            document.getElementById('tab-compare').style.display = tab === 'compare' ? 'block' : 'none';
+            
+            document.getElementById('tab-btn-players').style.color = tab === 'players' ? 'var(--accent-orange)' : 'var(--text-secondary)';
+            document.getElementById('tab-btn-players').style.borderBottomColor = tab === 'players' ? 'var(--accent-orange)' : 'transparent';
+            document.getElementById('tab-btn-compare').style.color = tab === 'compare' ? 'var(--accent-orange)' : 'var(--text-secondary)';
+            document.getElementById('tab-btn-compare').style.borderBottomColor = tab === 'compare' ? 'var(--accent-orange)' : 'transparent';
+
+            if (tab === 'compare' && !window._compareLoaded) {
+                window._compareLoaded = true;
+                loadCompareTab();
+            }
+        }
+
+        // ============================================================================
+        // COMPARE TAB
+        // ============================================================================
+        async function loadCompareTab() {
+            await Promise.all([
+                loadMyTeamSummary(),
+                loadDivisionDropdown(),
+                loadH2HDropdown()
+            ]);
+        }
+
+        // --- MY TEAM SUMMARY ---
+        async function loadMyTeamSummary() {
+            const section = document.getElementById('myTeamSummary');
+            const myTeam = HLL.currentTeam || 'Circle';
+
+            // Get my team's match stats
+            const { data: matches } = await HLL.supabase
+                .from('matches')
+                .select('*')
+                .eq('my_team', myTeam);
+
+            // Get my team's player stats from match_details
+            const { data: details } = await HLL.supabase
+                .from('match_details')
+                .select('kills, deaths, combat_eff')
+                .eq('team', 'Friendly');
+
+            if (!matches || matches.length === 0) {
+                section.innerHTML = '<div class="text-center text-muted">No matches found</div>';
+                return;
+            }
+
+            const totalMatches = matches.length;
+            const wins = matches.filter(m => m.result === 'W').length;
+            const losses = matches.filter(m => m.result === 'L').length;
+            const draws = matches.filter(m => m.result === 'D').length;
+            const winRate = totalMatches > 0 ? Math.round(wins / totalMatches * 100) : 0;
+            const ptsFor = matches.reduce((s, m) => s + (m.my_score || 0), 0);
+            const ptsAgainst = matches.reduce((s, m) => s + (m.enemy_score || 0), 0);
+
+            const totalKills = (details || []).reduce((s, d) => s + (d.kills || 0), 0);
+            const totalDeaths = (details || []).reduce((s, d) => s + (d.deaths || 0), 0);
+            const avgKillsPerMatch = totalMatches > 0 ? (totalKills / totalMatches).toFixed(0) : '-';
+            const avgDeathsPerMatch = totalMatches > 0 ? (totalDeaths / totalMatches).toFixed(0) : '-';
+            const teamKD = totalDeaths > 0 ? (totalKills / totalDeaths).toFixed(2) : '-';
+
+            // Get my divisions
+            const { data: myDivs } = await HLL.supabase
+                .from('my_team_divisions')
+                .select('division_id')
+                .eq('team_name', myTeam);
+            let divNames = [];
+            if (myDivs && myDivs.length > 0) {
+                const { data: divData } = await HLL.supabase
+                    .from('divisions')
+                    .select('name')
+                    .in('id', myDivs.map(d => d.division_id));
+                divNames = (divData || []).map(d => d.name);
+            }
+
+            section.innerHTML = `
+                <div style="margin-bottom: 12px;">
+                    <span style="font-size: 1.2rem; font-weight: 700;">${myTeam}</span>
+                    ${divNames.length > 0 ? '<span style="margin-left: 8px;">' + divNames.map(n => `<span style="padding: 2px 8px; border-radius: 3px; font-size: 0.75rem; background: rgba(255,152,0,0.15); color: #ff9800;">${n}</span>`).join(' ') + '</span>' : ''}
+                </div>
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 12px;">
+                    <div class="stat-box"><span class="stat-value">${totalMatches}</span><span class="stat-label">Matches</span></div>
+                    <div class="stat-box"><span class="stat-value" style="color: var(--accent-green)">${wins}</span><span class="stat-label">Wins</span></div>
+                    <div class="stat-box"><span class="stat-value" style="color: var(--accent-red)">${losses}</span><span class="stat-label">Losses</span></div>
+                    <div class="stat-box"><span class="stat-value">${winRate}%</span><span class="stat-label">Win Rate</span></div>
+                    <div class="stat-box"><span class="stat-value">${ptsFor}-${ptsAgainst}</span><span class="stat-label">Score F/A</span></div>
+                    <div class="stat-box"><span class="stat-value" style="color: ${parseFloat(teamKD) >= 1 ? 'var(--accent-green)' : 'var(--accent-red)'}">${teamKD}</span><span class="stat-label">Team K/D</span></div>
+                    <div class="stat-box"><span class="stat-value">${avgKillsPerMatch}</span><span class="stat-label">Avg Kills/Match</span></div>
+                    <div class="stat-box"><span class="stat-value">${avgDeathsPerMatch}</span><span class="stat-label">Avg Deaths/Match</span></div>
+                </div>`;
+        }
+
+        // --- DIVISION RANKINGS ---
+        async function loadDivisionDropdown() {
+            const { data: divs } = await HLL.supabase
+                .from('divisions')
+                .select('*')
+                .order('sort_order', { ascending: true });
+            
+            const select = document.getElementById('divisionFilter');
+            (divs || []).forEach(d => {
+                const opt = document.createElement('option');
+                opt.value = d.id;
+                opt.textContent = d.name;
+                select.appendChild(opt);
+            });
+            select.addEventListener('change', () => loadDivisionRankings(select.value));
+        }
+
+        async function loadDivisionRankings(divisionId) {
+            const section = document.getElementById('divisionRankings');
+            if (!divisionId) {
+                section.innerHTML = '<div class="text-center text-muted">Select a division to see rankings</div>';
+                return;
+            }
+
+            section.innerHTML = '<div class="text-center text-muted">Loading...</div>';
+
+            // Get division name
+            const { data: divData } = await HLL.supabase
+                .from('divisions')
+                .select('name')
+                .eq('id', divisionId)
+                .single();
+            const divName = divData?.name || '';
+
+            // Get all enemy teams in this division
+            const { data: teamLinks } = await HLL.supabase
+                .from('enemy_team_divisions')
+                .select('team_tag')
+                .eq('division_id', divisionId);
+            const enemyTags = (teamLinks || []).map(t => t.team_tag);
+
+            // Check if my team is in this division
+            const myTeam = HLL.currentTeam || 'Circle';
+            const { data: myInDiv } = await HLL.supabase
+                .from('my_team_divisions')
+                .select('id')
+                .eq('team_name', myTeam)
+                .eq('division_id', divisionId);
+            const myTeamInDiv = myInDiv && myInDiv.length > 0;
+
+            // Get ALL matches of this division type (filtered by match_type)
+            const { data: divMatches } = await HLL.supabase
+                .from('matches')
+                .select('*')
+                .eq('match_type', divName);
+
+            // Build rankings array
+            const rankings = [];
+
+            // Calculate stats per enemy team from division matches only
+            for (const tag of enemyTags) {
+                const teamMatches = (divMatches || []).filter(m => m.enemy_team === tag);
+                if (teamMatches.length === 0) {
+                    rankings.push({ tag, name: tag, matches: 0, wins: 0, losses: 0, winRate: 0, ptsFor: 0, ptsAgainst: 0, isMyTeam: false });
+                    continue;
+                }
+                // From our perspective: our W = their L, our L = their W
+                const theirWins = teamMatches.filter(m => m.result === 'L').length;
+                const theirLosses = teamMatches.filter(m => m.result === 'W').length;
+                rankings.push({
+                    tag,
+                    name: tag,
+                    matches: teamMatches.length,
+                    wins: theirWins,
+                    losses: theirLosses,
+                    winRate: teamMatches.length > 0 ? Math.round(theirWins / teamMatches.length * 100) : 0,
+                    ptsFor: teamMatches.reduce((s, m) => s + (m.enemy_score || 0), 0),
+                    ptsAgainst: teamMatches.reduce((s, m) => s + (m.my_score || 0), 0),
+                    isMyTeam: false
+                });
+            }
+
+            // Get my team stats (only matches of this division type)
+            const myMatches = (divMatches || []).filter(m => m.my_team === myTeam);
+
+            // Add my team if in this division
+            if (myTeamInDiv && myMatches.length > 0) {
+                const mw = myMatches.filter(m => m.result === 'W').length;
+                const ml = myMatches.filter(m => m.result === 'L').length;
+                rankings.push({
+                    tag: myTeam,
+                    name: myTeam,
+                    matches: myMatches.length,
+                    wins: mw,
+                    losses: ml,
+                    winRate: myMatches.length > 0 ? Math.round(mw / myMatches.length * 100) : 0,
+                    ptsFor: myMatches.reduce((s, m) => s + (m.my_score || 0), 0),
+                    ptsAgainst: myMatches.reduce((s, m) => s + (m.enemy_score || 0), 0),
+                    isMyTeam: true
+                });
+            }
+
+            // Sort by win rate desc, then wins desc
+            rankings.sort((a, b) => b.winRate - a.winRate || b.wins - a.wins);
+
+            if (rankings.length === 0) {
+                section.innerHTML = '<div class="text-center text-muted">No teams found in this division</div>';
+                return;
+            }
+
+            section.innerHTML = `
+                <table class="data-table">
+                    <thead><tr>
+                        <th>#</th><th>Team</th><th>Matches</th><th>W</th><th>L</th><th>Win Rate</th><th>Pts F/A</th>
+                    </tr></thead>
+                    <tbody>
+                        ${rankings.map((t, i) => `
+                            <tr style="${t.isMyTeam ? 'background: rgba(255,152,0,0.1); font-weight: 600;' : ''}">
+                                <td>${i + 1}</td>
+                                <td>${t.isMyTeam ? '⭐ ' : ''}[${t.tag}] ${t.name !== t.tag ? t.name : ''}</td>
+                                <td>${t.matches}</td>
+                                <td style="color: var(--accent-green)">${t.wins}</td>
+                                <td style="color: var(--accent-red)">${t.losses}</td>
+                                <td><strong>${t.winRate}%</strong></td>
+                                <td>${t.ptsFor}-${t.ptsAgainst}</td>
+                            </tr>
+                        `).join('')}
+                    </tbody>
+                </table>`;
+        }
+
+        // --- HEAD TO HEAD ---
+        async function loadH2HDropdown() {
+            const { data: teams } = await HLL.supabase
+                .from('enemy_teams')
+                .select('tag, name')
+                .order('tag');
+            
+            const select = document.getElementById('h2hTeamSelect');
+            (teams || []).forEach(t => {
+                const opt = document.createElement('option');
+                opt.value = t.tag;
+                opt.textContent = `[${t.tag}] ${t.name || ''}`;
+                select.appendChild(opt);
+            });
+            select.addEventListener('change', () => loadHeadToHead(select.value));
+        }
+
+        async function loadHeadToHead(enemyTag) {
+            const section = document.getElementById('headToHead');
+            const playerSection = document.getElementById('playerCompareSection');
+            if (!enemyTag) {
+                section.innerHTML = '<div class="text-center text-muted">Select an enemy team for head-to-head comparison</div>';
+                playerSection.style.display = 'none';
+                return;
+            }
+
+            section.innerHTML = '<div class="text-center text-muted">Loading...</div>';
+            const myTeam = HLL.currentTeam || 'Circle';
+
+            // Get matches against this team
+            const { data: matches } = await HLL.supabase
+                .from('matches')
+                .select('*')
+                .eq('enemy_team', enemyTag);
+
+            if (!matches || matches.length === 0) {
+                section.innerHTML = '<div class="text-center text-muted">No matches found against this team</div>';
+                playerSection.style.display = 'none';
+                return;
+            }
+
+            const matchIds = matches.map(m => m.match_id);
+
+            // Get all match_details for these matches
+            const { data: details } = await HLL.supabase
+                .from('match_details')
+                .select('*')
+                .in('match_id', matchIds);
+
+            const friendly = (details || []).filter(d => d.team === 'Friendly');
+            const enemy = (details || []).filter(d => d.team === 'Enemy');
+
+            const myKills = friendly.reduce((s, d) => s + (d.kills || 0), 0);
+            const myDeaths = friendly.reduce((s, d) => s + (d.deaths || 0), 0);
+            const theirKills = enemy.reduce((s, d) => s + (d.kills || 0), 0);
+            const theirDeaths = enemy.reduce((s, d) => s + (d.deaths || 0), 0);
+
+            const wins = matches.filter(m => m.result === 'W').length;
+            const losses = matches.filter(m => m.result === 'L').length;
+            const myKD = myDeaths > 0 ? (myKills / myDeaths).toFixed(2) : '-';
+            const theirKD = theirDeaths > 0 ? (theirKills / theirDeaths).toFixed(2) : '-';
+            const myAvgKills = matches.length > 0 ? (myKills / matches.length).toFixed(0) : '-';
+            const theirAvgKills = matches.length > 0 ? (theirKills / matches.length).toFixed(0) : '-';
+
+            const betterKD = parseFloat(myKD) > parseFloat(theirKD);
+
+            section.innerHTML = `
+                <div style="display: grid; grid-template-columns: 1fr auto 1fr; gap: 16px; align-items: start;">
+                    <!-- My Team -->
+                    <div style="text-align: center;">
+                        <div style="font-size: 1.1rem; font-weight: 700; margin-bottom: 12px; color: var(--accent-orange);">${myTeam}</div>
+                        <div style="display: flex; flex-direction: column; gap: 8px;">
+                            <div class="stat-box"><span class="stat-value" style="color: var(--accent-green)">${wins}</span><span class="stat-label">Wins</span></div>
+                            <div class="stat-box"><span class="stat-value">${myKills}</span><span class="stat-label">Total Kills</span></div>
+                            <div class="stat-box"><span class="stat-value">${myDeaths}</span><span class="stat-label">Total Deaths</span></div>
+                            <div class="stat-box"><span class="stat-value" style="color: ${betterKD ? 'var(--accent-green)' : 'var(--accent-red)'}">${myKD}</span><span class="stat-label">K/D</span></div>
+                            <div class="stat-box"><span class="stat-value">${myAvgKills}</span><span class="stat-label">Avg Kills/Match</span></div>
+                        </div>
+                    </div>
+                    <!-- VS -->
+                    <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; padding-top: 40px;">
+                        <div style="font-size: 1.5rem; font-weight: 700; color: var(--text-secondary);">VS</div>
+                        <div style="font-size: 0.85rem; color: var(--text-secondary); margin-top: 4px;">${matches.length} matches</div>
+                    </div>
+                    <!-- Enemy Team -->
+                    <div style="text-align: center;">
+                        <div style="font-size: 1.1rem; font-weight: 700; margin-bottom: 12px; color: var(--text-primary);">[${enemyTag}]</div>
+                        <div style="display: flex; flex-direction: column; gap: 8px;">
+                            <div class="stat-box"><span class="stat-value" style="color: var(--accent-green)">${losses}</span><span class="stat-label">Wins</span></div>
+                            <div class="stat-box"><span class="stat-value">${theirKills}</span><span class="stat-label">Total Kills</span></div>
+                            <div class="stat-box"><span class="stat-value">${theirDeaths}</span><span class="stat-label">Total Deaths</span></div>
+                            <div class="stat-box"><span class="stat-value" style="color: ${!betterKD ? 'var(--accent-green)' : 'var(--accent-red)'}">${theirKD}</span><span class="stat-label">K/D</span></div>
+                            <div class="stat-box"><span class="stat-value">${theirAvgKills}</span><span class="stat-label">Avg Kills/Match</span></div>
+                        </div>
+                    </div>
+                </div>`;
+
+            // Load player comparison
+            await loadPlayerComparison(matchIds, enemyTag);
+        }
+
+        // --- PLAYER COMPARISON ---
+        async function loadPlayerComparison(matchIds, enemyTag) {
+            const section = document.getElementById('playerCompareSection');
+            const body = document.getElementById('playerCompare');
+            section.style.display = 'block';
+            body.innerHTML = '<div class="text-center text-muted">Loading...</div>';
+
+            // Get friendly player stats for these matches
+            const { data: friendlyDetails } = await HLL.supabase
+                .from('match_details')
+                .select('steam_id, player_name, kills, deaths')
+                .in('match_id', matchIds)
+                .eq('team', 'Friendly');
+
+            // Get enemy player stats
+            const { data: enemyDetails } = await HLL.supabase
+                .from('match_details')
+                .select('steam_id, player_name, kills, deaths')
+                .in('match_id', matchIds)
+                .eq('team', 'Enemy');
+
+            // Aggregate by player
+            function aggregatePlayers(details) {
+                const map = {};
+                (details || []).forEach(d => {
+                    const key = d.steam_id || d.player_name;
+                    if (!map[key]) map[key] = { name: d.player_name, kills: 0, deaths: 0, matches: 0 };
+                    map[key].kills += d.kills || 0;
+                    map[key].deaths += d.deaths || 0;
+                    map[key].matches++;
+                });
+                return Object.values(map)
+                    .map(p => ({ ...p, avgKills: (p.kills / p.matches).toFixed(1), kd: p.deaths > 0 ? (p.kills / p.deaths).toFixed(2) : '-' }))
+                    .sort((a, b) => parseFloat(b.avgKills) - parseFloat(a.avgKills))
+                    .slice(0, 10);
+            }
+
+            const myTop = aggregatePlayers(friendlyDetails);
+            const theirTop = aggregatePlayers(enemyDetails);
+            const maxRows = Math.max(myTop.length, theirTop.length);
+
+            body.innerHTML = `
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px;">
+                    <div>
+                        <h4 style="text-align: center; margin-bottom: 8px; color: var(--accent-orange); font-size: 0.9rem;">Our Top Players</h4>
+                        <table class="data-table" style="font-size: 0.85rem;">
+                            <thead><tr><th>#</th><th>Name</th><th>Avg K</th><th>K/D</th></tr></thead>
+                            <tbody>
+                                ${myTop.map((p, i) => `<tr><td>${i+1}</td><td>${p.name}</td><td>${p.avgKills}</td><td>${p.kd}</td></tr>`).join('')}
+                            </tbody>
+                        </table>
+                    </div>
+                    <div>
+                        <h4 style="text-align: center; margin-bottom: 8px; font-size: 0.9rem;">Their Top Players</h4>
+                        <table class="data-table" style="font-size: 0.85rem;">
+                            <thead><tr><th>#</th><th>Name</th><th>Avg K</th><th>K/D</th></tr></thead>
+                            <tbody>
+                                ${theirTop.map((p, i) => `<tr><td>${i+1}</td><td>${p.name}</td><td>${p.avgKills}</td><td>${p.kd}</td></tr>`).join('')}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>`;
+        }
+
         init();
     </script>
 </body>

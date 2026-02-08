@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Admin - HLL Tool v0.5.3</title>
+    <title>Admin - HLL Tool v0.6.4</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <link rel="stylesheet" href="../css/styles.css">
     <style>
@@ -81,7 +81,7 @@
         <!-- Header -->
         <div class="page-header">
             <h1 class="page-title">Admin</h1>
-            <span class="version-badge">v0.5.3</span>
+            <span class="version-badge">v0.6.4</span>
         </div>
 
         <div class="admin-grid">
@@ -558,7 +558,7 @@
                 const noShows = detectNoShows(players, lineupSlots);
                 
                 // Step 7: Calculate MVP
-                const mvp = calculateMVP(players);
+                const mvp = calculateMVP(players, matchInfo.duration);
                 
                 // Step 8: Detect TEMP players that can be paired with real SteamIDs
                 const { data: rosterPlayers } = await HLL.supabase
@@ -676,7 +676,7 @@
                         </div>
                         <div class="stat-box">
                             <span class="stat-value">${mvp ? mvp.name : '—'}</span>
-                            <span class="stat-label">MVP (CE: ${mvp ? mvp.ce : '—'})</span>
+                            <span class="stat-label">MVP (PPS: ${mvp ? mvp.pps : '—'})</span>
                         </div>
                         <div class="stat-box">
                             <span class="stat-value">${noShows.length}</span>
@@ -1109,34 +1109,43 @@
             // Get lineup data from Supabase
             const { data: lineupSlots } = await HLL.supabase
                 .from('lineups')
-                .select('cell_position, steam_id, player_name, role')
+                .select('cell_position, steam_id, player_name, role, sl_role, note')
                 .eq('lineup_number', parseInt(lineupNumber));
             
-            // Build lookup: steam_id → role, and name → role (fallback)
+            // Build lookup: steam_id → role info, and name → role info (fallback)
             const steamToRole = {};
             const nameToRole = {};
             const lineupSteamIds = new Set();
             const lineupNames = new Set();
             
             for (const slot of (lineupSlots || [])) {
+                const roleInfo = {
+                    role: slot.role || getRoleFromCellPosition(slot.cell_position),
+                    cell_position: slot.cell_position || null,
+                    section: getSectionFromCellPosition(slot.cell_position),
+                    sl_role: slot.sl_role || null,
+                    note: slot.note || null
+                };
                 if (slot.steam_id) {
-                    steamToRole[slot.steam_id] = slot.role || getRoleFromCellPosition(slot.cell_position);
+                    steamToRole[slot.steam_id] = roleInfo;
                     lineupSteamIds.add(slot.steam_id);
                 }
                 if (slot.player_name) {
-                    nameToRole[normalizeName(slot.player_name)] = slot.role || getRoleFromCellPosition(slot.cell_position);
+                    nameToRole[normalizeName(slot.player_name)] = roleInfo;
                     lineupNames.add(normalizeName(slot.player_name));
                 }
             }
             
             // Match players to lineup roles
             for (const player of players) {
-                if (steamToRole[player.steamId]) {
+                const info = steamToRole[player.steamId] || nameToRole[normalizeName(player.name)];
+                if (info) {
                     player.isFriendly = true;
-                    player.role = steamToRole[player.steamId];
-                } else if (nameToRole[normalizeName(player.name)]) {
-                    player.isFriendly = true;
-                    player.role = nameToRole[normalizeName(player.name)];
+                    player.role = info.role;
+                    player.cell_position = info.cell_position;
+                    player.section = info.section;
+                    player.sl_role = info.sl_role;
+                    player.note = info.note;
                 }
                 
                 // Set faction based on friendly/enemy
@@ -1164,9 +1173,42 @@
             if (pos.includes('-drv'))   return 'Driver';
             if (pos.includes('-spot')) return 'Spotter';
             if (pos.includes('-snip')) return 'Sniper';
-            if (pos.startsWith('nn-') || pos.startsWith('nm-') || pos.startsWith('ns-')) return 'Defence';
-            // Infantry sections: nw, def, mg, flx, se, inf
+            if (pos.startsWith('nn-') || pos.startsWith('nm-') || pos.startsWith('ns-')) return 'Nodes';
+            // Section-specific infantry
+            if (pos.startsWith('def-'))  return 'Defence';
+            if (pos.startsWith('nw-'))   return 'Infantry';
+            if (pos.startsWith('mg-'))   return 'Infantry';
+            if (pos.startsWith('flx-'))  return 'Infantry';
+            if (pos.startsWith('se-'))   return 'Infantry';
+            if (pos.startsWith('inf-'))  return 'Infantry';
             return 'Infantry';
+        }
+        
+        /**
+         * Get the squad/section name from cell position.
+         */
+        function getSectionFromCellPosition(cellPos) {
+            if (!cellPos) return null;
+            const pos = cellPos.toLowerCase();
+            if (pos.startsWith('cmd'))  return 'Command';
+            if (pos.startsWith('art'))  return 'Artillery';
+            if (pos.startsWith('str'))  return 'Streamer';
+            if (pos.startsWith('t1-'))  return 'Tank 1';
+            if (pos.startsWith('t2-'))  return 'Tank 2';
+            if (pos.startsWith('t3-'))  return 'Tank 3';
+            if (pos.startsWith('t4-'))  return 'Tank 4';
+            if (pos.startsWith('r1-'))  return 'Recon 1';
+            if (pos.startsWith('r2-'))  return 'Recon 2';
+            if (pos.startsWith('nw-'))  return 'North/West';
+            if (pos.startsWith('def-')) return 'Defence';
+            if (pos.startsWith('mg-'))  return 'Meat Grind';
+            if (pos.startsWith('flx-')) return 'Flex';
+            if (pos.startsWith('se-'))  return 'South/East';
+            if (pos.startsWith('inf-')) return 'Infiltration';
+            if (pos.startsWith('nn-'))  return 'Nodes North';
+            if (pos.startsWith('nm-'))  return 'Nodes Middle';
+            if (pos.startsWith('ns-'))  return 'Nodes South';
+            return null;
         }
         
         /**
@@ -1199,21 +1241,59 @@
         }
         
         /**
-         * Find MVP: highest CE among friendly players, excluding Artillery.
-         * Mirrors VBA CalculateMVP (line 789).
+         * Find MVP: highest PPS among friendly players, excluding Artillery.
+         * PPS = Player Performance Score inspired by hellor.pro H-Score.
          */
-        function calculateMVP(players) {
+        function calculateMVP(players, matchDuration) {
             let mvp = null;
-            let maxCE = 0;
+            let maxPPS = 0;
             
             for (const player of players) {
-                if (player.isFriendly && player.ce > maxCE && player.role !== 'Artillery') {
-                    maxCE = player.ce;
+                if (!player.isFriendly || player.role === 'Artillery') continue;
+                
+                const pps = calculatePPS(player, matchDuration);
+                player.pps = pps;
+                
+                if (pps > maxPPS) {
+                    maxPPS = pps;
                     mvp = player;
                 }
             }
             
             return mvp;
+        }
+
+        /**
+         * Calculate Player Performance Score (PPS) for a single match.
+         * Formula inspired by hellor.pro H-Score, normalized by duration.
+         */
+        function calculatePPS(p, duration) {
+            const kd = p.kd || 0;
+            const kpm = p.kpm || 0;
+            const ce = p.ce || 0;
+            const off = p.offensive || 0;
+            const def = p.defensive || 0;
+            const sup = p.support || 0;
+            
+            const kdFactor = Math.min(2.5, Math.max(0.3, kd / 1.5));
+            const kpmFactor = Math.min(2.5, Math.max(0.3, kpm / 0.8));
+            const supportFactor = 1.0 / (1.0 + sup / 5000);
+            
+            // Parse duration H:MM:SS to seconds, default 5400 (90 min)
+            let durationSecs = 5400;
+            if (duration) {
+                const parts = duration.split(':').map(Number);
+                if (parts.length === 3) durationSecs = parts[0] * 3600 + parts[1] * 60 + parts[2];
+            }
+            durationSecs = Math.max(1, durationSecs);
+            
+            const rawScore = 
+                (ce * 4.0 * kdFactor * kpmFactor) +
+                (off * 0.9 * kdFactor * kpmFactor) +
+                (def * 1.1 * kdFactor * kpmFactor) +
+                (sup * 2.0 * supportFactor);
+            
+            return Math.round((rawScore / durationSecs) * 100) / 100;
         }
         
         /**
@@ -1372,7 +1452,11 @@
                         match_id: matchId,
                         role: p.role,
                         player_name: p.name,
-                        steam_id: p.steamId
+                        steam_id: p.steamId,
+                        cell_position: p.cell_position || null,
+                        section: p.section || null,
+                        sl_role: p.sl_role || null,
+                        note: p.note || null
                     }));
                 
                 if (lineupRows.length > 0) {

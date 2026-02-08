@@ -4,6 +4,54 @@ All notable changes to this project will be documented in this file.
 
 ---
 
+## [v0.6.4] - 2026-02-08
+### Fixed
+- **stats.html**: Division Rankings now filtered by match_type — only shows W/L/score from matches tagged with that division, not overall record
+
+## [v0.6.3] - 2026-02-08
+### Fixed
+- **PPS normalization**: PPS now divided by match duration in seconds (parsed from H:MM:SS). Scores now ~1-5 range instead of 7,000-15,000.
+- **Threat/100**: Updated to `avg_pps / 5.0 * 100` (PPS 5.0 = 100 extreme, 2.5 = 50 high, 1.0 = 20 low)
+- **Duplicate match**: Cleaned up MTH-000002 duplicate. Import duplicate detection TODO.
+- **admin.html**: calculatePPS now accepts duration parameter and normalizes by seconds
+
+## [v0.6.2] - 2026-02-08
+### Added
+- **sql/007_role_pps.sql**: Role-based PPS system
+  - `match_lineups` now stores `cell_position`, `section`, `sl_role`, `note` per player per match
+  - `player_role_pps` view: joins PPS with lineup data to assign role groups (Infantry, Squad Leader, Defence, Defence SL, Spotter, Sniper, Tank Crew, Commander, Artillery)
+  - `role_leaderboard` view: avg/best PPS per player per role group
+- **admin.html**: Import now saves cell_position, section, sl_role, and note to match_lineups. Fixed getRoleFromCellPosition to properly distinguish Defence section from Infantry.
+- **stats.html**: Role Leaderboard section — select a role to see players ranked by avg PPS with all stats
+
+## [v0.6.1] - 2026-02-08
+### Added
+- **sql/006_pps.sql**: Player Performance Score (PPS) system inspired by hellor.pro H-Score
+  - `player_match_pps` view: calculates PPS per player per match using combat_eff, offensive_pts, defensive_pts, support_pts with K/D and KPM multipliers and support diminishing returns
+  - Updated `enemy_player_stats` view: threat score now based on avg PPS (normalized to 0-100), shows avg_pps, max_pps, last_pps
+- **enemies.html**: Player Intel table now shows Avg PPS and Best PPS columns. Threat summary shows team avg PPS.
+- **admin.html**: MVP selection now uses PPS instead of raw Combat Efficiency. Preview shows PPS score.
+
+## [v0.6.0] - 2026-02-08
+### Added
+- **stats.html**: New "Team Compare" tab with 4 sections:
+  - **My Team Summary**: aggregate stats (matches, W/L, win rate, team K/D, avg kills/deaths per match, divisions)
+  - **Division Rankings**: select a division to see all teams ranked by win rate, with your team highlighted
+  - **Head-to-Head**: select an enemy team for side-by-side comparison (wins, kills, deaths, K/D, avg kills)
+  - **Player Comparison**: top 10 players from each side ranked by avg kills per match
+
+## [v0.5.6] - 2026-02-08
+### Changed
+- **lineup.html**: Auto-fill nodes now uses note-dropdown assignments — players marked "Eng" go to Eng node slots, "Supp" go to Supp node slots. Only SL, Rocket, AT, MG, Driver are skipped. Players with no note are assigned based on roster role data.
+
+## [v0.5.5] - 2026-02-08
+### Changed
+- **lineup.html**: Auto-fill nodes only pulls from infantry squads (not reserves). Players with any task (SL, Rocket, AT, MG, Supp, Eng, Driver) are skipped. Players stay in their squad — nodes are additional duty. Also skips players already assigned to other node slots.
+
+## [v0.5.4] - 2026-02-08
+### Fixed
+- **lineup.html**: Auto-fill nodes no longer removes players from their infantry slot — node duty is an additional task, players stay in their squad
+
 ## [v0.5.3] - 2026-02-08
 ### Changed
 - **lineup.html**: Rewrote `autoPopulateNodes()` with proper game logic:

@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Enemy Intel - HLL Tool v0.5.3</title>
+    <title>Enemy Intel - HLL Tool v0.6.4</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <link rel="stylesheet" href="../css/styles.css">
     <style>
@@ -318,7 +318,7 @@
     <div class="app-container">
         <div class="page-header">
             <h1 class="page-title">Enemy Intel</h1>
-            <span class="version-badge">v0.5.3</span>
+            <span class="version-badge">v0.6.4</span>
         </div>
 
         <!-- TEAM LIST VIEW -->
@@ -394,6 +394,8 @@
                             <th onclick="sortPlayers('avg_kills')">Avg Kills</th>
                             <th onclick="sortPlayers('avg_deaths')">Avg Deaths</th>
                             <th onclick="sortPlayers('avg_kd')">Avg K/D</th>
+                            <th onclick="sortPlayers('avg_pps')">Avg PPS</th>
+                            <th onclick="sortPlayers('max_pps')">Best PPS</th>
                             <th onclick="sortPlayers('threat_score')">Threat</th>
                         </tr>
                     </thead>
@@ -676,6 +678,7 @@
             }
             
             const avgThreat = players.length > 0 ? Math.round(totalThreat / players.length) : 0;
+            const avgPPS = players.length > 0 ? Math.round(players.reduce((s, p) => s + (p.avg_pps || 0), 0) / players.length) : 0;
 
             section.innerHTML = `
                 <div class="threat-grid">
@@ -687,6 +690,10 @@
                 <div class="intel-row" style="margin-top: 12px; border-top: 1px solid var(--border); padding-top: 8px;">
                     <span class="label">Avg Threat/100</span>
                     <span class="value">${avgThreat}</span>
+                </div>
+                <div class="intel-row">
+                    <span class="label">Avg PPS</span>
+                    <span class="value">${avgPPS}</span>
                 </div>
                 <div class="intel-row">
                     <span class="label">Total Players</span>
@@ -737,6 +744,8 @@
                     <td>${p.avg_kills || '-'}</td>
                     <td>${p.avg_deaths || '-'}</td>
                     <td>${p.avg_kd || '-'}</td>
+                    <td>${p.avg_pps || '-'}</td>
+                    <td>${p.max_pps || '-'}</td>
                     <td><span class="threat-badge ${threatClass}">${threat} ${threatLabel}</span></td>
                 </tr>`;
             }).join('');
