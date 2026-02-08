@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Enemy Intel - HLL Tool v0.4.6</title>
+    <title>Enemy Intel - HLL Tool v0.4.8</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <link rel="stylesheet" href="../css/styles.css">
     <style>
@@ -243,6 +243,50 @@
         .match-result-L { color: var(--accent-red); font-weight: 600; }
         .match-result-D { color: var(--text-secondary); font-weight: 600; }
 
+        .division-tags { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
+        .division-tag {
+            display: inline-block;
+            padding: 1px 8px;
+            border-radius: 3px;
+            font-size: 0.7rem;
+            background: rgba(255, 152, 0, 0.15);
+            color: var(--accent-orange);
+        }
+        .division-edit-btn {
+            display: inline-block;
+            padding: 1px 8px;
+            border-radius: 3px;
+            font-size: 0.7rem;
+            background: rgba(255,255,255,0.05);
+            color: var(--text-secondary);
+            cursor: pointer;
+            border: 1px dashed rgba(255,255,255,0.15);
+        }
+        .division-edit-btn:hover { color: var(--accent-orange); border-color: var(--accent-orange); }
+        .div-modal-overlay {
+            position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0,0,0,0.7); z-index: 1000;
+            display: flex; align-items: center; justify-content: center;
+        }
+        .div-modal {
+            background: var(--bg-secondary); border-radius: 8px; padding: 20px;
+            min-width: 320px; max-width: 450px; max-height: 80vh; overflow-y: auto;
+        }
+        .div-modal h3 { margin: 0 0 12px; font-size: 1rem; }
+        .div-checkbox { display: flex; align-items: center; gap: 8px; padding: 6px 0; cursor: pointer; }
+        .div-checkbox input { accent-color: var(--accent-orange); }
+        .div-checkbox label { cursor: pointer; flex: 1; }
+        .div-add-row { display: flex; gap: 8px; margin-top: 12px; padding-top: 12px; border-top: 1px solid rgba(255,255,255,0.1); }
+        .div-add-row input {
+            flex: 1; padding: 6px 10px; border-radius: 4px; border: 1px solid rgba(255,255,255,0.15);
+            background: var(--bg-primary); color: var(--text-primary); font-size: 0.85rem;
+        }
+        .div-remove-btn {
+            background: none; border: none; color: var(--accent-red); cursor: pointer;
+            font-size: 0.8rem; padding: 2px 6px; opacity: 0.6;
+        }
+        .div-remove-btn:hover { opacity: 1; }
+
         /* Mobile */
         @media (max-width: 768px) {
             .team-grid { grid-template-columns: 1fr; }
@@ -274,7 +318,7 @@
     <div class="app-container">
         <div class="page-header">
             <h1 class="page-title">Enemy Intel</h1>
-            <span class="version-badge">v0.4.6</span>
+            <span class="version-badge">v0.4.8</span>
         </div>
 
         <!-- TEAM LIST VIEW -->
@@ -307,6 +351,7 @@
                 <div>
                     <div class="detail-title" id="detailTeamTag"></div>
                     <div class="detail-subtitle" id="detailTeamName"></div>
+                    <div id="detailDivision" style="margin-top: 4px; cursor: pointer;"></div>
                 </div>
                 <div id="detailRecord" class="team-record" style="font-size: 1.2rem;"></div>
             </div>
@@ -431,6 +476,9 @@
                 
                 // Render team grid
                 renderTeamGrid();
+                
+                // Load divisions for team cards
+                loadAllTeamCardDivisions();
 
             } catch (err) {
                 console.error('Error loading enemy intel:', err);
@@ -462,6 +510,7 @@
                         <div>
                             <div class="team-tag">[${t.tag}]</div>
                             ${t.name ? `<div class="team-name">${t.name}</div>` : ''}
+                            <div class="division-tags" id="cardDivs_${t.tag}"></div>
                         </div>
                         <div class="team-record">
                             <span class="win">${t.wins || 0}W</span> 
@@ -526,6 +575,7 @@
             // Header
             document.getElementById('detailTeamTag').textContent = `vs [${tag}]`;
             document.getElementById('detailTeamName').textContent = team.name || '';
+            await loadTeamDivisions(tag);
             document.getElementById('detailRecord').innerHTML = 
                 `<span class="win">${team.wins || 0}W</span> <span class="loss">${team.losses || 0}L</span>` +
                 (team.draws ? ` <span class="draw">${team.draws}D</span>` : '');
@@ -733,6 +783,158 @@
         // ============================================================================
         // NAVIGATION
         // ============================================================================
+        // ============================================================================
+        // DIVISION SYSTEM
+        // ============================================================================
+        let allDivisions = [];
+
+        async function loadAllDivisions() {
+            const { data } = await HLL.supabase
+                .from('divisions')
+                .select('*')
+                .order('sort_order', { ascending: true });
+            allDivisions = data || [];
+        }
+
+        async function loadAllTeamCardDivisions() {
+            await loadAllDivisions();
+            const { data } = await HLL.supabase
+                .from('enemy_team_divisions')
+                .select('team_tag, division_id');
+            const divMap = {};
+            (data || []).forEach(d => {
+                if (!divMap[d.team_tag]) divMap[d.team_tag] = [];
+                divMap[d.team_tag].push(d.division_id);
+            });
+            // Render tags on each card
+            for (const team of allTeams) {
+                const el = document.getElementById(`cardDivs_${team.tag}`);
+                if (!el) continue;
+                const teamDivIds = divMap[team.tag] || [];
+                el.innerHTML = teamDivIds.map(did => {
+                    const div = allDivisions.find(d => d.id === did);
+                    return div ? `<span class="division-tag">${div.name}</span>` : '';
+                }).join('');
+            }
+        }
+
+        async function loadTeamDivisions(tag) {
+            await loadAllDivisions();
+            const { data } = await HLL.supabase
+                .from('enemy_team_divisions')
+                .select('division_id')
+                .eq('team_tag', tag);
+            const teamDivIds = (data || []).map(d => d.division_id);
+            
+            const el = document.getElementById('detailDivision');
+            const tags = teamDivIds.map(did => {
+                const div = allDivisions.find(d => d.id === did);
+                return div ? `<span class="division-tag">${div.name}</span>` : '';
+            }).join('');
+            el.innerHTML = tags + `<span class="division-edit-btn" onclick="openDivisionModal('${tag}')">✏️ Edit</span>`;
+        }
+
+        async function openDivisionModal(tag) {
+            await loadAllDivisions();
+            const { data } = await HLL.supabase
+                .from('enemy_team_divisions')
+                .select('division_id')
+                .eq('team_tag', tag);
+            const teamDivIds = new Set((data || []).map(d => d.division_id));
+
+            const overlay = document.createElement('div');
+            overlay.className = 'div-modal-overlay';
+            overlay.onclick = (e) => { if (e.target === overlay) overlay.remove(); };
+
+            const modal = document.createElement('div');
+            modal.className = 'div-modal';
+            modal.innerHTML = `
+                <h3>Divisions for [${tag}]</h3>
+                <div id="divCheckboxes">
+                    ${allDivisions.map(d => `
+                        <div class="div-checkbox">
+                            <input type="checkbox" id="div_${d.id}" ${teamDivIds.has(d.id) ? 'checked' : ''} 
+                                onchange="toggleDivision('${tag}', '${d.id}', this.checked)">
+                            <label for="div_${d.id}">${d.name}</label>
+                            <button class="div-remove-btn" onclick="removeDivisionOption('${d.id}', this)" title="Delete this division">✕</button>
+                        </div>
+                    `).join('')}
+                </div>
+                <div class="div-add-row">
+                    <input type="text" id="newDivInput" placeholder="Add new division..." 
+                        onkeydown="if(event.key==='Enter')addDivisionOption('${tag}')">
+                    <button class="btn btn-sm" onclick="addDivisionOption('${tag}')" style="padding: 6px 12px;">Add</button>
+                </div>
+                <div style="margin-top: 12px; text-align: right;">
+                    <button class="btn btn-sm" onclick="this.closest('.div-modal-overlay').remove(); loadTeamDivisions('${tag}'); loadAllTeamCardDivisions();" style="padding: 6px 16px;">Done</button>
+                </div>
+            `;
+            overlay.appendChild(modal);
+            document.body.appendChild(overlay);
+        }
+
+        async function toggleDivision(tag, divisionId, checked) {
+            if (checked) {
+                await HLL.supabase
+                    .from('enemy_team_divisions')
+                    .insert({ team_tag: tag, division_id: divisionId });
+            } else {
+                await HLL.supabase
+                    .from('enemy_team_divisions')
+                    .delete()
+                    .eq('team_tag', tag)
+                    .eq('division_id', divisionId);
+            }
+        }
+
+        async function addDivisionOption(tag) {
+            const input = document.getElementById('newDivInput');
+            const name = input.value.trim();
+            if (!name) return;
+
+            const maxOrder = allDivisions.length > 0 ? Math.max(...allDivisions.map(d => d.sort_order || 0)) : 0;
+            const { data, error } = await HLL.supabase
+                .from('divisions')
+                .insert({ name: name, sort_order: maxOrder + 10 })
+                .select()
+                .single();
+            
+            if (error) {
+                if (error.code === '23505') alert('Division already exists');
+                else alert('Error: ' + error.message);
+                return;
+            }
+
+            input.value = '';
+            allDivisions.push(data);
+            
+            // Re-render checkboxes
+            const container = document.getElementById('divCheckboxes');
+            const div = document.createElement('div');
+            div.className = 'div-checkbox';
+            div.innerHTML = `
+                <input type="checkbox" id="div_${data.id}" onchange="toggleDivision('${tag}', '${data.id}', this.checked)">
+                <label for="div_${data.id}">${data.name}</label>
+                <button class="div-remove-btn" onclick="removeDivisionOption('${data.id}', this)" title="Delete this division">✕</button>
+            `;
+            container.appendChild(div);
+        }
+
+        async function removeDivisionOption(divisionId, btn) {
+            const div = allDivisions.find(d => d.id === divisionId);
+            if (!confirm(`Remove "${div?.name}" from available divisions? This will unlink it from all teams.`)) return;
+            
+            const { error } = await HLL.supabase
+                .from('divisions')
+                .delete()
+                .eq('id', divisionId);
+            
+            if (error) { alert('Error: ' + error.message); return; }
+            
+            allDivisions = allDivisions.filter(d => d.id !== divisionId);
+            btn.closest('.div-checkbox').remove();
+        }
+
         function showTeamList() {
             document.getElementById('teamDetailView').style.display = 'none';
             document.getElementById('teamListView').style.display = 'block';

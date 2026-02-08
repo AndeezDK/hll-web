@@ -4,6 +4,18 @@ All notable changes to this project will be documented in this file.
 
 ---
 
+## [v0.4.8] - 2026-02-08
+### Added
+- **enemies.html**: Multi-division system — teams can be tagged with multiple leagues/divisions (ECL Div. 1-6, HBL, HCA, Seasonals)
+- **enemies.html**: Division picker modal with checkboxes, add new divisions, remove divisions
+- **enemies.html**: Division tags shown on team cards and team detail header
+- **sql/004_divisions.sql**: New `divisions` table and `enemy_team_divisions` many-to-many table with default divisions seeded
+
+## [v0.4.7] - 2026-02-08
+### Added
+- **enemies.html**: Division/tier field on enemy teams — shown on team cards and detail header, click to edit
+- **sql/003_enemy_intel.sql**: Added `division` column to `enemy_teams` table and `enemy_team_stats` view
+
 ## [v0.4.6] - 2026-02-08
 ### Added
 - **enemies.html**: Player Intel table now shows Last Game (Kills, Deaths, K/D) and Average (Kills, Deaths, K/D) columns instead of just totals
