@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Admin - HLL Tool v0.6.4</title>
+    <title>Admin - HLL Tool v0.6.5</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <link rel="stylesheet" href="../css/styles.css">
     <style>
@@ -81,7 +81,7 @@
         <!-- Header -->
         <div class="page-header">
             <h1 class="page-title">Admin</h1>
-            <span class="version-badge">v0.6.4</span>
+            <span class="version-badge">v0.6.5</span>
         </div>
 
         <div class="admin-grid">
@@ -1332,6 +1332,35 @@
             if (!pendingMatchImport) return;
             
             const { matchInfo, players, noShows, mvp, friendlyPlayers, pairings } = pendingMatchImport;
+            
+            // --- DUPLICATE DETECTION ---
+            try {
+                const { data: existing } = await HLL.supabase
+                    .from('matches')
+                    .select('match_id, match_date, map, enemy_team, my_score, enemy_score')
+                    .eq('match_date', matchInfo.date)
+                    .eq('map', matchInfo.map || 'Unknown')
+                    .eq('my_score', matchInfo.myScore)
+                    .eq('enemy_score', matchInfo.enemyScore);
+                
+                if (existing && existing.length > 0) {
+                    const dupMatch = existing[0];
+                    const proceed = confirm(
+                        `⚠️ Possible duplicate detected!\n\n` +
+                        `Existing match: ${dupMatch.match_id}\n` +
+                        `Date: ${dupMatch.match_date}\n` +
+                        `Map: ${dupMatch.map}\n` +
+                        `vs ${dupMatch.enemy_team} (${dupMatch.my_score}-${dupMatch.enemy_score})\n\n` +
+                        `Do you still want to import this match?`
+                    );
+                    if (!proceed) {
+                        HLL.hideLoading();
+                        return;
+                    }
+                }
+            } catch (dupErr) {
+                console.warn('Duplicate check failed, proceeding:', dupErr);
+            }
             
             HLL.showLoading('Importing match...');
             

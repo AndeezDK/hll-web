@@ -4,6 +4,10 @@ All notable changes to this project will be documented in this file.
 
 ---
 
+## [v0.6.5] - 2026-02-08
+### Added
+- **admin.html**: Duplicate match detection — checks for existing match with same date + map + score before importing. Shows confirm dialog with existing match details if duplicate found.
+
 ## [v0.6.4] - 2026-02-08
 ### Fixed
 - **stats.html**: Division Rankings now filtered by match_type — only shows W/L/score from matches tagged with that division, not overall record
