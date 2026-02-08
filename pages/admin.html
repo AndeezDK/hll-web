@@ -391,6 +391,26 @@
         // MATCH IMPORT (placeholder - full implementation would mirror VBA logic)
         // ============================================================================
         
+        // --- Fetch known team names for dropdowns ---
+        async function getKnownTeams() {
+            const teams = { myTeams: new Set(), enemyTeams: new Set() };
+            try {
+                // My teams from players table
+                const { data: players } = await HLL.supabase.from('players').select('team');
+                if (players) players.forEach(p => { if (p.team) teams.myTeams.add(p.team); });
+                // My teams from matches
+                const { data: matches } = await HLL.supabase.from('matches').select('my_team, enemy_team');
+                if (matches) matches.forEach(m => {
+                    if (m.my_team) teams.myTeams.add(m.my_team);
+                    if (m.enemy_team) teams.enemyTeams.add(m.enemy_team);
+                });
+                // Enemy teams from enemy_teams table
+                const { data: enemyTeams } = await HLL.supabase.from('enemy_teams').select('team_tag');
+                if (enemyTeams) enemyTeams.forEach(t => { if (t.team_tag) teams.enemyTeams.add(t.team_tag); });
+            } catch (e) { console.warn('Failed to load known teams:', e); }
+            return { myTeams: [...teams.myTeams].sort(), enemyTeams: [...teams.enemyTeams].sort() };
+        }
+
         async function previewMatchImport() {
             const teamData = document.getElementById('teamPasteData').value.trim();
             const csvFileInput = document.getElementById('csvFileInput');
@@ -622,6 +642,9 @@
                 const previewCard = document.getElementById('matchPreviewCard');
                 const previewBody = document.getElementById('matchPreviewBody');
                 
+                // Fetch known teams for dropdowns
+                const knownTeams = await getKnownTeams();
+                
                 const resultColor = matchInfo.result === 'W' ? '#4ade80' : matchInfo.result === 'L' ? '#f87171' : '#fbbf24';
                 const resultLabel = matchInfo.result === 'W' ? 'WIN' : matchInfo.result === 'L' ? 'LOSS' : matchInfo.result === 'D' ? 'DRAW' : '?';
                 
@@ -658,16 +681,29 @@
                             <span class="stat-label">Date</span>
                         </div>
                         <div class="stat-box">
-                            <input type="text" id="myTeamInput" value="${HLL.currentTeam || 'Circle'}" 
+                            <select id="myTeamInput" 
                                 style="background: var(--bg-input, #1a1a2e); border: 1px solid var(--accent-orange); border-radius: 4px; color: var(--text-primary); font-size: 1.1rem; font-weight: 700; text-align: center; width: 100%; padding: 4px 8px;"
-                                placeholder="Enter your team">
-                            <span class="stat-label">My Team (editable)</span>
+                                onchange="if(this.value==='__custom__'){const v=prompt('Enter team name:');if(v){const o=document.createElement('option');o.value=v.trim();o.textContent=v.trim();this.insertBefore(o,this.lastElementChild);this.value=v.trim();}else{this.value='${HLL.currentTeam || 'Circle'}';}}"
+                            >
+                                ${knownTeams.myTeams.map(t => `<option value="${t}" ${t === (HLL.currentTeam || 'Circle') ? 'selected' : ''}>${t}</option>`).join('')}
+                                ${!knownTeams.myTeams.includes(HLL.currentTeam || 'Circle') ? `<option value="${HLL.currentTeam || 'Circle'}" selected>${HLL.currentTeam || 'Circle'}</option>` : ''}
+                                <option value="__custom__">+ Add new...</option>
+                            </select>
+                            <span class="stat-label">My Team</span>
                         </div>
                         <div class="stat-box">
-                            <input type="text" id="enemyTeamInput" value="${matchInfo.enemyTeam || ''}" 
+                            <select id="enemyTeamInput" 
                                 style="background: var(--bg-input, #1a1a2e); border: 1px solid var(--accent-orange); border-radius: 4px; color: var(--text-primary); font-size: 1.1rem; font-weight: 700; text-align: center; width: 100%; padding: 4px 8px;"
-                                placeholder="Enter enemy tag">
-                            <span class="stat-label">Enemy Team (editable)</span>
+                                onchange="if(this.value==='__custom__'){const v=prompt('Enter enemy team name:');if(v){const o=document.createElement('option');o.value=v.trim();o.textContent=v.trim();this.insertBefore(o,this.lastElementChild);this.value=v.trim();}else{this.value=this.options[0]?.value||'';}}"
+                            >
+                                ${(() => {
+                                    const detected = matchInfo.enemyTeam || '';
+                                    const allEnemy = [...new Set([...knownTeams.enemyTeams, ...(detected ? [detected] : [])])].sort();
+                                    return allEnemy.map(t => `<option value="${t}" ${t === detected ? 'selected' : ''}>${t}</option>`).join('');
+                                })()}
+                                <option value="__custom__">+ Add new...</option>
+                            </select>
+                            <span class="stat-label">Enemy Team</span>
                         </div>
                         <div class="stat-box">
                             <span class="stat-value" style="font-size: 1rem; padding: 2px 8px; border-radius: 4px; background: ${window._pendingMatchType === 'Friendly' ? 'rgba(255,255,255,0.05)' : 'rgba(255,152,0,0.15)'}; color: ${window._pendingMatchType === 'Friendly' ? 'var(--text-secondary)' : '#ff9800'};">${window._pendingMatchType || 'Friendly'}</span>
@@ -1403,11 +1439,9 @@
                     }
                 }
                 
-                // --- 0. AUTO-ADD NEW FRIENDLY PLAYERS TO ROSTER (must be before match insert for FK) ---
-                await autoAddNewPlayers(friendlyPlayers, matchInfo, myTeam);
-                
-                // Generate match ID (MTH-XXXXXX format, sequential)
-                const matchId = await generateMatchId();
+                // --- Read my team from editable input ---
+                const myTeamInput = document.getElementById('myTeamInput');
+                const myTeam = myTeamInput ? myTeamInput.value.trim() || HLL.currentTeam || 'Circle' : HLL.currentTeam || 'Circle';
                 
                 // --- Read enemy team from editable input (user may have corrected it) ---
                 const enemyTeamInput = document.getElementById('enemyTeamInput');
@@ -1415,9 +1449,11 @@
                     matchInfo.enemyTeam = enemyTeamInput.value.trim() || matchInfo.enemyTeam || 'Unknown';
                 }
                 
-                // --- Read my team from editable input ---
-                const myTeamInput = document.getElementById('myTeamInput');
-                const myTeam = myTeamInput ? myTeamInput.value.trim() || HLL.currentTeam || 'Circle' : HLL.currentTeam || 'Circle';
+                // --- 0. AUTO-ADD NEW FRIENDLY PLAYERS TO ROSTER (must be before match insert for FK) ---
+                await autoAddNewPlayers(friendlyPlayers, matchInfo, myTeam);
+                
+                // Generate match ID (MTH-XXXXXX format, sequential)
+                const matchId = await generateMatchId();
                 
                 const matchTypeInput = document.getElementById('matchTypeInput');
                 const matchType = window._pendingMatchType || 'Friendly';
