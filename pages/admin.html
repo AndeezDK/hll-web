@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Admin - HLL Tool v0.6.13</title>
+    <title>Admin - HLL Tool v0.6.15</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <link rel="stylesheet" href="../css/styles.css">
     <style>
@@ -81,7 +81,7 @@
         <!-- Header -->
         <div class="page-header">
             <h1 class="page-title">Admin</h1>
-            <span class="version-badge">v0.6.13</span>
+            <span class="version-badge">v0.6.15</span>
         </div>
 
         <div class="admin-grid">
@@ -172,28 +172,28 @@
                 
                 <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px;">
                     <!-- My Teams -->
-                    <div>
+                    <div style="min-width: 0; overflow: hidden;">
                         <h4 style="font-size: 0.9rem; margin-bottom: 8px; color: var(--accent-orange);">My Teams</h4>
                         <div id="myTeamsList" style="margin-bottom: 8px;">
                             <div style="color: var(--text-secondary); font-size: 0.85rem;">Loading...</div>
                         </div>
                         <div style="display: flex; gap: 6px;">
                             <input type="text" id="addMyTeamInput" placeholder="New team name" 
-                                style="flex: 1; padding: 4px 8px; font-size: 12px; background: var(--bg-input, #1a1a2e); border: 1px solid var(--border-color); border-radius: 4px; color: var(--text-primary);">
-                            <button class="btn btn-secondary btn-sm" onclick="addMyTeam()" style="font-size: 11px; padding: 4px 8px;">+ Add</button>
+                                style="flex: 1; min-width: 0; padding: 4px 8px; font-size: 12px; background: var(--bg-input, #1a1a2e); border: 1px solid var(--border-color); border-radius: 4px; color: var(--text-primary);">
+                            <button class="btn btn-secondary btn-sm" onclick="addMyTeam()" style="font-size: 11px; padding: 4px 8px; white-space: nowrap;">+ Add</button>
                         </div>
                     </div>
                     
                     <!-- Enemy Teams -->
-                    <div>
+                    <div style="min-width: 0; overflow: hidden;">
                         <h4 style="font-size: 0.9rem; margin-bottom: 8px; color: var(--accent-orange);">Enemy Teams</h4>
                         <div id="enemyTeamsList" style="margin-bottom: 8px;">
                             <div style="color: var(--text-secondary); font-size: 0.85rem;">Loading...</div>
                         </div>
                         <div style="display: flex; gap: 6px;">
                             <input type="text" id="addEnemyTeamInput" placeholder="New team tag" 
-                                style="flex: 1; padding: 4px 8px; font-size: 12px; background: var(--bg-input, #1a1a2e); border: 1px solid var(--border-color); border-radius: 4px; color: var(--text-primary);">
-                            <button class="btn btn-secondary btn-sm" onclick="addEnemyTeam()" style="font-size: 11px; padding: 4px 8px;">+ Add</button>
+                                style="flex: 1; min-width: 0; padding: 4px 8px; font-size: 12px; background: var(--bg-input, #1a1a2e); border: 1px solid var(--border-color); border-radius: 4px; color: var(--text-primary);">
+                            <button class="btn btn-secondary btn-sm" onclick="addEnemyTeam()" style="font-size: 11px; padding: 4px 8px; white-space: nowrap;">+ Add</button>
                         </div>
                     </div>
                 </div>
@@ -2202,10 +2202,10 @@
                 // Track which are in enemy_teams table vs only in matches
                 const inTable = new Set((enemyTeams || []).map(t => t.team_tag));
                 enemyList.innerHTML = allEnemy.map(t => `
-                    <div style="display: flex; justify-content: space-between; align-items: center; padding: 3px 0; border-bottom: 1px solid rgba(255,255,255,0.05);">
-                        <span style="font-size: 0.85rem;">${t} ${!inTable.has(t) ? '<span style="font-size:10px;color:var(--text-secondary);">(from matches)</span>' : ''}</span>
+                    <div style="display: flex; justify-content: space-between; align-items: center; padding: 3px 0; border-bottom: 1px solid rgba(255,255,255,0.05); gap: 4px;">
+                        <span style="font-size: 0.85rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0;">${t} ${!inTable.has(t) ? '<span style="font-size:10px;color:var(--text-secondary);">(matches)</span>' : ''}</span>
                         <button onclick="removeEnemyTeam('${t.replace(/'/g, "\\'")}')" 
-                            style="background: none; border: none; color: #f87171; cursor: pointer; font-size: 11px; padding: 2px 6px;" title="Remove">✕</button>
+                            style="background: none; border: none; color: #f87171; cursor: pointer; font-size: 11px; padding: 2px 6px; flex-shrink: 0;" title="Remove">✕</button>
                     </div>
                 `).join('');
             }
@@ -2399,18 +2399,18 @@
             const pc = playersUsing?.length || 0;
             const mc = matchesUsing?.length || 0;
             
-            if (pc > 0 || mc > 0) {
-                alert(`Cannot delete "${teamName}" — it still has ${pc} player(s) and ${mc} match(es).\n\nUse ✏️ to migrate them to another team first, then delete.`);
+            if (pc === 0 && mc === 0) {
+                if (!confirm(`Delete "${teamName}"?`)) return;
+                HLL.showAlert(`"${teamName}" removed.`, 'success');
+                loadManagedTeams();
                 return;
             }
             
-            if (!confirm(`Delete "${teamName}"? This team has no players or matches.`)) return;
+            // Team is in use — offer to migrate and delete
+            if (!confirm(`"${teamName}" has ${pc} player(s) and ${mc} match(es).\n\nMigrate them to another team and delete "${teamName}"?`)) return;
             
-            // Nothing to delete in DB since my teams are derived from data.
-            // But if it's completely empty, it shouldn't appear in the list anymore.
-            // Force refresh to confirm it's gone.
-            HLL.showAlert(`"${teamName}" removed — no records remain.`, 'success');
-            loadManagedTeams();
+            // Open the rename modal which handles migration
+            renameMyTeam(teamName);
         }
 
         async function removeEnemyTeam(teamTag) {
