@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Matches - HLL Tool v0.4.9</title>
+    <title>Matches - HLL Tool v0.5.3</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <link rel="stylesheet" href="../css/styles.css">
     <style>
@@ -141,7 +141,7 @@
     <div class="app-container">
         <div class="page-header">
             <h1 class="page-title">Match History</h1>
-            <span class="version-badge">v0.4.9</span>
+            <span class="version-badge">v0.5.3</span>
         </div>
 
         <!-- Summary Stats -->
@@ -410,7 +410,10 @@
                     <td><span class="badge ${HLL.getResultBadgeClass(m.result)}">${m.result || '-'}</span></td>
                     <td>${m.duration || '-'}</td>
                     <td>${m.mvp_name || '-'}</td>
-                    <td><button class="btn btn-sm btn-secondary" onclick="event.stopPropagation(); openMatchModal('${m.match_id}')">View</button></td>
+                    <td style="white-space: nowrap;">
+                        <button class="btn btn-sm btn-secondary" onclick="event.stopPropagation(); openMatchModal('${m.match_id}')">View</button>
+                        <button class="btn btn-sm" onclick="event.stopPropagation(); deleteMatch('${m.match_id}')" style="background: rgba(248,113,113,0.2); color: #f87171; margin-left: 4px;" title="Delete match">🗑️</button>
+                    </td>
                 </tr>
             `).join('');
         }
@@ -627,6 +630,47 @@
             currentEnemyFilter = enemySelect.value;
 
             filterAndRender();
+        }
+
+        async function deleteMatch(matchId) {
+            if (!confirm(`Delete match ${matchId}?\n\nThis will remove:\n• Match record\n• All player stats from this match\n• Lineup data\n• No-show records\n\nThis cannot be undone.`)) return;
+            
+            try {
+                // Delete in order: match_lineups, no_shows, match_details, then match
+                const { error: e1 } = await HLL.supabase
+                    .from('match_lineups')
+                    .delete()
+                    .eq('match_id', matchId);
+                if (e1) console.warn('match_lineups delete:', e1.message);
+
+                const { error: e2 } = await HLL.supabase
+                    .from('no_shows')
+                    .delete()
+                    .eq('match_id', matchId);
+                if (e2) console.warn('no_shows delete:', e2.message);
+
+                const { error: e3 } = await HLL.supabase
+                    .from('match_details')
+                    .delete()
+                    .eq('match_id', matchId);
+                if (e3) console.warn('match_details delete:', e3.message);
+
+                const { error: e4 } = await HLL.supabase
+                    .from('matches')
+                    .delete()
+                    .eq('match_id', matchId);
+                if (e4) throw e4;
+
+                HLL.showAlert(`Match ${matchId} deleted successfully`, 'success');
+                
+                // Refresh the list
+                allMatches = allMatches.filter(m => m.match_id !== matchId);
+                filterAndRender();
+                
+            } catch (err) {
+                console.error('Delete error:', err);
+                HLL.showAlert('Failed to delete match: ' + err.message, 'error');
+            }
         }
 
         init();

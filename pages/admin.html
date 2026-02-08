@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Admin - HLL Tool v0.4.9</title>
+    <title>Admin - HLL Tool v0.5.3</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <link rel="stylesheet" href="../css/styles.css">
     <style>
@@ -81,7 +81,7 @@
         <!-- Header -->
         <div class="page-header">
             <h1 class="page-title">Admin</h1>
-            <span class="version-badge">v0.4.9</span>
+            <span class="version-badge">v0.5.3</span>
         </div>
 
         <div class="admin-grid">
@@ -400,6 +400,12 @@
                 return;
             }
             
+            // Prompt for match type before processing
+            const matchType = await selectMatchType();
+            if (matchType === null) return; // cancelled
+            window._pendingMatchType = matchType;
+            }
+            
             // --- VALIDATE TEAM_PASTE DATA ---
             // Check for helo-system.de markers (case-insensitive, position-independent)
             const lowerTeamData = teamData.toLowerCase();
@@ -665,10 +671,7 @@
                             <span class="stat-label">Enemy Team (editable)</span>
                         </div>
                         <div class="stat-box">
-                            <select id="matchTypeInput" 
-                                style="background: var(--bg-input, #1a1a2e); border: 1px solid var(--accent-orange); border-radius: 4px; color: var(--text-primary); font-size: 0.95rem; font-weight: 700; text-align: center; width: 100%; padding: 5px 8px; cursor: pointer;">
-                                <option value="Friendly">Friendly</option>
-                            </select>
+                            <span class="stat-value" style="font-size: 1rem; padding: 2px 8px; border-radius: 4px; background: ${window._pendingMatchType === 'Friendly' ? 'rgba(255,255,255,0.05)' : 'rgba(255,152,0,0.15)'}; color: ${window._pendingMatchType === 'Friendly' ? 'var(--text-secondary)' : '#ff9800'};">${window._pendingMatchType || 'Friendly'}</span>
                             <span class="stat-label">Match Type</span>
                         </div>
                         <div class="stat-box">
@@ -765,23 +768,6 @@
                 
                 previewCard.classList.remove('hidden');
                 previewCard.scrollIntoView({ behavior: 'smooth' });
-                
-                // Populate match type dropdown with divisions
-                try {
-                    const { data: divs } = await HLL.supabase
-                        .from('divisions')
-                        .select('*')
-                        .order('sort_order', { ascending: true });
-                    const select = document.getElementById('matchTypeInput');
-                    if (select && divs) {
-                        divs.forEach(d => {
-                            const opt = document.createElement('option');
-                            opt.value = d.name;
-                            opt.textContent = d.name;
-                            select.appendChild(opt);
-                        });
-                    }
-                } catch (e) { console.warn('Could not load divisions for match type:', e); }
                 
             } catch (err) {
                 HLL.hideLoading();
@@ -1326,7 +1312,7 @@
                 const myTeam = myTeamInput ? myTeamInput.value.trim() || HLL.currentTeam || 'Circle' : HLL.currentTeam || 'Circle';
                 
                 const matchTypeInput = document.getElementById('matchTypeInput');
-                const matchType = matchTypeInput ? matchTypeInput.value : 'Friendly';
+                const matchType = window._pendingMatchType || 'Friendly';
                 
                 // --- 1. INSERT MATCH (Match_Log equivalent) ---
                 const { error: matchError } = await HLL.supabase
@@ -1780,6 +1766,69 @@
             }
         }
         
+        // ============================================================================
+        // MATCH TYPE SELECTION POPUP
+        // ============================================================================
+        async function selectMatchType() {
+            // Load divisions
+            let divOptions = [];
+            try {
+                const { data } = await HLL.supabase
+                    .from('divisions')
+                    .select('*')
+                    .order('sort_order', { ascending: true });
+                divOptions = data || [];
+            } catch (e) { console.warn('Could not load divisions:', e); }
+
+            return new Promise((resolve) => {
+                const overlay = document.createElement('div');
+                overlay.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.7);z-index:1000;display:flex;align-items:center;justify-content:center;';
+
+                const modal = document.createElement('div');
+                modal.style.cssText = 'background:var(--bg-secondary,#1a1a2e);border-radius:8px;padding:24px;min-width:320px;max-width:400px;max-height:80vh;overflow-y:auto;';
+
+                const options = [
+                    { name: 'Friendly', style: '' },
+                    ...divOptions.map(d => ({ name: d.name, style: '' }))
+                ];
+
+                modal.innerHTML = `
+                    <h3 style="margin:0 0 4px;font-size:1.1rem;">Select Match Type</h3>
+                    <p style="font-size:0.8rem;color:var(--text-secondary);margin:0 0 16px;">What type of match is this?</p>
+                    <div style="display:flex;flex-direction:column;gap:6px;">
+                        ${options.map(o => `
+                            <button class="btn btn-secondary" style="text-align:left;padding:10px 14px;font-size:0.9rem;" 
+                                onclick="this.closest('div[style*=fixed]').remove()">
+                                ${o.name === 'Friendly' ? '🤝' : '🏆'} ${o.name}
+                            </button>
+                        `).join('')}
+                    </div>
+                    <div style="margin-top:12px;text-align:center;">
+                        <button class="btn btn-sm" style="padding:6px 16px;opacity:0.6;" 
+                            onclick="this.closest('div[style*=fixed]').remove()">Cancel</button>
+                    </div>
+                `;
+
+                // Attach click handlers to each option button
+                overlay.appendChild(modal);
+                document.body.appendChild(overlay);
+
+                const buttons = modal.querySelectorAll('.btn-secondary');
+                buttons.forEach((btn, i) => {
+                    btn.onclick = () => {
+                        overlay.remove();
+                        resolve(options[i].name);
+                    };
+                });
+
+                // Cancel button
+                modal.querySelector('.btn-sm').onclick = () => {
+                    overlay.remove();
+                    resolve(null);
+                };
+            });
+        }
+
         // ============================================================================
         // MY TEAM DIVISIONS
         // ============================================================================

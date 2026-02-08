@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Lineups - HLL Tool v0.4.9</title>
+    <title>Lineups - HLL Tool v0.5.3</title>
     <!-- Supabase JS Client -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <style>
@@ -799,7 +799,7 @@
     
     <div class="page-header">
         <h1 class="page-title">Lineups</h1>
-        <span class="version-badge">v0.4.9</span>
+        <span class="version-badge">v0.5.3</span>
         <div class="sync-indicator" id="syncIndicator">
             <span class="sync-dot"></span>
             <span class="sync-text">Offline</span>
@@ -953,7 +953,7 @@
     <div class="actions">
         <button class="btn btn-save" onclick="saveLineup()" id="saveBtn">💾 Save</button>
         <button class="btn btn-secondary" onclick="checkConflicts()">🔍 Check Conflicts</button>
-        <button class="btn btn-secondary" onclick="autoPopulateNodes()" style="display:none;">⚡ Auto-fill Nodes</button>
+        <button class="btn btn-secondary" onclick="autoPopulateNodes()">⚡ Auto-fill Nodes</button>
         <button class="btn btn-primary" id="lockBtn" onclick="toggleLock()">🔒 Lock Lineup</button>
         <button class="btn btn-secondary" onclick="exportLineup()">📤 Export</button>
         <button class="btn btn-secondary" onclick="processAttendance()">📋 Process Attendance</button>
@@ -1892,56 +1892,173 @@
             document.getElementById('reserveCount').textContent = rc;
         }
         
-        function autoPopulateNodes() {
-            // Get all assigned players (in non-node slots)
-            const assignedPlayers = new Set();
-            document.querySelectorAll('.player-slot .slot-name:not(.empty), .infantry-slot .slot-name:not(.empty)').forEach(el => {
-                if (el.textContent !== 'Empty') assignedPlayers.add(el.textContent);
-            });
-            
-            // Get all available players not yet assigned
-            const availablePlayers = players.filter(p => !assignedPlayers.has(p.name));
-            
-            if (availablePlayers.length === 0) {
-                alert('No unassigned players available for nodes.');
-                return;
-            }
-            
-            // Get all empty node slots
-            const emptyNodeSlots = [];
+        async function autoPopulateNodes() {
+            // === RULES ===
+            // 3 node groups (North, Middle, South): each needs 1 Eng + 3 Supp = 12 total
+            // Source: reserves + infantry (NW, MeatGrind, Flex, SE, Infiltration) WITHOUT special tasks
+            // NEVER pull from: Defence, Tanks, Recon, Command, Artillery
+            // "Special task" = has SL role or note-dropdown value (Rocket, AT, MG)
+            // Note: Supp/Eng/Driver in dropdown means they're ALREADY assigned those tasks — skip them too
+
+            // 1. Get all empty node slots grouped by type
+            const emptyEngSlots = [];
+            const emptySuppSlots = [];
             document.querySelectorAll('.node-slot').forEach(slot => {
                 const nameEl = slot.querySelector('.slot-name');
                 if (nameEl && nameEl.classList.contains('empty')) {
-                    emptyNodeSlots.push(slot);
+                    const cell = slot.dataset.cell || '';
+                    if (cell.includes('-eng')) {
+                        emptyEngSlots.push(slot);
+                    } else {
+                        emptySuppSlots.push(slot);
+                    }
                 }
             });
-            
-            if (emptyNodeSlots.length === 0) {
+
+            if (emptyEngSlots.length === 0 && emptySuppSlots.length === 0) {
                 alert('All node slots are already filled.');
                 return;
             }
-            
-            // Auto-populate empty node slots
-            let playerIndex = 0;
-            emptyNodeSlots.forEach(slot => {
-                if (playerIndex < availablePlayers.length) {
+
+            // 2. Collect eligible infantry players (no special tasks, not from defence)
+            const eligibleSections = ['northWestSlots', 'meatGrindSlots', 'flexSlots', 'southEastSlots', 'infiltrationSlots'];
+            const eligibleInfantry = [];
+
+            eligibleSections.forEach(sectionId => {
+                const container = document.getElementById(sectionId);
+                if (!container) return;
+                container.querySelectorAll('.infantry-slot.filled').forEach(slot => {
                     const nameEl = slot.querySelector('.slot-name');
-                    const player = availablePlayers[playerIndex];
+                    if (!nameEl || nameEl.classList.contains('empty') || nameEl.textContent === 'Empty') return;
                     
-                    nameEl.textContent = player.name;
-                    nameEl.classList.remove('empty');
-                    slot.classList.add('filled');
+                    const slDropdown = slot.querySelector('.sl-dropdown');
+                    const noteDropdown = slot.querySelector('.note-dropdown');
+                    const hasSL = slDropdown && slDropdown.value !== '';
+                    const hasNote = noteDropdown && noteDropdown.value !== '';
                     
-                    // Set role dropdown to "Supp" if this slot has a note dropdown
-                    // For nodes, we mark the role in a data attribute
-                    slot.dataset.autoRole = 'Supp';
-                    
-                    playerIndex++;
+                    // Only take players with NO special assignment
+                    if (!hasSL && !hasNote) {
+                        eligibleInfantry.push({
+                            name: slot.dataset.player || nameEl.textContent,
+                            displayName: nameEl.textContent,
+                            sourceSlot: slot
+                        });
+                    }
+                });
+            });
+
+            // 3. Collect reserve players
+            const reservePlayers = [];
+            document.querySelectorAll('.reserve-slot:not(.empty)').forEach(el => {
+                if (el.textContent !== 'Empty') {
+                    reservePlayers.push({ name: el.textContent, displayName: el.textContent, sourceEl: el });
                 }
             });
-            
+
+            // 4. Get role data for smart matching
+            const allCandidateNames = [...reservePlayers, ...eligibleInfantry].map(p => p.name);
+            const { data: rosterData } = await HLL.supabase
+                .from('players')
+                .select('name, primary_role, secondary_role, tertiary_role')
+                .in('name', allCandidateNames);
+
+            const roleMap = {};
+            (rosterData || []).forEach(p => {
+                roleMap[p.name] = [p.primary_role, p.secondary_role, p.tertiary_role]
+                    .filter(Boolean).map(r => r.toLowerCase());
+            });
+
+            // 5. Categorize: engineers, supports, others — reserves first in each category
+            const engineers = [];
+            const supports = [];
+            const others = [];
+
+            const categorize = (candidates, isReserve) => {
+                candidates.forEach(c => {
+                    const roles = roleMap[c.name] || [];
+                    const entry = { ...c, isReserve };
+                    if (roles.includes('engineer') || roles.includes('eng')) {
+                        engineers.push(entry);
+                    } else if (roles.includes('support') || roles.includes('supp')) {
+                        supports.push(entry);
+                    } else {
+                        others.push(entry);
+                    }
+                });
+            };
+            categorize(reservePlayers, true);
+            categorize(eligibleInfantry, false);
+
+            // 6. Fill Eng slots: engineers first, then others
+            let filled = 0;
+            const used = new Set();
+            const engPool = [...engineers, ...others, ...supports];
+
+            emptyEngSlots.forEach(slot => {
+                const candidate = engPool.find(c => !used.has(c.name));
+                if (candidate) {
+                    fillNodeSlot(slot, candidate);
+                    used.add(candidate.name);
+                    filled++;
+                }
+            });
+
+            // 7. Fill Supp slots: supports first, then others
+            const suppPool = [...supports, ...others, ...engineers].filter(c => !used.has(c.name));
+
+            emptySuppSlots.forEach(slot => {
+                let candidate = suppPool.find(c => !used.has(c.name));
+                if (!candidate) {
+                    // Try any remaining eligible
+                    candidate = [...reservePlayers, ...eligibleInfantry].find(c => !used.has(c.name));
+                }
+                if (candidate) {
+                    fillNodeSlot(slot, candidate);
+                    used.add(candidate.name);
+                    filled++;
+                }
+            });
+
             updateCounters();
-            alert(`Auto-filled ${playerIndex} node slots with "Supp" role.`);
+
+            const total = emptyEngSlots.length + emptySuppSlots.length;
+            const fromInf = [...used].filter(n => eligibleInfantry.some(e => e.name === n)).length;
+            const fromRes = [...used].filter(n => reservePlayers.some(r => r.name === n)).length;
+            
+            if (filled === 0) {
+                alert('No eligible players found.\n\nNode candidates must be:\n• In infantry squads (not Defence) with no SL/special role assigned\n• Or in Reserves');
+            } else {
+                alert(`Auto-filled ${filled}/${total} node slots.\n\n${fromRes} from Reserves, ${fromInf} from Infantry.\nEngineers → Eng slots, Supports → Supp slots where possible.`);
+            }
+        }
+
+        function fillNodeSlot(slot, candidate) {
+            const nameEl = slot.querySelector('.slot-name');
+            nameEl.textContent = candidate.displayName;
+            nameEl.classList.remove('empty');
+            slot.classList.add('filled');
+            slot.dataset.player = candidate.name;
+
+            // Clear source: remove from infantry slot or reserve
+            if (candidate.sourceSlot) {
+                const srcName = candidate.sourceSlot.querySelector('.slot-name');
+                if (srcName) { srcName.textContent = 'Empty'; srcName.classList.add('empty'); }
+                candidate.sourceSlot.classList.remove('filled');
+                candidate.sourceSlot.dataset.player = '';
+            }
+            if (candidate.sourceEl) {
+                candidate.sourceEl.textContent = 'Empty';
+                candidate.sourceEl.classList.add('empty');
+            }
+        }
+
+        function removeFromReserves(name) {
+            document.querySelectorAll('.reserve-slot:not(.empty)').forEach(el => {
+                if (el.textContent === name) {
+                    el.textContent = 'Empty';
+                    el.classList.add('empty');
+                }
+            });
         }
         
         function processAttendance() {

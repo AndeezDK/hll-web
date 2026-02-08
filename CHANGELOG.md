@@ -4,6 +4,28 @@ All notable changes to this project will be documented in this file.
 
 ---
 
+## [v0.5.3] - 2026-02-08
+### Changed
+- **lineup.html**: Rewrote `autoPopulateNodes()` with proper game logic:
+  - Sources from Reserves + Infantry (NW, Meat Grind, Flex, SE, Infiltration) only
+  - Never pulls from Defence, Tanks, Recon, Command, or Artillery
+  - Skips infantry players with special tasks (SL role, Rocket, AT, MG, or any note assignment)
+  - Matches Engineers → Eng slots, Supports → Supp slots based on roster role data
+  - Moves players out of their source slot (infantry/reserves) when assigned to nodes
+  - Shows summary: how many filled, how many from reserves vs infantry
+
+## [v0.5.2] - 2026-02-08
+### Fixed
+- **lineup.html**: Smart `autoPopulateNodes()` — prioritizes reserve players first, matches Engineers to Eng slots and Supports to Supp slots based on player role data, falls back to unassigned players. Button now visible.
+
+## [v0.5.1] - 2026-02-08
+### Added
+- **matches.html**: Delete button (🗑️) on each match row — removes match, player stats, lineup data, and no-show records with confirmation prompt
+
+## [v0.5.0] - 2026-02-08
+### Changed
+- **admin.html**: Match Type is now selected via popup dialog before import preview — shows all available divisions plus "Friendly" as clickable buttons
+
 ## [v0.4.9] - 2026-02-08
 ### Added
 - **admin.html**: Match Type dropdown in import preview — tag matches as "Friendly" or any division (ECL Div. 1-6, HBL, HCA, Seasonals, etc.)
