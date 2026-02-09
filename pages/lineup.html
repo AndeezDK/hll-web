@@ -1213,6 +1213,9 @@
                 
                 if (error) throw error;
                 
+                // Clear existing data before repopulating
+                lineupData = {};
+                
                 // Group by lineup number
                 data?.forEach(slot => {
                     const num = slot.lineup_number;
@@ -2449,6 +2452,27 @@
             if (conflicts.length > 0) {
                 showConflictModal(conflicts, document.querySelector('.tab.active')?.textContent || 'Lineup 1');
                 return; // Block submission until conflicts resolved
+            }
+            
+            // Check for players not marked as "here" (potential no-shows)
+            const uncheckedPlayers = [];
+            document.querySelectorAll('.player-slot, .infantry-slot, .node-slot').forEach(slot => {
+                const nameEl = slot.querySelector('.slot-name');
+                const hereCheck = slot.querySelector('.here-check');
+                if (nameEl && !nameEl.classList.contains('empty') && nameEl.textContent !== 'Empty') {
+                    if (!hereCheck || !hereCheck.checked) {
+                        uncheckedPlayers.push(nameEl.textContent);
+                    }
+                }
+            });
+            
+            if (uncheckedPlayers.length > 0) {
+                const proceed = confirm(
+                    `⚠️ ${uncheckedPlayers.length} player(s) not checked as Here:\n\n` +
+                    uncheckedPlayers.join('\n') +
+                    `\n\nContinue with submission?`
+                );
+                if (!proceed) return;
             }
             
             // Collect all lineup data for submission
