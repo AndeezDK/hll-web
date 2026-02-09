@@ -799,7 +799,7 @@
     
     <div class="page-header">
         <h1 class="page-title">Lineups</h1>
-        <span class="version-badge">v0.6.18</span>
+        <span class="version-badge">v0.6.19</span>
         <div class="sync-indicator" id="syncIndicator">
             <span class="sync-dot"></span>
             <span class="sync-text">Offline</span>
@@ -1722,8 +1722,7 @@
         function createInfantrySlotHTML(sectionId, index) {
             const prefix = infantryCellPrefix[sectionId] || sectionId;
             const cellId = prefix + '-' + index;
-            return `<div class="infantry-slot" data-cell="${cellId}"><input type="checkbox" class="here-check"><span class="slot-name empty">Empty</span>
-                <select class="sl-dropdown"><option value=""></option><option>SL-1</option><option>SL-2</option><option>SL-3</option></select>
+            return `<div class="infantry-slot" data-cell="${cellId}"><input type="checkbox" class="here-check"><select class="sl-dropdown"><option value=""></option><option>SL-1</option><option>SL-2</option><option>SL-3</option></select><span class="slot-name empty">Empty</span>
                 <select class="note-dropdown"><option value=""></option><option>Rocket</option><option>AT</option><option>MG</option><option>Supp</option><option>Eng</option><option>Driver</option></select>
                 <button class="add-slot-inline-btn" onclick="addSlotAfter(this)" title="Add row">+</button>
                 <button class="remove-slot-btn" onclick="removeSlot(this)" title="Remove">−</button></div>`;
