@@ -1,5 +1,5 @@
 // ============================================================================
-// HLL Web Tool v0.6.5 - Shared JavaScript Module
+// HLL Web Tool - Shared JavaScript Module
 // ============================================================================
 
 // ============================================================================
@@ -7,7 +7,7 @@
 // ============================================================================
 
 const HLL = {
-    version: '0.6.5',
+    version: '0.6.17',
     
     // Default Supabase config (can be overridden via localStorage)
     config: {
@@ -55,6 +55,11 @@ HLL.init = async function() {
     
     // Update nav status
     this.updateNavStatus();
+    
+    // Auto-populate version badges on all pages
+    document.querySelectorAll('.version-badge').forEach(el => {
+        el.textContent = 'v' + this.version;
+    });
     
     return this.isOnline;
 };

@@ -799,7 +799,7 @@
     
     <div class="page-header">
         <h1 class="page-title">Lineups</h1>
-        <span class="version-badge">v0.6.5</span>
+        <span class="version-badge">v0.6.17</span>
         <div class="sync-indicator" id="syncIndicator">
             <span class="sync-dot"></span>
             <span class="sync-text">Offline</span>
@@ -1115,10 +1115,8 @@
                 
                 hideLoading();
                 
-                // Hide banner after 2s
-                setTimeout(() => {
-                    document.getElementById('connectionBanner').classList.add('hidden');
-                }, 2000);
+                // Hide banner immediately on success
+                document.getElementById('connectionBanner').classList.add('hidden');
                 
             } catch (err) {
                 console.error('Supabase connection error:', err);
