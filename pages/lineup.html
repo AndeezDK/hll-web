@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Lineups - HLL Tool v0.7.0</title>
+    <title>Lineups - HLL Tool v0.7.3</title>
     <!-- Supabase JS Client -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <style>
@@ -264,6 +264,8 @@
         }
         .infantry-slot:hover { border-color: #f5a623; background: #1c2128; }
         .infantry-slot.filled { border-color: #238636; background: #0d1117; }
+        .infantry-slot.focused { outline: 1px solid #58a6ff; outline-offset: -1px; }
+        .player-slot.focused, .node-slot.focused, .reserve-slot.focused { outline: 1px solid #58a6ff; outline-offset: -1px; }
         .infantry-slot.no-show { border-color: #f85149; background: #f8514922; }
         .infantry-slot.no-show .slot-name { text-decoration: line-through; color: #f85149; }
         .infantry-slot select {
@@ -807,7 +809,7 @@
     
     <div class="page-header">
         <h1 class="page-title">Lineups</h1>
-        <span class="version-badge">v0.7.0</span>
+        <span class="version-badge">v0.7.3</span>
         <div class="sync-indicator" id="syncIndicator">
             <span class="sync-dot"></span>
             <span class="sync-text">Offline</span>
@@ -1509,7 +1511,7 @@
                 const playerName = slot.dataset.player || getRawPlayerName(nameEl.textContent);
                 if (!playerName || playerName === 'Empty') return;
                 
-                const player = players.find(p => p.name === playerName) || players.find(p => p.name === getRawPlayerName(playerName));
+                const player = findRosterPlayer(playerName);
                 const hereCheck = slot.querySelector('.here-check');
                 const slDropdown = slot.querySelector('.sl-dropdown');
                 const noteDropdown = slot.querySelector('.note-dropdown');
@@ -1651,11 +1653,14 @@
                 // Set player name (formatted with team tag)
                 // Check roster match: try exact name first, then try stripped name (handles legacy saves with clan tags)
                 const rawName = getRawPlayerName(playerName);
-                const rosterPlayer = players.find(p => p.name === playerName) || players.find(p => p.name === rawName);
+                const rosterPlayer = findRosterPlayer(playerName);
                 const isUnknown = !rosterPlayer;
                 if (isUnknown) {
-                    console.warn(`[Unknown] "${playerName}" (raw: "${rawName}") not found in roster. Closest matches:`, 
-                        players.filter(p => p.name.toLowerCase().includes(rawName.toLowerCase().substring(0, 4))).map(p => p.name).slice(0, 3));
+                    const strip = s => s.replace(/[^\x20-\x7E]/g, '').trim().toLowerCase();
+                    const closestMatch = players.find(p => strip(p.name) === strip(rawName));
+                    console.warn(`[Unknown] "${playerName}" (raw: "${rawName}") not found in roster.`,
+                        `Chars: [${[...rawName].map(c => c.charCodeAt(0)).join(',')}]`,
+                        closestMatch ? `MATCH BY STRIP: "${closestMatch.name}" chars: [${[...closestMatch.name].map(c => c.charCodeAt(0)).join(',')}]` : 'No strip match either');
                 }
                 const matchedName = rosterPlayer ? rosterPlayer.name : rawName;
                 const team = rosterPlayer ? rosterPlayer.team : '';
@@ -1856,7 +1861,7 @@
         function selectPlayerFromBottomSheet(name, team) {
             if (bottomSheetSlot) {
                 const nameEl = bottomSheetSlot.querySelector('.slot-name');
-                const isUnknown = !players.some(p => p.name === name);
+                const isUnknown = !findRosterPlayer(name);
                 bottomSheetSlot.dataset.player = name;
                 bottomSheetSlot.dataset.unknown = isUnknown ? 'true' : '';
                 nameEl.textContent = isUnknown ? name : formatPlayerName(name, team || getPlayerTeam(name));
@@ -1969,6 +1974,7 @@
         }
         
         let currentSlot = null;
+        let focusedSlot = null;
         const dropdown = document.getElementById('playerDropdown'), searchInput = document.getElementById('dropdownSearch'), dropdownList = document.getElementById('dropdownList');
         
         // Format player name with team tag for display
@@ -1987,8 +1993,29 @@
         
         // Helper to get team from players array
         function getPlayerTeam(name) {
-            const player = players.find(p => p.name === name);
+            const player = findRosterPlayer(name);
             return player?.team || '';
+        }
+        
+        // Robust roster matching — tries exact, stripped, then normalized
+        function findRosterPlayer(name) {
+            if (!name) return null;
+            // 1. Exact match
+            let p = players.find(x => x.name === name);
+            if (p) return p;
+            // 2. Strip clan tags
+            const raw = getRawPlayerName(name);
+            p = players.find(x => x.name === raw);
+            if (p) return p;
+            // 3. Normalized (trim + case-insensitive)
+            const norm = raw.trim().toLowerCase();
+            p = players.find(x => x.name.trim().toLowerCase() === norm);
+            if (p) return p;
+            // 4. Aggressive — strip all non-ASCII-printable characters (zero-width, non-breaking spaces, etc.)
+            const strip = s => s.replace(/[^\x20-\x7E]/g, '').trim().toLowerCase();
+            const stripped = strip(raw);
+            p = players.find(x => strip(x.name) === stripped);
+            return p || null;
         }
         
         function getAssignedPlayers() { 
@@ -2013,7 +2040,7 @@
         function selectPlayer(name, team) { 
             if (currentSlot) { 
                 const n = currentSlot.querySelector('.slot-name'); 
-                const isUnknown = !players.some(p => p.name === name);
+                const isUnknown = !findRosterPlayer(name);
                 currentSlot.dataset.player = name;
                 currentSlot.dataset.unknown = isUnknown ? 'true' : '';
                 n.textContent = isUnknown ? name : formatPlayerName(name, team || getPlayerTeam(name)); 
@@ -2031,11 +2058,51 @@
             dropdown.classList.add('active'); searchInput.value = ''; searchInput.focus(); renderDropdown();
         }
         function closeDropdown() { dropdown.classList.remove('active'); currentSlot = null; }
+        
+        function setFocusedSlot(slot) {
+            if (focusedSlot) focusedSlot.classList.remove('focused');
+            focusedSlot = slot;
+            if (slot) slot.classList.add('focused');
+        }
+        
+        function clearFocusedSlot() {
+            if (focusedSlot) {
+                const n = focusedSlot.querySelector('.slot-name');
+                if (n && !n.classList.contains('empty')) {
+                    n.textContent = 'Empty';
+                    n.classList.add('empty');
+                    n.classList.remove('unknown-player');
+                    focusedSlot.classList.remove('filled');
+                    delete focusedSlot.dataset.player;
+                    delete focusedSlot.dataset.unknown;
+                    updateCounters();
+                    markModified();
+                }
+            }
+        }
+        
+        function getNavigableSlots() {
+            return [...document.querySelectorAll('.player-slot, .infantry-slot, .node-slot')].filter(s => s.offsetParent !== null);
+        }
+        
+        function navigateSlot(direction) {
+            const slots = getNavigableSlots();
+            if (slots.length === 0) return;
+            if (!focusedSlot) { setFocusedSlot(slots[0]); return; }
+            const idx = slots.indexOf(focusedSlot);
+            const next = idx + direction;
+            if (next >= 0 && next < slots.length) {
+                setFocusedSlot(slots[next]);
+                slots[next].scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+            }
+        }
+        
         function attachSlotListeners() {
             document.querySelectorAll('.player-slot, .infantry-slot, .node-slot, .reserve-slot, .dropout-item').forEach(s => {
                 s.onclick = function(e) { 
                     if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT' || e.target.tagName === 'BUTTON') return;
                     e.stopPropagation();
+                    setFocusedSlot(this);
                     
                     // Use bottom sheet on mobile, dropdown on desktop
                     if (isMobile()) {
@@ -2047,9 +2114,60 @@
             });
         }
         searchInput.addEventListener('input', e => renderDropdown(e.target.value));
+        // Enter key in search field selects first non-assigned item
+        searchInput.addEventListener('keydown', e => {
+            if (e.key === 'Enter') {
+                const first = dropdownList.querySelector('.dropdown-item:not(.already-assigned)');
+                if (first) { selectPlayer(first.dataset.name, first.dataset.team); }
+            }
+        });
         document.getElementById('dropdownClear').addEventListener('click', clearSlot);
-        document.addEventListener('click', e => { if (!dropdown.contains(e.target)) closeDropdown(); });
-        document.addEventListener('keydown', e => { if (e.key === 'Escape') closeDropdown(); });
+        document.addEventListener('click', e => {
+            if (!dropdown.contains(e.target)) closeDropdown();
+            // Deselect slot if clicking empty area
+            const isSlot = e.target.closest('.player-slot, .infantry-slot, .node-slot, .reserve-slot, .dropout-item');
+            if (!isSlot && !dropdown.contains(e.target)) setFocusedSlot(null);
+        });
+        document.addEventListener('keydown', e => {
+            // Skip if focused on input/select/textarea
+            if (e.target.matches('input, textarea, select')) {
+                if (e.key === 'Escape') closeDropdown();
+                return;
+            }
+            
+            switch (e.key) {
+                case 'Escape':
+                    closeDropdown();
+                    setFocusedSlot(null);
+                    break;
+                case 'Backspace':
+                case 'Delete':
+                    if (focusedSlot && !dropdown.classList.contains('active')) {
+                        e.preventDefault();
+                        clearFocusedSlot();
+                    }
+                    break;
+                case 'Enter':
+                    if (focusedSlot && !dropdown.classList.contains('active')) {
+                        e.preventDefault();
+                        if (isMobile()) openBottomSheet(focusedSlot);
+                        else openDropdown(focusedSlot);
+                    }
+                    break;
+                case 'ArrowDown':
+                    if (!dropdown.classList.contains('active')) {
+                        e.preventDefault();
+                        navigateSlot(1);
+                    }
+                    break;
+                case 'ArrowUp':
+                    if (!dropdown.classList.contains('active')) {
+                        e.preventDefault();
+                        navigateSlot(-1);
+                    }
+                    break;
+            }
+        });
         
         function updateCounters() {
             let roster = 0, sl = 0, dkb = 0, circle = 0, merc = 0, unknown = 0;
