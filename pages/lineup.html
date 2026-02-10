@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Lineups - HLL Tool v0.7.7</title>
+    <title>Lineups - HLL Tool v0.7.8</title>
     <!-- Supabase JS Client -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <style>
@@ -374,6 +374,7 @@
             border-bottom: 1px solid #21262d; transition: background 0.1s;
         }
         .dropdown-item:hover { background: #30363d; }
+        .dropdown-item.tab-highlight { background: #388bfd33; outline: 1px solid #388bfd; }
         .dropdown-item .player-team { font-size: 9px; color: #8b949e; }
         .dropdown-item.already-assigned { opacity: 0.4; cursor: not-allowed; }
         .dropdown-clear {
@@ -811,7 +812,7 @@
     
     <div class="page-header">
         <h1 class="page-title">Lineups</h1>
-        <span class="version-badge">v0.7.7</span>
+        <span class="version-badge">v0.7.8</span>
         <div class="sync-indicator" id="syncIndicator">
             <span class="sync-dot"></span>
             <span class="sync-text">Offline</span>
@@ -2182,7 +2183,52 @@
             if (!dropdown.contains(e.target)) closeDropdown();
         });
         document.addEventListener('keydown', e => {
-            // Skip if focused on input/select/textarea
+            // Arrow keys always navigate slots, even from search input
+            if (e.key === 'ArrowDown' || e.key === 'ArrowUp' || e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
+                e.preventDefault();
+                if (e.target.matches('input, textarea, select')) e.target.blur();
+                closeDropdown();
+                switch (e.key) {
+                    case 'ArrowDown': navigateSlot(1); break;
+                    case 'ArrowUp': navigateSlot(-1); break;
+                    case 'ArrowRight': navigateColumn(1); break;
+                    case 'ArrowLeft': navigateColumn(-1); break;
+                }
+                return;
+            }
+            
+            // Tab cycles through dropdown items when dropdown is open
+            if (e.key === 'Tab' && dropdown.classList.contains('active')) {
+                e.preventDefault();
+                const items = [...dropdownList.querySelectorAll('.dropdown-item:not(.already-assigned)')];
+                if (items.length === 0) return;
+                const current = dropdownList.querySelector('.dropdown-item.tab-highlight');
+                let nextIdx = 0;
+                if (current) {
+                    current.classList.remove('tab-highlight');
+                    nextIdx = (items.indexOf(current) + (e.shiftKey ? -1 : 1)) % items.length;
+                    if (nextIdx < 0) nextIdx = items.length - 1;
+                }
+                items[nextIdx].classList.add('tab-highlight');
+                items[nextIdx].scrollIntoView({ block: 'nearest' });
+                return;
+            }
+            
+            // Enter selects tab-highlighted item if one exists
+            if (e.key === 'Enter' && dropdown.classList.contains('active')) {
+                const highlighted = dropdownList.querySelector('.dropdown-item.tab-highlight');
+                if (highlighted) {
+                    e.preventDefault();
+                    selectPlayer(highlighted.dataset.name, highlighted.dataset.team);
+                    return;
+                }
+                // Otherwise select first item
+                const first = dropdownList.querySelector('.dropdown-item:not(.already-assigned)');
+                if (first) { e.preventDefault(); selectPlayer(first.dataset.name, first.dataset.team); }
+                return;
+            }
+            
+            // Skip other keys if focused on input/select/textarea
             if (e.target.matches('input, textarea, select')) {
                 if (e.key === 'Escape') closeDropdown();
                 return;
@@ -2198,37 +2244,17 @@
                     break;
                 case 'Backspace':
                 case 'Delete':
-                    if (focusedSlot && !dropdown.classList.contains('active')) {
+                    if (focusedSlot) {
                         e.preventDefault();
                         clearFocusedSlot();
                     }
                     break;
                 case 'Enter':
-                    if (focusedSlot && !dropdown.classList.contains('active')) {
+                    if (focusedSlot) {
                         e.preventDefault();
                         if (isMobile()) openBottomSheet(focusedSlot);
                         else openDropdown(focusedSlot);
                     }
-                    break;
-                case 'ArrowDown':
-                    e.preventDefault();
-                    closeDropdown();
-                    navigateSlot(1);
-                    break;
-                case 'ArrowUp':
-                    e.preventDefault();
-                    closeDropdown();
-                    navigateSlot(-1);
-                    break;
-                case 'ArrowRight':
-                    e.preventDefault();
-                    closeDropdown();
-                    navigateColumn(1);
-                    break;
-                case 'ArrowLeft':
-                    e.preventDefault();
-                    closeDropdown();
-                    navigateColumn(-1);
                     break;
             }
         });
