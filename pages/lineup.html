@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Lineups - HLL Tool v0.6.24</title>
+    <title>Lineups - HLL Tool v0.6.25</title>
     <!-- Supabase JS Client -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <style>
@@ -807,7 +807,7 @@
     
     <div class="page-header">
         <h1 class="page-title">Lineups</h1>
-        <span class="version-badge">v0.6.24</span>
+        <span class="version-badge">v0.6.25</span>
         <div class="sync-indicator" id="syncIndicator">
             <span class="sync-dot"></span>
             <span class="sync-text">Offline</span>
@@ -1366,7 +1366,7 @@
                 const playerName = slot.dataset.player || getRawPlayerName(nameEl.textContent);
                 if (!playerName || playerName === 'Empty') return;
                 
-                const player = players.find(p => p.name === playerName);
+                const player = players.find(p => p.name === playerName) || players.find(p => p.name === getRawPlayerName(playerName));
                 const hereCheck = slot.querySelector('.here-check');
                 const slDropdown = slot.querySelector('.sl-dropdown');
                 const noteDropdown = slot.querySelector('.note-dropdown');
@@ -1506,11 +1506,15 @@
                 if (!nameEl) return;
                 
                 // Set player name (formatted with team tag)
-                const team = getPlayerTeam(playerName);
-                const isUnknown = !players.some(p => p.name === playerName);
-                slot.dataset.player = playerName;
+                // Check roster match: try exact name first, then try stripped name (handles legacy saves with clan tags)
+                const rawName = getRawPlayerName(playerName);
+                const rosterPlayer = players.find(p => p.name === playerName) || players.find(p => p.name === rawName);
+                const isUnknown = !rosterPlayer;
+                const matchedName = rosterPlayer ? rosterPlayer.name : rawName;
+                const team = rosterPlayer ? rosterPlayer.team : '';
+                slot.dataset.player = matchedName;
                 slot.dataset.unknown = isUnknown ? 'true' : '';
-                nameEl.textContent = isUnknown ? playerName : formatPlayerName(playerName, team);
+                nameEl.textContent = isUnknown ? matchedName : formatPlayerName(matchedName, team);
                 nameEl.classList.remove('empty');
                 nameEl.classList.toggle('unknown-player', isUnknown);
                 slot.classList.add('filled');
