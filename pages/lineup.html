@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Lineups - HLL Tool v0.7.6</title>
+    <title>Lineups - HLL Tool v0.7.7</title>
     <!-- Supabase JS Client -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <style>
@@ -811,7 +811,7 @@
     
     <div class="page-header">
         <h1 class="page-title">Lineups</h1>
-        <span class="version-badge">v0.7.6</span>
+        <span class="version-badge">v0.7.7</span>
         <div class="sync-indicator" id="syncIndicator">
             <span class="sync-dot"></span>
             <span class="sync-text">Offline</span>
@@ -1936,7 +1936,7 @@
         function removeSlot(btn) {
             const slot = btn.closest('.infantry-slot');
             const container = slot.parentElement;
-            const minSlots = 1; // Minimum slots to keep
+            const minSlots = 6; // Minimum slots to keep (default squad size)
             if (container.querySelectorAll('.infantry-slot').length > minSlots) {
                 slot.remove();
                 updateAddButtons();
