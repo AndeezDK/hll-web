@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Lineups - HLL Tool v0.7.3</title>
+    <title>Lineups - HLL Tool v0.7.5</title>
     <!-- Supabase JS Client -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <style>
@@ -207,6 +207,8 @@
         .bottom-sheet-item.freetext-add:hover { background: #d299221a; }
         .unknown-banner { background: #d299221a; border: 1px solid #d2992233; color: #d29922; padding: 8px 12px; border-radius: 6px; margin: 8px 0; font-size: 12px; display: none; }
         .unknown-banner.visible { display: block; }
+        .toast { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); background: #1c2128; border: 1px solid #30363d; color: #e7e9ea; padding: 8px 16px; border-radius: 6px; font-size: 12px; z-index: 10000; opacity: 0; transition: opacity 0.3s; pointer-events: none; }
+        .toast.visible { opacity: 1; }
         .stat-box.ok .stat-value { color: #3fb950; }
         
         /* Main Layout - Responsive */
@@ -809,7 +811,7 @@
     
     <div class="page-header">
         <h1 class="page-title">Lineups</h1>
-        <span class="version-badge">v0.7.3</span>
+        <span class="version-badge">v0.7.5</span>
         <div class="sync-indicator" id="syncIndicator">
             <span class="sync-dot"></span>
             <span class="sync-text">Offline</span>
@@ -998,6 +1000,7 @@
     
     <!-- Bottom Sheet Overlay -->
     <div class="bottom-sheet-overlay" id="bottomSheetOverlay" onclick="closeBottomSheet()"></div>
+    <div class="toast" id="toast"></div>
     
     <!-- Bottom Sheet Player Picker (Mobile) -->
     <div class="bottom-sheet" id="bottomSheet">
@@ -1394,10 +1397,15 @@
             }
         }
         
+        function showToast(msg, duration = 2000) {
+            const t = document.getElementById('toast');
+            t.textContent = msg;
+            t.classList.add('visible');
+            setTimeout(() => t.classList.remove('visible'), duration);
+        }
+        
         async function undoLineup() {
             if (!supabaseClient || !isOnline || !currentTeamId) return;
-            
-            if (!confirm('Undo last save? This will restore the previous lineup state.')) return;
             
             updateSyncIndicator('syncing', 'Undoing...');
             
@@ -1413,7 +1421,7 @@
                 
                 if (histErr) throw histErr;
                 if (!history || history.length === 0) {
-                    alert('No undo history available for this lineup.');
+                    showToast('No undo history available');
                     updateSyncIndicator('synced', 'Live');
                     return;
                 }
@@ -1464,12 +1472,13 @@
                 lineupModified = false;
                 updateSyncIndicator('synced', 'Restored');
                 updateStatusBadge('saved');
+                showToast(`↩ Restored to ${snapshotTime}`);
                 console.log(`Undo complete — restored to ${snapshotTime}`);
                 
             } catch (err) {
                 console.error('Undo failed:', err);
                 updateSyncIndicator('error', 'Undo failed');
-                alert('Undo failed: ' + err.message);
+                showToast('Undo failed: ' + err.message, 3000);
             }
         }
         
@@ -1997,7 +2006,7 @@
             return player?.team || '';
         }
         
-        // Robust roster matching — tries exact, stripped, then normalized
+        // Robust roster matching — tries exact, stripped, normalized, ASCII-only, contains, alphanumeric
         function findRosterPlayer(name) {
             if (!name) return null;
             // 1. Exact match
@@ -2011,11 +2020,28 @@
             const norm = raw.trim().toLowerCase();
             p = players.find(x => x.name.trim().toLowerCase() === norm);
             if (p) return p;
-            // 4. Aggressive — strip all non-ASCII-printable characters (zero-width, non-breaking spaces, etc.)
+            // 4. Strip all non-ASCII-printable characters
             const strip = s => s.replace(/[^\x20-\x7E]/g, '').trim().toLowerCase();
             const stripped = strip(raw);
             p = players.find(x => strip(x.name) === stripped);
-            return p || null;
+            if (p) return p;
+            // 5. Contains match (min 3 chars) — catches "Anitex" matching "Anitex - Deus vult"
+            if (stripped.length >= 3) {
+                p = players.find(x => strip(x.name).startsWith(stripped));
+                if (p) return p;
+                p = players.find(x => strip(x.name).includes(stripped));
+                if (p) return p;
+            }
+            // 6. Alphanumeric-only match — catches "Danish.Guy" matching "Danish Guy"
+            const alphaNum = s => s.replace(/[^a-z0-9]/gi, '').toLowerCase();
+            const lineupClean = alphaNum(raw);
+            if (lineupClean.length >= 3) {
+                p = players.find(x => alphaNum(x.name) === lineupClean);
+                if (p) return p;
+                p = players.find(x => alphaNum(x.name).startsWith(lineupClean));
+                if (p) return p;
+            }
+            return null;
         }
         
         function getAssignedPlayers() { 
@@ -2085,6 +2111,10 @@
             return [...document.querySelectorAll('.player-slot, .infantry-slot, .node-slot')].filter(s => s.offsetParent !== null);
         }
         
+        function getSlotColumn(slot) {
+            return slot.closest('.column');
+        }
+        
         function navigateSlot(direction) {
             const slots = getNavigableSlots();
             if (slots.length === 0) return;
@@ -2095,6 +2125,32 @@
                 setFocusedSlot(slots[next]);
                 slots[next].scrollIntoView({ block: 'nearest', behavior: 'smooth' });
             }
+        }
+        
+        function navigateColumn(direction) {
+            const columns = [...document.querySelectorAll('.lineup-grid > .column')].filter(c => c.offsetParent !== null);
+            if (columns.length === 0 || !focusedSlot) return;
+            
+            const currentCol = getSlotColumn(focusedSlot);
+            const colIdx = columns.indexOf(currentCol);
+            const nextColIdx = colIdx + direction;
+            if (nextColIdx < 0 || nextColIdx >= columns.length) return;
+            
+            // Find the slot at roughly the same vertical position in the target column
+            const currentRect = focusedSlot.getBoundingClientRect();
+            const targetSlots = [...columns[nextColIdx].querySelectorAll('.player-slot, .infantry-slot, .node-slot')].filter(s => s.offsetParent !== null);
+            if (targetSlots.length === 0) return;
+            
+            // Find closest slot by vertical position
+            let closest = targetSlots[0];
+            let closestDist = Infinity;
+            for (const s of targetSlots) {
+                const dist = Math.abs(s.getBoundingClientRect().top - currentRect.top);
+                if (dist < closestDist) { closestDist = dist; closest = s; }
+            }
+            
+            setFocusedSlot(closest);
+            closest.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
         }
         
         function attachSlotListeners() {
@@ -2164,6 +2220,18 @@
                     if (!dropdown.classList.contains('active')) {
                         e.preventDefault();
                         navigateSlot(-1);
+                    }
+                    break;
+                case 'ArrowRight':
+                    if (!dropdown.classList.contains('active')) {
+                        e.preventDefault();
+                        navigateColumn(1);
+                    }
+                    break;
+                case 'ArrowLeft':
+                    if (!dropdown.classList.contains('active')) {
+                        e.preventDefault();
+                        navigateColumn(-1);
                     }
                     break;
             }
