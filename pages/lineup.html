@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Lineups - HLL Tool v0.6.25</title>
+    <title>Lineups - HLL Tool v0.7.0</title>
     <!-- Supabase JS Client -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <style>
@@ -807,7 +807,7 @@
     
     <div class="page-header">
         <h1 class="page-title">Lineups</h1>
-        <span class="version-badge">v0.6.25</span>
+        <span class="version-badge">v0.7.0</span>
         <div class="sync-indicator" id="syncIndicator">
             <span class="sync-dot"></span>
             <span class="sync-text">Offline</span>
@@ -963,6 +963,7 @@
     
     <div class="actions">
         <button class="btn btn-save" onclick="saveLineup()" id="saveBtn">💾 Save</button>
+        <button class="btn btn-secondary" onclick="undoLineup()" id="undoBtn" disabled title="No undo history">↩ Undo</button>
         <button class="btn btn-secondary" onclick="checkConflicts()">🔍 Check Conflicts</button>
         <button class="btn btn-secondary" onclick="autoPopulateNodes()">⚡ Auto-fill Nodes</button>
         <button class="btn btn-primary" id="lockBtn" onclick="toggleLock()">🔒 Lock Lineup</button>
@@ -1311,6 +1312,9 @@
             updateSyncIndicator('syncing', 'Saving...');
             
             try {
+                // Snapshot current DB state before overwriting (for undo)
+                await snapshotLineup();
+                
                 const slots = collectLineupSlots();
                 
                 // Delete existing slots for this lineup
@@ -1347,6 +1351,7 @@
                 updateTabIndicators();
                 
                 console.log('Saved ' + slots.length + ' slots to Lineup ' + currentLineupNumber);
+                updateUndoButton();
                 
             } catch (err) {
                 console.error('Error saving lineup:', err);
@@ -1354,6 +1359,144 @@
                 alert('Save failed: ' + err.message);
             }
         }
+        
+        // ========================================
+        // UNDO / HISTORY
+        // ========================================
+        
+        async function snapshotLineup() {
+            if (!supabaseClient || !isOnline || !currentTeamId) return;
+            try {
+                // Read current DB state (what we're about to overwrite)
+                const { data, error } = await supabaseClient
+                    .from('lineups')
+                    .select('cell_position, steam_id, player_name, role, sl_role, note, is_here')
+                    .eq('team_id', currentTeamId)
+                    .eq('lineup_number', currentLineupNumber);
+                
+                if (error) throw error;
+                if (!data || data.length === 0) return; // Nothing to snapshot
+                
+                await supabaseClient
+                    .from('lineup_history')
+                    .insert({
+                        team_id: currentTeamId,
+                        lineup_number: currentLineupNumber,
+                        snapshot: JSON.stringify(data)
+                    });
+                
+                console.log(`Snapshot saved (${data.length} slots) for Lineup ${currentLineupNumber}`);
+                updateUndoButton();
+            } catch (err) {
+                console.warn('Snapshot warning:', err);
+            }
+        }
+        
+        async function undoLineup() {
+            if (!supabaseClient || !isOnline || !currentTeamId) return;
+            
+            if (!confirm('Undo last save? This will restore the previous lineup state.')) return;
+            
+            updateSyncIndicator('syncing', 'Undoing...');
+            
+            try {
+                // Get most recent snapshot
+                const { data: history, error: histErr } = await supabaseClient
+                    .from('lineup_history')
+                    .select('id, snapshot, created_at')
+                    .eq('team_id', currentTeamId)
+                    .eq('lineup_number', currentLineupNumber)
+                    .order('created_at', { ascending: false })
+                    .limit(1);
+                
+                if (histErr) throw histErr;
+                if (!history || history.length === 0) {
+                    alert('No undo history available for this lineup.');
+                    updateSyncIndicator('synced', 'Live');
+                    return;
+                }
+                
+                const snapshot = JSON.parse(history[0].snapshot);
+                const snapshotId = history[0].id;
+                const snapshotTime = new Date(history[0].created_at).toLocaleTimeString();
+                
+                // Delete current lineup slots
+                await supabaseClient
+                    .from('lineups')
+                    .delete()
+                    .eq('team_id', currentTeamId)
+                    .eq('lineup_number', currentLineupNumber);
+                
+                // Restore from snapshot
+                if (snapshot.length > 0) {
+                    const records = snapshot.map(s => ({
+                        team_id: currentTeamId,
+                        lineup_number: currentLineupNumber,
+                        cell_position: s.cell_position,
+                        steam_id: s.steam_id,
+                        player_name: s.player_name,
+                        role: s.role,
+                        sl_role: s.sl_role,
+                        note: s.note,
+                        is_here: s.is_here
+                    }));
+                    
+                    const { error: insertErr } = await supabaseClient
+                        .from('lineups')
+                        .insert(records);
+                    
+                    if (insertErr) throw insertErr;
+                }
+                
+                // Delete the used snapshot so next undo goes further back
+                await supabaseClient
+                    .from('lineup_history')
+                    .delete()
+                    .eq('id', snapshotId);
+                
+                // Reload UI
+                await loadLineupsFromDatabase();
+                updateCounters();
+                updateUndoButton();
+                
+                lineupModified = false;
+                updateSyncIndicator('synced', 'Restored');
+                updateStatusBadge('saved');
+                console.log(`Undo complete — restored to ${snapshotTime}`);
+                
+            } catch (err) {
+                console.error('Undo failed:', err);
+                updateSyncIndicator('error', 'Undo failed');
+                alert('Undo failed: ' + err.message);
+            }
+        }
+        
+        async function updateUndoButton() {
+            const btn = document.getElementById('undoBtn');
+            if (!btn || !supabaseClient || !isOnline || !currentTeamId) return;
+            
+            try {
+                const { data, error } = await supabaseClient
+                    .from('lineup_history')
+                    .select('id', { count: 'exact', head: true })
+                    .eq('team_id', currentTeamId)
+                    .eq('lineup_number', currentLineupNumber);
+                
+                const count = data ? data.length : 0;
+                btn.disabled = count === 0;
+                btn.title = count > 0 ? `${count} undo step(s) available` : 'No undo history';
+            } catch (err) {
+                btn.disabled = true;
+            }
+        }
+        
+        // Ctrl+Z handler
+        document.addEventListener('keydown', e => {
+            if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.target.matches('input, textarea, select')) {
+                e.preventDefault();
+                undoLineup();
+            }
+        });
         
         function collectLineupSlots() {
             const slots = [];
@@ -1510,6 +1653,10 @@
                 const rawName = getRawPlayerName(playerName);
                 const rosterPlayer = players.find(p => p.name === playerName) || players.find(p => p.name === rawName);
                 const isUnknown = !rosterPlayer;
+                if (isUnknown) {
+                    console.warn(`[Unknown] "${playerName}" (raw: "${rawName}") not found in roster. Closest matches:`, 
+                        players.filter(p => p.name.toLowerCase().includes(rawName.toLowerCase().substring(0, 4))).map(p => p.name).slice(0, 3));
+                }
                 const matchedName = rosterPlayer ? rosterPlayer.name : rawName;
                 const team = rosterPlayer ? rosterPlayer.team : '';
                 slot.dataset.player = matchedName;
@@ -1539,6 +1686,7 @@
             // Update counters and buttons
             updateCounters();
             updateAddButtons();
+            updateUndoButton();
         }
         
         async function switchLineup(num) {
@@ -1759,7 +1907,7 @@
         
         function initializeInfantrySections() {
             ['northWestSlots','defenceSlots','meatGrindSlots','flexSlots','southEastSlots','infiltrationSlots'].forEach(id => {
-                const c = document.getElementById(id); for (let i = 0; i < 6; i++) c.innerHTML += createInfantrySlotHTML(id, i + 1);
+                const c = document.getElementById(id); c.innerHTML = ''; for (let i = 0; i < 6; i++) c.innerHTML += createInfantrySlotHTML(id, i + 1);
             });
         }
         
@@ -2654,7 +2802,7 @@ In production, this will:
             }
         }
         
-        initializeInfantrySections(); initializeReserves(); initializeDropouts(); attachSlotListeners(); updateCounters(); initCollapsibleSections();
+        attachSlotListeners(); updateCounters();
         document.addEventListener('change', e => { if (e.target.classList.contains('sl-dropdown')) { updateCounters(); markModified(); } });
         
         // Add lineup tab click handlers
