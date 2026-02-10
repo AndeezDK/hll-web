@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Lineups - HLL Tool v0.7.10</title>
+    <title>Lineups - HLL Tool v0.8.0</title>
     <!-- Supabase JS Client -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <style>
@@ -90,6 +90,12 @@
             font-size: 9px; background: #30363d;
             padding: 2px 6px; border-radius: 4px; color: #8b949e;
         }
+        .team-selector {
+            background: #0f1419; border: 1px solid #f5a623; border-radius: 4px;
+            color: #f5a623; font-size: 11px; font-weight: 600; padding: 4px 8px;
+            cursor: pointer;
+        }
+        .team-selector:focus { outline: none; border-color: #d4910f; }
         
         /* Tab indicators for saved data */
         .tab.has-data::after {
@@ -813,7 +819,10 @@
     
     <div class="page-header">
         <h1 class="page-title">Lineups</h1>
-        <span class="version-badge">v0.7.10</span>
+        <span class="version-badge">v0.8.0</span>
+        <select class="team-selector" id="teamSelector" onchange="switchTeam(this.value)">
+            <option value="">Loading teams...</option>
+        </select>
         <div class="sync-indicator" id="syncIndicator">
             <span class="sync-dot"></span>
             <span class="sync-text">Offline</span>
@@ -1026,6 +1035,7 @@
         let supabaseClient = null;
         let isOnline = false;
         let currentTeamId = null;
+        let allTeams = [];
         let currentLineupNumber = 1;
         let lineupModified = false;
         let lineupData = { 1: null, 2: null, 3: null, 4: null };
@@ -1113,6 +1123,10 @@
                 
                 if (error) throw error;
                 
+                // Store all teams and populate selector
+                allTeams = teams || [];
+                populateTeamSelector(allTeams, defaultTeam);
+                
                 // Find team ID
                 const team = teams?.find(t => t.name === defaultTeam || t.tag === defaultTeam);
                 if (team) {
@@ -1155,6 +1169,41 @@
             players = [...fallbackPlayers];
             updateConnectionBanner('offline', 'Offline Mode - Using sample data');
             updateSyncIndicator('error', 'Offline');
+        }
+        
+        function populateTeamSelector(teams, selectedName) {
+            const sel = document.getElementById('teamSelector');
+            sel.innerHTML = teams.map(t => 
+                `<option value="${t.id}" ${t.name === selectedName ? 'selected' : ''}>${t.name}${t.tag ? ' [' + t.tag + ']' : ''}</option>`
+            ).join('');
+        }
+        
+        async function switchTeam(teamId) {
+            if (teamId === currentTeamId) return;
+            
+            // Auto-save current lineup before switching
+            if (lineupModified && isOnline && supabaseClient) {
+                await saveLineup();
+            }
+            
+            currentTeamId = teamId;
+            currentLineupNumber = 1;
+            
+            // Reset tab UI
+            document.querySelectorAll('.tab').forEach((tab, i) => {
+                tab.classList.toggle('active', i === 0);
+            });
+            
+            // Clear and reload
+            clearLineupUI();
+            lineupData = {};
+            
+            showLoading('Switching team...');
+            await loadLineupsFromDatabase();
+            hideLoading();
+            
+            const team = allTeams.find(t => t.id === teamId);
+            showToast(`Switched to ${team?.name || 'team'}`);
         }
         
         function updateConnectionBanner(status, text) {
