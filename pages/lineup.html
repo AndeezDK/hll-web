@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Lineups - HLL Tool v0.7.5</title>
+    <title>Lineups - HLL Tool v0.7.6</title>
     <!-- Supabase JS Client -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <style>
@@ -811,7 +811,7 @@
     
     <div class="page-header">
         <h1 class="page-title">Lineups</h1>
-        <span class="version-badge">v0.7.5</span>
+        <span class="version-badge">v0.7.6</span>
         <div class="sync-indicator" id="syncIndicator">
             <span class="sync-dot"></span>
             <span class="sync-text">Offline</span>
@@ -2180,9 +2180,6 @@
         document.getElementById('dropdownClear').addEventListener('click', clearSlot);
         document.addEventListener('click', e => {
             if (!dropdown.contains(e.target)) closeDropdown();
-            // Deselect slot if clicking empty area
-            const isSlot = e.target.closest('.player-slot, .infantry-slot, .node-slot, .reserve-slot, .dropout-item');
-            if (!isSlot && !dropdown.contains(e.target)) setFocusedSlot(null);
         });
         document.addEventListener('keydown', e => {
             // Skip if focused on input/select/textarea
@@ -2193,8 +2190,11 @@
             
             switch (e.key) {
                 case 'Escape':
-                    closeDropdown();
-                    setFocusedSlot(null);
+                    if (dropdown.classList.contains('active')) {
+                        closeDropdown();
+                    } else {
+                        setFocusedSlot(null);
+                    }
                     break;
                 case 'Backspace':
                 case 'Delete':
@@ -2211,28 +2211,24 @@
                     }
                     break;
                 case 'ArrowDown':
-                    if (!dropdown.classList.contains('active')) {
-                        e.preventDefault();
-                        navigateSlot(1);
-                    }
+                    e.preventDefault();
+                    closeDropdown();
+                    navigateSlot(1);
                     break;
                 case 'ArrowUp':
-                    if (!dropdown.classList.contains('active')) {
-                        e.preventDefault();
-                        navigateSlot(-1);
-                    }
+                    e.preventDefault();
+                    closeDropdown();
+                    navigateSlot(-1);
                     break;
                 case 'ArrowRight':
-                    if (!dropdown.classList.contains('active')) {
-                        e.preventDefault();
-                        navigateColumn(1);
-                    }
+                    e.preventDefault();
+                    closeDropdown();
+                    navigateColumn(1);
                     break;
                 case 'ArrowLeft':
-                    if (!dropdown.classList.contains('active')) {
-                        e.preventDefault();
-                        navigateColumn(-1);
-                    }
+                    e.preventDefault();
+                    closeDropdown();
+                    navigateColumn(-1);
                     break;
             }
         });
