@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Stats - HLL Tool v0.6.5</title>
+    <title>Stats - HLL Tool v0.6.8</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <link rel="stylesheet" href="../css/styles.css">
     <style>
@@ -11,6 +11,38 @@
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
             gap: 16px;
+        }
+        
+        /* Award cards grid */
+        .awards-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            gap: 12px;
+        }
+        .award-card {
+            background: var(--bg-secondary); border: 1px solid var(--border-color);
+            border-radius: 8px; padding: 12px; transition: border-color 0.2s;
+        }
+        .award-card:hover { border-color: var(--accent-orange); }
+        .award-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+        .award-title { font-size: 11px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; }
+        .award-icon { font-size: 16px; }
+        .award-winner { font-size: 15px; font-weight: 700; color: var(--text-primary); margin-bottom: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .award-stat { font-size: 12px; color: var(--text-secondary); }
+        .award-stat .highlight { color: var(--accent-green); font-weight: 600; }
+        .award-empty { font-size: 12px; color: var(--text-muted); font-style: italic; }
+        .award-expand { background: none; border: none; color: var(--text-muted); cursor: pointer; font-size: 10px; padding: 2px 0; margin-top: 6px; transition: color 0.15s; }
+        .award-expand:hover { color: var(--accent-orange); }
+        .award-runners { display: none; margin-top: 6px; border-top: 1px solid var(--border-color); padding-top: 6px; }
+        .award-runners.visible { display: block; }
+        .runner-row { display: flex; justify-content: space-between; padding: 2px 0; font-size: 11px; }
+        .runner-rank { color: var(--text-muted); width: 18px; }
+        .runner-name { flex: 1; color: var(--text-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .runner-stat { color: var(--text-muted); margin-left: 8px; }
+        
+        .section-title {
+            font-size: 16px; font-weight: 700; color: var(--text-primary);
+            margin-bottom: 12px; padding-bottom: 8px; border-bottom: 1px solid var(--border-color);
         }
         
         .win-bar {
@@ -179,7 +211,7 @@
         <!-- Header -->
         <div class="page-header">
             <h1 class="page-title">Team Stats</h1>
-            <span class="version-badge">v0.6.5</span>
+            <span class="version-badge">v0.6.8</span>
         </div>
 
         <!-- Tabs -->
@@ -257,47 +289,19 @@
             </div>
         </div>
 
-        <!-- Role Stats -->
-        <div class="stats-grid mt-lg">
-            <!-- Role Distribution -->
-            <div class="card">
-                <div class="card-header">
-                    <span class="card-title">🎖️ Role Distribution</span>
-                </div>
-                <div class="card-body" id="roleDistribution">
-                    <div class="text-center text-muted">Loading...</div>
-                </div>
+        <!-- Role Leaders -->
+        <div class="mt-lg">
+            <div class="section-title">🎖️ Role Leaders</div>
+            <div class="awards-grid" id="roleLeaderCards">
+                <div class="text-center text-muted" style="grid-column: 1/-1;">Loading...</div>
             </div>
+        </div>
 
-            <!-- Top by Role -->
-            <div class="card">
-                <div class="card-header">
-                    <span class="card-title">👤 Player Role %</span>
-                </div>
-                <div class="card-body">
-                    <div class="table-container" style="max-height: 500px; overflow: auto;">
-                        <table class="data-table" id="playerRoleTable">
-                            <thead>
-                                <tr>
-                                    <th>Player</th>
-                                    <th class="numeric">Games</th>
-                                    <th class="numeric">CMD</th>
-                                    <th class="numeric">ART</th>
-                                    <th class="numeric">SL</th>
-                                    <th class="numeric">INF</th>
-                                    <th class="numeric">SNIP</th>
-                                    <th class="numeric">SPOT</th>
-                                    <th class="numeric">TC</th>
-                                    <th class="numeric">TANK</th>
-                                    <th class="numeric">DEF</th>
-                                </tr>
-                            </thead>
-                            <tbody id="playerRoleBody">
-                                <tr><td colspan="11" class="text-center text-muted">Loading...</td></tr>
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
+        <!-- Achievement Awards -->
+        <div class="mt-lg">
+            <div class="section-title">🏅 Achievements</div>
+            <div class="awards-grid" id="achievementCards">
+                <div class="text-center text-muted" style="grid-column: 1/-1;">Loading...</div>
             </div>
         </div>
 
@@ -485,7 +489,7 @@
                     loadMapStats(),
                     loadEnemyStats(),
                     loadPlayerLeaderboards(),
-                    loadRoleStats()
+                    loadAwardCards()
                 ]);
                 initRoleLeaderboard();
             }
@@ -667,113 +671,288 @@
             `).join('');
         }
         
-        async function loadRoleStats() {
+        // ============================================================================
+        // AWARD CARDS
+        // ============================================================================
+        
+        function renderAwardCard(icon, title, players, statFn, id) {
+            if (!players || players.length === 0) {
+                return `<div class="award-card"><div class="award-header"><span class="award-title">${title}</span><span class="award-icon">${icon}</span></div><div class="award-empty">Not enough data</div></div>`;
+            }
+            const winner = players[0];
+            const runners = players.slice(1, 10);
+            const runnersId = 'runners-' + id;
+            return `<div class="award-card">
+                <div class="award-header"><span class="award-title">${title}</span><span class="award-icon">${icon}</span></div>
+                <div class="award-winner">${winner.name}</div>
+                <div class="award-stat">${statFn(winner)}</div>
+                ${runners.length > 0 ? `<button class="award-expand" onclick="toggleRunners('${runnersId}')">▸ Top ${runners.length + 1}</button>
+                <div class="award-runners" id="${runnersId}">
+                    ${runners.map((p, i) => `<div class="runner-row"><span class="runner-rank">#${i + 2}</span><span class="runner-name">${p.name}</span><span class="runner-stat">${statFn(p)}</span></div>`).join('')}
+                </div>` : ''}
+            </div>`;
+        }
+        
+        function toggleRunners(id) {
+            const el = document.getElementById(id);
+            if (el) {
+                el.classList.toggle('visible');
+                const btn = el.previousElementSibling;
+                if (btn) btn.textContent = el.classList.contains('visible') ? '▾ Collapse' : '▸ Top 10';
+            }
+        }
+        
+        async function loadAwardCards() {
             try {
-                // Fetch all match_lineups
-                const { data: lineups, error } = await HLL.supabase
-                    .from('match_lineups')
-                    .select('role, player_name, steam_id, match_id');
+                // Fetch all data we need
+                const [detailsRes, lineupsRes, playersRes, matchesRes] = await Promise.all([
+                    HLL.supabase.from('match_details').select('*').eq('team', 'Friendly'),
+                    HLL.supabase.from('match_lineups').select('*'),
+                    HLL.supabase.from('players').select('*'),
+                    HLL.supabase.from('matches').select('match_id, date, result')
+                ]);
                 
-                if (error) throw error;
-                if (!lineups || lineups.length === 0) {
-                    document.getElementById('roleDistribution').innerHTML = '<div class="text-center text-muted">No match lineup data yet</div>';
-                    document.getElementById('playerRoleBody').innerHTML = '<tr><td colspan="11" class="text-center text-muted">No match lineup data yet</td></tr>';
+                const details = detailsRes.data || [];
+                const lineups = lineupsRes.data || [];
+                const allPlayers = playersRes.data || [];
+                const matches = matchesRes.data || [];
+                
+                if (details.length === 0 && lineups.length === 0) {
+                    document.getElementById('roleLeaderCards').innerHTML = '<div class="text-center text-muted" style="grid-column:1/-1">Import match data to see role leaders</div>';
+                    document.getElementById('achievementCards').innerHTML = '<div class="text-center text-muted" style="grid-column:1/-1">Import match data to see achievements</div>';
                     return;
                 }
                 
-                // === ROLE DISTRIBUTION (bar chart) ===
-                const roleCounts = {};
-                const roleColors = {
-                    'Commander': '#f5a623', 'Artillery': '#f85149', 'SL': '#388bfd',
-                    'Infantry': '#3fb950', 'TC': '#bc8cff', 'Gunner': '#bc8cff',
-                    'Driver': '#bc8cff', 'Spotter': '#d2a8ff', 'Sniper': '#d2a8ff',
-                    'Defence': '#79c0ff', 'Streamer': '#8b949e', 'Reserve': '#484f58'
-                };
+                // === BUILD PLAYER STAT MAPS ===
                 
-                lineups.forEach(l => {
-                    const role = l.role || 'Unknown';
-                    roleCounts[role] = (roleCounts[role] || 0) + 1;
+                // Per-player match stats from match_details
+                const playerStats = {};
+                details.forEach(d => {
+                    const key = d.steam_id || d.player_name;
+                    if (!playerStats[key]) playerStats[key] = { name: d.player_name, matches: [], steamId: d.steam_id };
+                    playerStats[key].matches.push(d);
                 });
                 
-                const totalSlots = lineups.length;
-                const sortedRoles = Object.entries(roleCounts).sort((a, b) => b[1] - a[1]);
-                const maxCount = sortedRoles[0] ? sortedRoles[0][1] : 1;
-                
-                document.getElementById('roleDistribution').innerHTML = sortedRoles.map(([role, count]) => {
-                    const pct = Math.round((count / totalSlots) * 100);
-                    const barPct = Math.round((count / maxCount) * 100);
-                    const color = roleColors[role] || '#8b949e';
-                    return `
-                        <div class="role-bar-row">
-                            <span class="role-bar-label">${role}</span>
-                            <div class="role-bar-track">
-                                <div class="role-bar-fill" style="width: ${barPct}%; background: ${color};"></div>
-                            </div>
-                            <span class="role-bar-value">${count} (${pct}%)</span>
-                        </div>
-                    `;
-                }).join('');
-                
-                // === PER-PLAYER ROLE% TABLE ===
-                // Maps to Excel Roster columns: CMD%, ART%, SL%, INF%, SNIPER%, SPOTTER%, TC%, TANK_CREW%, DEFENSE%
-                const roleCategories = {
-                    'CMD':  ['Commander'],
-                    'ART':  ['Artillery'],
-                    'SL':   ['SL'],
-                    'INF':  ['Infantry'],
-                    'SNIP': ['Sniper'],
-                    'SPOT': ['Spotter'],
-                    'TC':   ['TC'],
-                    'TANK': ['Gunner', 'Driver'],
-                    'DEF':  ['Defence']
-                };
-                
-                // Count unique matches per player and role occurrences
-                const playerData = {};
+                // Per-player role counts from match_lineups
+                const playerRoles = {};
                 lineups.forEach(l => {
                     const key = l.steam_id || l.player_name;
-                    if (!playerData[key]) {
-                        playerData[key] = { name: l.player_name, matches: new Set(), roleCounts: {} };
-                    }
-                    playerData[key].matches.add(l.match_id);
+                    if (!playerRoles[key]) playerRoles[key] = { name: l.player_name, roles: {}, sections: {}, matchIds: new Set() };
                     const role = l.role || 'Unknown';
-                    playerData[key].roleCounts[role] = (playerData[key].roleCounts[role] || 0) + 1;
+                    const section = l.section || '';
+                    playerRoles[key].roles[role] = (playerRoles[key].roles[role] || 0) + 1;
+                    if (section) playerRoles[key].sections[section] = (playerRoles[key].sections[section] || 0) + 1;
+                    playerRoles[key].matchIds.add(l.match_id);
                 });
                 
-                // Build table rows sorted by total matches desc
-                const playerRows = Object.values(playerData)
-                    .map(p => {
-                        const totalMatches = p.matches.size;
-                        const pcts = {};
-                        for (const [cat, roles] of Object.entries(roleCategories)) {
-                            const count = roles.reduce((sum, r) => sum + (p.roleCounts[r] || 0), 0);
-                            pcts[cat] = totalMatches > 0 ? Math.round((count / totalMatches) * 100) : 0;
-                        }
-                        return { name: p.name, totalMatches, pcts };
-                    })
-                    .sort((a, b) => b.totalMatches - a.totalMatches);
-                
-                const tbody = document.getElementById('playerRoleBody');
-                if (playerRows.length === 0) {
-                    tbody.innerHTML = '<tr><td colspan="11" class="text-center text-muted">No data</td></tr>';
-                } else {
-                    tbody.innerHTML = playerRows.map(p => {
-                        const cells = ['CMD','ART','SL','INF','SNIP','SPOT','TC','TANK','DEF']
-                            .map(cat => {
-                                const val = p.pcts[cat];
-                                const cls = val >= 50 ? ' style="color: #3fb950; font-weight: 600;"'
-                                          : val >= 25 ? ' style="color: #79c0ff;"'
-                                          : val > 0  ? '' : ' style="color: #484f58;"';
-                                return `<td class="numeric"${cls}>${val > 0 ? val + '%' : '-'}</td>`;
-                            }).join('');
-                        return `<tr><td>${p.name}</td><td class="numeric">${p.totalMatches}</td>${cells}</tr>`;
-                    }).join('');
+                // Helper: get avg stat for players with a specific role
+                function topByRole(roleName, minMatches = 1) {
+                    const candidates = [];
+                    Object.entries(playerRoles).forEach(([key, pr]) => {
+                        if (!pr.roles[roleName]) return;
+                        const ps = playerStats[key];
+                        if (!ps || ps.matches.length < minMatches) return;
+                        // Get only matches where they played this role
+                        const roleMatchIds = new Set();
+                        lineups.filter(l => (l.steam_id || l.player_name) === key && l.role === roleName).forEach(l => roleMatchIds.add(l.match_id));
+                        const roleMatches = ps.matches.filter(m => roleMatchIds.has(m.match_id));
+                        if (roleMatches.length === 0) return;
+                        const avgKills = roleMatches.reduce((s, m) => s + (m.kills || 0), 0) / roleMatches.length;
+                        const avgDeaths = roleMatches.reduce((s, m) => s + (m.deaths || 0), 0) / roleMatches.length;
+                        const avgCE = roleMatches.reduce((s, m) => s + (m.combat_eff || 0), 0) / roleMatches.length;
+                        const avgSupport = roleMatches.reduce((s, m) => s + (m.support_pts || 0), 0) / roleMatches.length;
+                        const avgDef = roleMatches.reduce((s, m) => s + (m.defensive_pts || 0), 0) / roleMatches.length;
+                        candidates.push({
+                            name: pr.name, games: roleMatches.length,
+                            avgKills: avgKills.toFixed(1), avgDeaths: avgDeaths.toFixed(1),
+                            avgCE: avgCE.toFixed(0), avgSupport: avgSupport.toFixed(0), avgDef: avgDef.toFixed(0),
+                            kd: avgDeaths > 0 ? (avgKills / avgDeaths).toFixed(2) : avgKills.toFixed(2)
+                        });
+                    });
+                    return candidates.sort((a, b) => parseFloat(b.kd) - parseFloat(a.kd));
                 }
                 
+                // Helper: top by section (Defence squads)
+                function topBySection(sectionMatch, minMatches = 1) {
+                    const candidates = [];
+                    Object.entries(playerRoles).forEach(([key, pr]) => {
+                        const sectionCount = Object.entries(pr.sections)
+                            .filter(([s]) => s.toLowerCase().includes(sectionMatch.toLowerCase()))
+                            .reduce((sum, [, c]) => sum + c, 0);
+                        if (sectionCount === 0) return;
+                        const ps = playerStats[key];
+                        if (!ps || ps.matches.length < minMatches) return;
+                        const avgKills = ps.matches.reduce((s, m) => s + (m.kills || 0), 0) / ps.matches.length;
+                        const avgDeaths = ps.matches.reduce((s, m) => s + (m.deaths || 0), 0) / ps.matches.length;
+                        candidates.push({
+                            name: pr.name, games: sectionCount,
+                            avgKills: avgKills.toFixed(1),
+                            kd: avgDeaths > 0 ? (avgKills / avgDeaths).toFixed(2) : avgKills.toFixed(2)
+                        });
+                    });
+                    return candidates.sort((a, b) => parseFloat(b.kd) - parseFloat(a.kd));
+                }
+                
+                // === ROLE LEADERS ===
+                const topCmd = topByRole('Commander');
+                const topDefSL = topByRole('Defence');  // Defence SL entries
+                const topDefInf = topBySection('defence');
+                const topTC = topByRole('TC');
+                const topTankCrew = [...(topByRole('Gunner')), ...(topByRole('Driver'))].sort((a, b) => parseFloat(b.kd) - parseFloat(a.kd));
+                const topRecon = [...(topByRole('Spotter')), ...(topByRole('Sniper'))].sort((a, b) => parseFloat(b.kd) - parseFloat(a.kd));
+                
+                // Squad Backbone: most games as any SL role
+                const slBackbone = Object.entries(playerRoles).map(([key, pr]) => {
+                    const slGames = Object.entries(pr.roles).filter(([r]) => r.includes('SL') || r === 'Commander').reduce((s, [, c]) => s + c, 0);
+                    return { name: pr.name, games: slGames };
+                }).filter(p => p.games > 0).sort((a, b) => b.games - a.games);
+                
+                // Rising Star: best K/D with < 5 matches
+                const risingStars = Object.values(playerStats)
+                    .filter(ps => ps.matches.length >= 1 && ps.matches.length < 5)
+                    .map(ps => {
+                        const avgK = ps.matches.reduce((s, m) => s + (m.kills || 0), 0) / ps.matches.length;
+                        const avgD = ps.matches.reduce((s, m) => s + (m.deaths || 0), 0) / ps.matches.length;
+                        return { name: ps.name, games: ps.matches.length, avgKills: avgK.toFixed(1), kd: avgD > 0 ? (avgK / avgD).toFixed(2) : avgK.toFixed(2) };
+                    }).sort((a, b) => parseFloat(b.kd) - parseFloat(a.kd));
+                
+                const roleHTML = [
+                    renderAwardCard('🎖️', 'Top Commander', topCmd, p => `<span class="highlight">${p.kd}</span> K/D · ${p.avgKills} avg kills · ${p.games} games`, 'cmd'),
+                    renderAwardCard('📣', 'Top SL', topByRole('SL'), p => `<span class="highlight">${p.kd}</span> K/D · ${p.avgKills} avg kills · ${p.games} games`, 'sl'),
+                    renderAwardCard('🛡️', 'Top Defence SL', topDefSL, p => `<span class="highlight">${p.kd}</span> K/D · ${p.avgDef} def pts · ${p.games} games`, 'defsl'),
+                    renderAwardCard('🏰', 'Top Defence Inf', topDefInf, p => `<span class="highlight">${p.kd}</span> K/D · ${p.games} games`, 'definf'),
+                    renderAwardCard('🎯', 'Top TC', topTC, p => `<span class="highlight">${p.kd}</span> K/D · ${p.avgKills} avg kills · ${p.games} games`, 'tc'),
+                    renderAwardCard('🔧', 'Top Tank Crew', topTankCrew, p => `<span class="highlight">${p.kd}</span> K/D · ${p.games} games`, 'tank'),
+                    renderAwardCard('🔭', 'Top Recon', topRecon, p => `<span class="highlight">${p.kd}</span> K/D · ${p.games} games`, 'recon'),
+                    renderAwardCard('📢', 'Squad Backbone', slBackbone, p => `<span class="highlight">${p.games}</span> games as SL/CMD`, 'backbone'),
+                    renderAwardCard('⭐', 'Rising Star', risingStars, p => `<span class="highlight">${p.kd}</span> K/D · ${p.avgKills} avg kills · ${p.games} games`, 'rising'),
+                ].join('');
+                
+                document.getElementById('roleLeaderCards').innerHTML = roleHTML;
+                
+                // === ACHIEVEMENTS ===
+                
+                // Top Support (avg support points)
+                const topSupport = Object.values(playerStats)
+                    .filter(ps => ps.matches.length >= 1)
+                    .map(ps => {
+                        const avg = ps.matches.reduce((s, m) => s + (m.support_pts || 0), 0) / ps.matches.length;
+                        return { name: ps.name, games: ps.matches.length, avgSupport: avg.toFixed(0) };
+                    }).sort((a, b) => parseFloat(b.avgSupport) - parseFloat(a.avgSupport));
+                
+                // Most Improved: compare first half vs second half of matches by date
+                const mostImproved = Object.values(playerStats)
+                    .filter(ps => ps.matches.length >= 4)
+                    .map(ps => {
+                        const sorted = [...ps.matches].sort((a, b) => (a.match_id || '').localeCompare(b.match_id || ''));
+                        const half = Math.floor(sorted.length / 2);
+                        const earlyKD = sorted.slice(0, half);
+                        const lateKD = sorted.slice(half);
+                        const earlyAvg = earlyKD.reduce((s, m) => s + (m.kills || 0), 0) / earlyKD.length;
+                        const lateAvg = lateKD.reduce((s, m) => s + (m.kills || 0), 0) / lateKD.length;
+                        const improvement = lateAvg - earlyAvg;
+                        return { name: ps.name, games: ps.matches.length, improvement: improvement.toFixed(1), earlyAvg: earlyAvg.toFixed(1), lateAvg: lateAvg.toFixed(1) };
+                    }).filter(p => parseFloat(p.improvement) > 0).sort((a, b) => parseFloat(b.improvement) - parseFloat(a.improvement));
+                
+                // Iron Man: longest attendance streak (consecutive matches)
+                const matchDates = matches.sort((a, b) => (a.date || '').localeCompare(b.date || ''));
+                const matchOrder = matchDates.map(m => m.match_id);
+                const ironMan = Object.values(playerStats)
+                    .filter(ps => ps.matches.length >= 2)
+                    .map(ps => {
+                        const playerMatchIds = new Set(ps.matches.map(m => m.match_id));
+                        let maxStreak = 0, streak = 0;
+                        matchOrder.forEach(mid => {
+                            if (playerMatchIds.has(mid)) { streak++; maxStreak = Math.max(maxStreak, streak); }
+                            else { streak = 0; }
+                        });
+                        return { name: ps.name, games: ps.matches.length, streak: maxStreak };
+                    }).sort((a, b) => b.streak - a.streak);
+                
+                // Most Versatile: most unique roles played
+                const versatile = Object.entries(playerRoles)
+                    .map(([key, pr]) => ({ name: pr.name, roles: Object.keys(pr.roles).length, roleList: Object.keys(pr.roles).join(', '), games: pr.matchIds.size }))
+                    .sort((a, b) => b.roles - a.roles);
+                
+                // The Reliable: best attendance with 10+ matches
+                const reliable = allPlayers
+                    .filter(p => (p.total_matches || 0) >= 10 && p.total_matches + (p.no_shows || 0) > 0)
+                    .map(p => {
+                        const pct = Math.round(p.total_matches / (p.total_matches + (p.no_shows || 0)) * 100);
+                        return { name: p.name, games: p.total_matches, pct };
+                    }).sort((a, b) => b.pct - a.pct || b.games - a.games);
+                
+                // The Veteran: most matches
+                const veteran = allPlayers
+                    .filter(p => (p.total_matches || 0) > 0)
+                    .map(p => ({ name: p.name, games: p.total_matches || 0 }))
+                    .sort((a, b) => b.games - a.games);
+                
+                // Node King: most games as Engineer/Support in node sections
+                const nodeKing = Object.entries(playerRoles)
+                    .map(([key, pr]) => {
+                        const nodeGames = Object.entries(pr.sections)
+                            .filter(([s]) => s.toLowerCase().includes('node'))
+                            .reduce((sum, [, c]) => sum + c, 0);
+                        return { name: pr.name, games: nodeGames };
+                    }).filter(p => p.games > 0).sort((a, b) => b.games - a.games);
+                
+                // The Anchor: most games on defence squads
+                const anchor = Object.entries(playerRoles)
+                    .map(([key, pr]) => {
+                        const defGames = Object.entries(pr.sections)
+                            .filter(([s]) => s.toLowerCase().includes('defen'))
+                            .reduce((sum, [, c]) => sum + c, 0)
+                            + (pr.roles['Defence'] || 0);
+                        return { name: pr.name, games: defGames };
+                    }).filter(p => p.games > 0).sort((a, b) => b.games - a.games);
+                
+                // Always There: same as Iron Man but current streak
+                const alwaysThere = Object.values(playerStats)
+                    .filter(ps => ps.matches.length >= 1)
+                    .map(ps => {
+                        const playerMatchIds = new Set(ps.matches.map(m => m.match_id));
+                        let streak = 0;
+                        for (let i = matchOrder.length - 1; i >= 0; i--) {
+                            if (playerMatchIds.has(matchOrder[i])) streak++;
+                            else break;
+                        }
+                        return { name: ps.name, games: ps.matches.length, streak };
+                    }).filter(p => p.streak > 0).sort((a, b) => b.streak - a.streak);
+                
+                // Team Player: highest avg support as non-SL
+                const teamPlayer = Object.entries(playerRoles).map(([key, pr]) => {
+                    const nonSLMatchIds = new Set();
+                    lineups.filter(l => (l.steam_id || l.player_name) === key && !l.role?.includes('SL') && l.role !== 'Commander')
+                        .forEach(l => nonSLMatchIds.add(l.match_id));
+                    if (nonSLMatchIds.size === 0) return null;
+                    const ps = playerStats[key];
+                    if (!ps) return null;
+                    const relevantMatches = ps.matches.filter(m => nonSLMatchIds.has(m.match_id));
+                    if (relevantMatches.length === 0) return null;
+                    const avgSup = relevantMatches.reduce((s, m) => s + (m.support_pts || 0), 0) / relevantMatches.length;
+                    return { name: pr.name, games: relevantMatches.length, avgSupport: avgSup.toFixed(0) };
+                }).filter(Boolean).sort((a, b) => parseFloat(b.avgSupport) - parseFloat(a.avgSupport));
+                
+                const achieveHTML = [
+                    renderAwardCard('💪', 'Top Support', topSupport, p => `<span class="highlight">${p.avgSupport}</span> avg support · ${p.games} games`, 'support'),
+                    renderAwardCard('📈', 'Most Improved', mostImproved, p => `<span class="highlight">+${p.improvement}</span> avg kills · ${p.earlyAvg} → ${p.lateAvg}`, 'improved'),
+                    renderAwardCard('🔥', 'Iron Man', ironMan, p => `<span class="highlight">${p.streak}</span> match streak · ${p.games} total`, 'ironman'),
+                    renderAwardCard('🎭', 'Most Versatile', versatile, p => `<span class="highlight">${p.roles}</span> roles · ${p.games} games`, 'versatile'),
+                    renderAwardCard('✅', 'The Reliable', reliable, p => `<span class="highlight">${p.pct}%</span> attendance · ${p.games} matches`, 'reliable'),
+                    renderAwardCard('👑', 'The Veteran', veteran, p => `<span class="highlight">${p.games}</span> matches played`, 'veteran'),
+                    renderAwardCard('⚡', 'Node King', nodeKing, p => `<span class="highlight">${p.games}</span> node assignments`, 'nodeking'),
+                    renderAwardCard('⚓', 'The Anchor', anchor, p => `<span class="highlight">${p.games}</span> defence assignments`, 'anchor'),
+                    renderAwardCard('🏅', 'Always There', alwaysThere, p => `<span class="highlight">${p.streak}</span> current streak · ${p.games} total`, 'always'),
+                    renderAwardCard('🤝', 'Team Player', teamPlayer, p => `<span class="highlight">${p.avgSupport}</span> avg support (non-SL) · ${p.games} games`, 'teamplayer'),
+                ].join('');
+                
+                document.getElementById('achievementCards').innerHTML = achieveHTML;
+                
             } catch (err) {
-                console.error('Error loading role stats:', err);
-                document.getElementById('roleDistribution').innerHTML = '<div class="text-center text-muted">Error loading role data</div>';
-                document.getElementById('playerRoleBody').innerHTML = '<tr><td colspan="11" class="text-center text-muted">Error loading role data</td></tr>';
+                console.error('Error loading award cards:', err);
+                document.getElementById('roleLeaderCards').innerHTML = '<div class="text-center text-muted" style="grid-column:1/-1">Error loading role leaders</div>';
+                document.getElementById('achievementCards').innerHTML = '<div class="text-center text-muted" style="grid-column:1/-1">Error loading achievements</div>';
             }
         }
         
