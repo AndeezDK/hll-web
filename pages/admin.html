@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Admin - HLL Tool v0.6.17</title>
+    <title>Admin - HLL Tool v0.6.18</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <link rel="stylesheet" href="../css/styles.css">
     <style>
@@ -81,7 +81,7 @@
         <!-- Header -->
         <div class="page-header">
             <h1 class="page-title">Admin</h1>
-            <span class="version-badge">v0.6.17</span>
+            <span class="version-badge">v0.6.18</span>
         </div>
 
         <div class="admin-grid">
@@ -116,9 +116,14 @@
                     <input type="file" id="playerFileInput" accept=".csv">
                 </div>
                 <div class="import-preview hidden" id="playerImportPreview"></div>
-                <button class="btn btn-primary mt-md hidden" id="confirmPlayerImport" onclick="confirmPlayerImport()">
-                    Import Players
-                </button>
+                <div class="mt-md" style="display: flex; gap: 8px;">
+                    <button class="btn btn-primary hidden" id="confirmPlayerImport" onclick="confirmPlayerImport()">
+                        Import Players
+                    </button>
+                    <button class="btn btn-secondary hidden" id="clearPlayerImport" onclick="clearPlayerImport()">
+                        ✕ Clear
+                    </button>
+                </div>
             </div>
 
             <!-- Import Match -->
@@ -384,9 +389,20 @@
                 `;
                 
                 document.getElementById('confirmPlayerImport').classList.remove('hidden');
+                document.getElementById('clearPlayerImport').classList.remove('hidden');
             };
             
             reader.readAsText(file);
+        }
+        
+        function clearPlayerImport() {
+            pendingPlayerImport = [];
+            document.getElementById('playerImportPreview').classList.add('hidden');
+            document.getElementById('playerImportPreview').innerHTML = '';
+            document.getElementById('confirmPlayerImport').classList.add('hidden');
+            document.getElementById('clearPlayerImport').classList.add('hidden');
+            document.getElementById('playerFileInput').value = '';
+            HLL.showAlert('Import cleared', 'success');
         }
         
         function cleanPlayerName(name) {
@@ -422,6 +438,7 @@
                 pendingPlayerImport = [];
                 document.getElementById('playerImportPreview').classList.add('hidden');
                 document.getElementById('confirmPlayerImport').classList.add('hidden');
+                document.getElementById('clearPlayerImport').classList.add('hidden');
                 document.getElementById('playerFileInput').value = '';
                 
             } catch (err) {
