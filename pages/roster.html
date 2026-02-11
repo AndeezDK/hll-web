@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Roster - HLL Tool v0.6.5</title>
+    <title>Roster - HLL Tool v0.6.6</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <link rel="stylesheet" href="../css/styles.css">
     <style>
@@ -26,6 +26,20 @@
         }
         .pref-tag.first { border-color: rgba(245, 166, 35, 0.4); color: var(--accent-orange); }
         .pref-sep { color: var(--text-muted); font-size: 10px; }
+
+        /* Note & flag indicators */
+        .note-icon { font-size: 10px; margin-left: 4px; cursor: help; }
+        .flag-icon { font-size: 9px; margin-right: 3px; }
+
+        /* Flag selector in modal */
+        .flag-selector { display: flex; gap: 6px; }
+        .flag-btn {
+            font-size: 18px; padding: 4px 10px; border-radius: 6px; cursor: pointer;
+            background: transparent; border: 2px solid var(--border-color);
+            opacity: 0.4; transition: all 0.15s;
+        }
+        .flag-btn:hover { opacity: 0.7; }
+        .flag-btn.active { opacity: 1; border-color: var(--accent-orange); background: rgba(245, 166, 35, 0.1); }
     </style>
 </head>
 <body>
@@ -52,7 +66,7 @@
         <!-- Header -->
         <div class="page-header">
             <h1 class="page-title">Roster</h1>
-            <span class="version-badge">v0.6.5</span>
+            <span class="version-badge">v0.6.6</span>
         </div>
 
         <!-- Stats Summary -->
@@ -103,7 +117,7 @@
                             <th class="sortable" data-column="name">Player</th>
                             <th class="sortable" data-column="team">Team</th>
                             <th>Played</th>
-                            <th>Prefers</th>
+                            <th>Preferred</th>
                             <th class="sortable" data-column="total_matches">Matches</th>
                             <th class="sortable" data-column="no_shows">No-Shows</th>
                             <th class="sortable" data-column="attendance_pct">Attend%</th>
@@ -359,10 +373,15 @@
             const tempBadge = p.steam_id.startsWith('TEMP-') 
                 ? ' <span style="color: #f5a623; font-size: 11px;" title="No SteamID — will pair on match import">⚠️ No SteamID</span>' 
                 : '';
+            const noteIcon = p.notes ? '<span class="note-icon" title="' + (p.notes || '').replace(/"/g, '&quot;') + '">📝</span>' : '';
+            const flag = p.flag || 'neutral';
+            const flagIcon = flag === 'green' ? '<span class="flag-icon flag-green" title="Green flag">🟢</span>'
+                : flag === 'red' ? '<span class="flag-icon flag-red" title="Red flag">🔴</span>'
+                : '';
             return `
                 <tr data-steam-id="${p.steam_id}">
                     <td>
-                        <strong>${HLL.formatPlayerName(p.name, p.team)}</strong>${tempBadge}
+                        ${flagIcon}<strong>${HLL.formatPlayerName(p.name, p.team)}</strong>${noteIcon}${tempBadge}
                     </td>
                     <td>
                         <span class="badge ${HLL.getTeamBadgeClass(p.team)}">${p.team}</span>
@@ -421,21 +440,21 @@
                         </select>
                     </div>
                     <div class="form-group">
-                        <label class="form-label">Prefers — 1st Choice</label>
+                        <label class="form-label">Preferred — 1st Choice</label>
                         <select class="form-select" id="editPrimaryRole">
                             <option value="">None</option>
                             ${HLL.roles.map(r => `<option value="${r}" ${player.primary_role === r ? 'selected' : ''}>${r}</option>`).join('')}
                         </select>
                     </div>
                     <div class="form-group">
-                        <label class="form-label">Prefers — 2nd Choice</label>
+                        <label class="form-label">Preferred — 2nd Choice</label>
                         <select class="form-select" id="editSecondaryRole">
                             <option value="">None</option>
                             ${HLL.roles.map(r => `<option value="${r}" ${player.secondary_role === r ? 'selected' : ''}>${r}</option>`).join('')}
                         </select>
                     </div>
                     <div class="form-group">
-                        <label class="form-label">Prefers — 3rd Choice</label>
+                        <label class="form-label">Preferred — 3rd Choice</label>
                         <select class="form-select" id="editTertiaryRole">
                             <option value="">None</option>
                             ${HLL.roles.map(r => `<option value="${r}" ${player.tertiary_role === r ? 'selected' : ''}>${r}</option>`).join('')}
@@ -444,6 +463,14 @@
                     <div class="form-group">
                         <label class="form-label">Notes</label>
                         <input type="text" class="form-input" id="editNotes" value="${player.notes || ''}">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Flag</label>
+                        <div class="flag-selector" id="flagSelector">
+                            <button type="button" class="flag-btn ${(player.flag || 'neutral') === 'green' ? 'active' : ''}" data-flag="green" title="Green flag">🟢</button>
+                            <button type="button" class="flag-btn ${(player.flag || 'neutral') === 'neutral' ? 'active' : ''}" data-flag="neutral" title="Neutral">⚪</button>
+                            <button type="button" class="flag-btn ${(player.flag || 'neutral') === 'red' ? 'active' : ''}" data-flag="red" title="Red flag">🔴</button>
+                        </div>
                     </div>
                 </div>
                 
@@ -497,6 +524,14 @@
             `;
             
             document.getElementById('playerModal').classList.add('active');
+            
+            // Flag selector listeners
+            document.querySelectorAll('.flag-btn').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    document.querySelectorAll('.flag-btn').forEach(b => b.classList.remove('active'));
+                    btn.classList.add('active');
+                });
+            });
         }
         
         function closePlayerModal() {
@@ -516,7 +551,8 @@
                 primary_role: document.getElementById('editPrimaryRole').value || null,
                 secondary_role: document.getElementById('editSecondaryRole').value || null,
                 tertiary_role: document.getElementById('editTertiaryRole').value || null,
-                notes: document.getElementById('editNotes').value || null
+                notes: document.getElementById('editNotes').value || null,
+                flag: document.querySelector('.flag-btn.active')?.dataset.flag || 'neutral'
             };
             
             HLL.showLoading('Saving...');
@@ -595,7 +631,7 @@
         // ============================================================================
         
         function exportRoster() {
-            const headers = ['Steam ID', 'Name', 'Team', 'Prefers 1st', 'Prefers 2nd', 'Prefers 3rd', 
+            const headers = ['Steam ID', 'Name', 'Team', 'Preferred 1st', 'Preferred 2nd', 'Preferred 3rd', 
                            'Matches', 'No-Shows', 'Attendance%', 'Total Kills', 'Total Deaths', 'K/D',
                            'Avg Kills', 'Most Kills', 'Avg CE', 'Avg Support', 'MVP Count', 'First Seen', 'Last Seen', 'Notes'];
             
