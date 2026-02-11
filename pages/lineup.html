@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Lineups - HLL Tool v0.8.1</title>
+    <title>Lineups - HLL Tool v0.8.3</title>
     <!-- Supabase JS Client -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <style>
@@ -164,6 +164,29 @@
         .match-field input:focus, .match-field select:focus { outline: none; border-color: #f5a623; }
         .vs-display { display: flex; align-items: center; gap: 6px; }
         .vs-display select, .vs-display input { width: 85px; }
+        
+        /* Enemy autocomplete */
+        .enemy-autocomplete-wrapper { position: relative; }
+        .enemy-autocomplete-wrapper input { width: 85px; }
+        .enemy-autocomplete {
+            display: none; position: absolute; top: 100%; left: 0; z-index: 500;
+            background: #1c2128; border: 1px solid #f5a623; border-radius: 6px;
+            max-height: 200px; overflow-y: auto; min-width: 180px;
+            box-shadow: 0 4px 16px rgba(0,0,0,0.4); margin-top: 2px;
+        }
+        .enemy-autocomplete.active { display: block; }
+        .enemy-ac-item {
+            padding: 6px 10px; cursor: pointer; font-size: 11px;
+            display: flex; justify-content: space-between; align-items: center;
+            transition: background 0.1s;
+        }
+        .enemy-ac-item:hover { background: #30363d; }
+        .enemy-ac-item .ac-tag { font-weight: 600; color: #e7e9ea; }
+        .enemy-ac-item .ac-record { color: #8b949e; font-size: 9px; }
+        .enemy-ac-item .ac-record .ac-win { color: #3fb950; }
+        .enemy-ac-item .ac-record .ac-loss { color: #f85149; }
+        
+
         .vs-badge { font-size: 11px; color: #8b949e; font-weight: 600; }
         .status-badge { padding: 3px 10px; border-radius: 12px; font-size: 9px; font-weight: 600; text-transform: uppercase; }
         .status-badge.draft { background: #388bfd33; color: #388bfd; }
@@ -184,7 +207,8 @@
             pointer-events: auto;
         }
         body.lineup-locked .add-slot-btn,
-        body.lineup-locked .remove-slot-btn {
+        body.lineup-locked .section-header-btns,
+        body.lineup-locked .slot-clear {
             display: none !important;
         }
         body.lineup-locked .match-info select,
@@ -252,24 +276,32 @@
             background: #0f1419; border: 1px solid #30363d; border-radius: 3px;
             padding: 3px 5px; margin-bottom: 2px;
             display: flex; align-items: center; gap: 4px;
-            cursor: pointer; font-size: 10px; transition: all 0.15s;
+            font-size: 10px; transition: all 0.15s;
         }
         .player-slot:hover { border-color: #f5a623; background: #1c2128; }
+        .player-slot .slot-name { cursor: pointer; }
+        .player-slot .slot-role { cursor: pointer; }
         .player-slot.filled { border-color: #238636; background: #0d1117; }
         .player-slot.no-show { border-color: #f85149; background: #f8514922; }
         .player-slot.no-show .slot-name { text-decoration: line-through; color: #f85149; }
         .player-slot .here-check { width: 14px; height: 14px; cursor: pointer; accent-color: #3fb950; }
         .slot-role { color: #8b949e; min-width: 32px; font-size: 9px; }
         .slot-name { flex: 1; color: #e7e9ea; font-size: 10px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .slot-name:hover { color: #f5a623; }
         .slot-name.empty { color: #484f58; font-style: italic; }
+        .slot-name.empty:hover { color: #6e7681; }
         
         /* Infantry slots */
         .infantry-slot {
-            display: grid; grid-template-columns: 14px 58px 1fr 58px 18px 18px; gap: 3px;
+            display: grid; grid-template-columns: 14px 58px 1fr 58px 16px; gap: 3px;
             align-items: center; background: #0f1419; border: 1px solid #30363d;
             border-radius: 3px; padding: 3px 5px; margin-bottom: 2px;
-            cursor: pointer; font-size: 10px; transition: all 0.15s;
+            font-size: 10px; transition: all 0.15s;
         }
+        .infantry-slot .slot-name { cursor: pointer; }
+        .slot-clear { display: none; background: none; border: none; color: #484f58; cursor: pointer; font-size: 12px; padding: 0; line-height: 1; transition: color 0.15s; }
+        .slot-clear:hover { color: #f85149; }
+        .filled .slot-clear { display: block; }
         .infantry-slot:hover { border-color: #f5a623; background: #1c2128; }
         .infantry-slot.filled { border-color: #238636; background: #0d1117; }
         .infantry-slot.focused { outline: 1px solid #58a6ff; outline-offset: -1px; }
@@ -281,24 +313,15 @@
             color: #8b949e; font-size: 9px; padding: 2px; cursor: pointer;
         }
         .infantry-slot select:focus { outline: none; border-color: #f5a623; }
-        .add-slot-inline-btn, .remove-slot-btn {
-            background: transparent; border: none;
-            font-size: 14px; cursor: pointer; padding: 2px 4px; line-height: 1;
-            transition: color 0.15s; font-weight: 700;
-            min-width: 22px; text-align: center;
-        }
-        .add-slot-inline-btn { color: #3fb950; }
-        .add-slot-inline-btn:hover { color: #56d364; }
-        .remove-slot-btn { color: #f85149; }
-        .remove-slot-btn:hover { color: #ff7b72; }
         
         /* Node slots */
         .node-slot {
-            display: grid; grid-template-columns: 14px 32px 1fr 20px; gap: 3px;
+            display: grid; grid-template-columns: 14px 32px 1fr 20px 16px; gap: 3px;
             align-items: center; background: #0f1419; border: 1px solid #30363d;
             border-radius: 3px; padding: 3px 5px; margin-bottom: 2px;
-            cursor: pointer; font-size: 10px; transition: all 0.15s;
+            font-size: 10px; transition: all 0.15s;
         }
+        .node-slot .slot-name { cursor: pointer; }
         .node-slot:hover { border-color: #f5a623; background: #1c2128; }
         .node-slot.filled { border-color: #238636; background: #0d1117; }
         .node-slot.no-show { border-color: #f85149; background: #f8514922; }
@@ -487,23 +510,19 @@
         .section-header {
             cursor: pointer;
             user-select: none;
-            position: relative;
+            display: flex;
+            align-items: center;
+            gap: 2px;
         }
-        
-        .section-header::after {
-            content: '▼';
-            position: absolute;
-            right: 8px;
-            font-size: 8px;
-            transition: transform 0.2s;
-        }
-        
-        .section.collapsed .section-header::after {
-            transform: rotate(-90deg);
-        }
+        .section-header-title { flex: 1; }
+        .section-header-btns { display: flex; gap: 1px; }
+        .section-header-btns button { background: rgba(0,0,0,0.3); border: none; color: inherit; cursor: pointer; font-size: 13px; font-weight: 700; width: 18px; height: 18px; border-radius: 3px; display: flex; align-items: center; justify-content: center; line-height: 1; opacity: 0.7; transition: opacity 0.15s; }
+        .section-header-btns button:hover { opacity: 1; background: rgba(0,0,0,0.5); }
+        .section-chevron { font-size: 8px; margin-left: 2px; transition: transform 0.2s; width: 14px; text-align: center; }
+        .section.collapsed .section-chevron { transform: rotate(-90deg); }
         
         .section.collapsed .section-content,
-        .section.collapsed .add-slot-btn {
+        .section.collapsed .section-header-btns {
             display: none;
         }
         
@@ -819,7 +838,7 @@
     
     <div class="page-header">
         <h1 class="page-title">Lineups</h1>
-        <span class="version-badge">v0.8.1</span>
+        <span class="version-badge">v0.8.3</span>
         <select class="team-selector" id="teamSelector" onchange="switchTeam(this.value)">
             <option value="">Loading teams...</option>
         </select>
@@ -839,7 +858,10 @@
         <div class="match-field vs-display">
             <select><option>Circle</option><option>DKB</option><option>Unity</option></select>
             <span class="vs-badge">vs</span>
-            <input type="text" value="Oktogon" placeholder="Enemy...">
+            <div class="enemy-autocomplete-wrapper">
+                <input type="text" id="enemyTeamInput" value="Oktogon" placeholder="Enemy..." autocomplete="off">
+                <div class="enemy-autocomplete" id="enemyAutocomplete"></div>
+            </div>
         </div>
         <div class="match-field">
             <label>Map</label>
@@ -887,92 +909,86 @@
     <div class="lineup-grid">
         <!-- COLUMN 1 -->
         <div class="column active-column">
-            <div class="section"><div class="section-header gray">Commander</div><div class="section-content">
-                <div class="player-slot" data-role="Commander" data-cell="cmd-1"><input type="checkbox" class="here-check"><span class="slot-name empty">Empty</span></div>
+            <div class="section"><div class="section-header gray"><span class="section-header-title">Commander</span><span class="section-chevron">▼</span></div><div class="section-content">
+                <div class="player-slot" data-role="Commander" data-cell="cmd-1"><input type="checkbox" class="here-check"><span class="slot-name empty">Empty</span><button class="slot-clear" onclick="clearThisSlot(this)" title="Clear player">✕</button></div>
             </div></div>
-            <div class="section"><div class="section-header gray">Artillery (TC)</div><div class="section-content">
-                <div class="player-slot" data-role="Artillery" data-cell="art-1"><input type="checkbox" class="here-check"><span class="slot-name empty">Empty</span></div>
+            <div class="section"><div class="section-header gray"><span class="section-header-title">Artillery (TC)</span><span class="section-chevron">▼</span></div><div class="section-content">
+                <div class="player-slot" data-role="Artillery" data-cell="art-1"><input type="checkbox" class="here-check"><span class="slot-name empty">Empty</span><button class="slot-clear" onclick="clearThisSlot(this)" title="Clear player">✕</button></div>
             </div></div>
-            <div class="section"><div class="section-header gray">Streamer</div><div class="section-content">
-                <div class="player-slot" data-role="Streamer" data-counts-sl="true" data-cell="str-1"><input type="checkbox" class="here-check"><span class="slot-name empty">Empty</span></div>
+            <div class="section"><div class="section-header gray"><span class="section-header-title">Streamer</span><span class="section-chevron">▼</span></div><div class="section-content">
+                <div class="player-slot" data-role="Streamer" data-counts-sl="true" data-cell="str-1"><input type="checkbox" class="here-check"><span class="slot-name empty">Empty</span><button class="slot-clear" onclick="clearThisSlot(this)" title="Clear player">✕</button></div>
             </div></div>
-            <div class="section"><div class="section-header blue">Tank 1</div><div class="section-content">
-                <div class="player-slot" data-cell="t1-tc"><input type="checkbox" class="here-check"><span class="slot-role">TC</span><span class="slot-name empty">Empty</span></div>
-                <div class="player-slot" data-cell="t1-gun"><input type="checkbox" class="here-check"><span class="slot-role">Gunner</span><span class="slot-name empty">Empty</span></div>
-                <div class="player-slot" data-cell="t1-drv"><input type="checkbox" class="here-check"><span class="slot-role">Driver</span><span class="slot-name empty">Empty</span></div>
+            <div class="section"><div class="section-header blue"><span class="section-header-title">Tank 1</span><span class="section-chevron">▼</span></div><div class="section-content">
+                <div class="player-slot" data-cell="t1-tc"><input type="checkbox" class="here-check"><span class="slot-role">TC</span><span class="slot-name empty">Empty</span><button class="slot-clear" onclick="clearThisSlot(this)" title="Clear player">✕</button></div>
+                <div class="player-slot" data-cell="t1-gun"><input type="checkbox" class="here-check"><span class="slot-role">Gunner</span><span class="slot-name empty">Empty</span><button class="slot-clear" onclick="clearThisSlot(this)" title="Clear player">✕</button></div>
+                <div class="player-slot" data-cell="t1-drv"><input type="checkbox" class="here-check"><span class="slot-role">Driver</span><span class="slot-name empty">Empty</span><button class="slot-clear" onclick="clearThisSlot(this)" title="Clear player">✕</button></div>
             </div></div>
-            <div class="section"><div class="section-header blue">Tank 2</div><div class="section-content">
-                <div class="player-slot" data-cell="t2-tc"><input type="checkbox" class="here-check"><span class="slot-role">TC</span><span class="slot-name empty">Empty</span></div>
-                <div class="player-slot" data-cell="t2-gun"><input type="checkbox" class="here-check"><span class="slot-role">Gunner</span><span class="slot-name empty">Empty</span></div>
-                <div class="player-slot" data-cell="t2-drv"><input type="checkbox" class="here-check"><span class="slot-role">Driver</span><span class="slot-name empty">Empty</span></div>
+            <div class="section"><div class="section-header blue"><span class="section-header-title">Tank 2</span><span class="section-chevron">▼</span></div><div class="section-content">
+                <div class="player-slot" data-cell="t2-tc"><input type="checkbox" class="here-check"><span class="slot-role">TC</span><span class="slot-name empty">Empty</span><button class="slot-clear" onclick="clearThisSlot(this)" title="Clear player">✕</button></div>
+                <div class="player-slot" data-cell="t2-gun"><input type="checkbox" class="here-check"><span class="slot-role">Gunner</span><span class="slot-name empty">Empty</span><button class="slot-clear" onclick="clearThisSlot(this)" title="Clear player">✕</button></div>
+                <div class="player-slot" data-cell="t2-drv"><input type="checkbox" class="here-check"><span class="slot-role">Driver</span><span class="slot-name empty">Empty</span><button class="slot-clear" onclick="clearThisSlot(this)" title="Clear player">✕</button></div>
             </div></div>
-            <div class="section"><div class="section-header blue">Tank 3</div><div class="section-content">
-                <div class="player-slot" data-cell="t3-tc"><input type="checkbox" class="here-check"><span class="slot-role">TC</span><span class="slot-name empty">Empty</span></div>
-                <div class="player-slot" data-cell="t3-gun"><input type="checkbox" class="here-check"><span class="slot-role">Gunner</span><span class="slot-name empty">Empty</span></div>
-                <div class="player-slot" data-cell="t3-drv"><input type="checkbox" class="here-check"><span class="slot-role">Driver</span><span class="slot-name empty">Empty</span></div>
+            <div class="section"><div class="section-header blue"><span class="section-header-title">Tank 3</span><span class="section-chevron">▼</span></div><div class="section-content">
+                <div class="player-slot" data-cell="t3-tc"><input type="checkbox" class="here-check"><span class="slot-role">TC</span><span class="slot-name empty">Empty</span><button class="slot-clear" onclick="clearThisSlot(this)" title="Clear player">✕</button></div>
+                <div class="player-slot" data-cell="t3-gun"><input type="checkbox" class="here-check"><span class="slot-role">Gunner</span><span class="slot-name empty">Empty</span><button class="slot-clear" onclick="clearThisSlot(this)" title="Clear player">✕</button></div>
+                <div class="player-slot" data-cell="t3-drv"><input type="checkbox" class="here-check"><span class="slot-role">Driver</span><span class="slot-name empty">Empty</span><button class="slot-clear" onclick="clearThisSlot(this)" title="Clear player">✕</button></div>
             </div></div>
-            <div class="section"><div class="section-header blue">Tank 4</div><div class="section-content">
-                <div class="player-slot" data-cell="t4-tc"><input type="checkbox" class="here-check"><span class="slot-role">TC</span><span class="slot-name empty">Empty</span></div>
-                <div class="player-slot" data-cell="t4-gun"><input type="checkbox" class="here-check"><span class="slot-role">Gunner</span><span class="slot-name empty">Empty</span></div>
-                <div class="player-slot" data-cell="t4-drv"><input type="checkbox" class="here-check"><span class="slot-role">Driver</span><span class="slot-name empty">Empty</span></div>
+            <div class="section"><div class="section-header blue"><span class="section-header-title">Tank 4</span><span class="section-chevron">▼</span></div><div class="section-content">
+                <div class="player-slot" data-cell="t4-tc"><input type="checkbox" class="here-check"><span class="slot-role">TC</span><span class="slot-name empty">Empty</span><button class="slot-clear" onclick="clearThisSlot(this)" title="Clear player">✕</button></div>
+                <div class="player-slot" data-cell="t4-gun"><input type="checkbox" class="here-check"><span class="slot-role">Gunner</span><span class="slot-name empty">Empty</span><button class="slot-clear" onclick="clearThisSlot(this)" title="Clear player">✕</button></div>
+                <div class="player-slot" data-cell="t4-drv"><input type="checkbox" class="here-check"><span class="slot-role">Driver</span><span class="slot-name empty">Empty</span><button class="slot-clear" onclick="clearThisSlot(this)" title="Clear player">✕</button></div>
             </div></div>
-            <div class="section"><div class="section-header gray">Recon 1</div><div class="section-content">
-                <div class="player-slot" data-cell="r1-spot"><input type="checkbox" class="here-check"><span class="slot-role">Spotter</span><span class="slot-name empty">Empty</span></div>
-                <div class="player-slot" data-cell="r1-snip"><input type="checkbox" class="here-check"><span class="slot-role">Sniper</span><span class="slot-name empty">Empty</span></div>
+            <div class="section"><div class="section-header gray"><span class="section-header-title">Recon 1</span><span class="section-chevron">▼</span></div><div class="section-content">
+                <div class="player-slot" data-cell="r1-spot"><input type="checkbox" class="here-check"><span class="slot-role">Spotter</span><span class="slot-name empty">Empty</span><button class="slot-clear" onclick="clearThisSlot(this)" title="Clear player">✕</button></div>
+                <div class="player-slot" data-cell="r1-snip"><input type="checkbox" class="here-check"><span class="slot-role">Sniper</span><span class="slot-name empty">Empty</span><button class="slot-clear" onclick="clearThisSlot(this)" title="Clear player">✕</button></div>
             </div></div>
-            <div class="section"><div class="section-header gray">Recon 2</div><div class="section-content">
-                <div class="player-slot" data-cell="r2-spot"><input type="checkbox" class="here-check"><span class="slot-role">Spotter</span><span class="slot-name empty">Empty</span></div>
-                <div class="player-slot" data-cell="r2-snip"><input type="checkbox" class="here-check"><span class="slot-role">Sniper</span><span class="slot-name empty">Empty</span></div>
+            <div class="section"><div class="section-header gray"><span class="section-header-title">Recon 2</span><span class="section-chevron">▼</span></div><div class="section-content">
+                <div class="player-slot" data-cell="r2-spot"><input type="checkbox" class="here-check"><span class="slot-role">Spotter</span><span class="slot-name empty">Empty</span><button class="slot-clear" onclick="clearThisSlot(this)" title="Clear player">✕</button></div>
+                <div class="player-slot" data-cell="r2-snip"><input type="checkbox" class="here-check"><span class="slot-role">Sniper</span><span class="slot-name empty">Empty</span><button class="slot-clear" onclick="clearThisSlot(this)" title="Clear player">✕</button></div>
             </div></div>
         </div>
         
         <!-- COLUMN 2 -->
         <div class="column">
-            <div class="section"><div class="section-header dark-red">North/West Squad</div><div class="section-content" id="northWestSlots"></div>
-                <button class="add-slot-btn" onclick="addInfantrySlot('northWestSlots',10)">+ Add (max 10)</button></div>
-            <div class="section"><div class="section-header orange">Defence</div><div class="section-content" id="defenceSlots"></div>
-                <button class="add-slot-btn" onclick="addInfantrySlot('defenceSlots',10)">+ Add (max 10)</button></div>
-            <div class="section"><div class="section-header dark-red">Nodes North</div><div class="section-content">
-                <div class="node-slot" data-cell="nn-eng"><input type="checkbox" class="here-check"><span class="slot-role">Eng</span><span class="slot-name empty">Empty</span><input type="checkbox" class="sl-check"></div>
-                <div class="node-slot" data-cell="nn-s1"><input type="checkbox" class="here-check"><span class="slot-role">Supp</span><span class="slot-name empty">Empty</span><span></span></div>
-                <div class="node-slot" data-cell="nn-s2"><input type="checkbox" class="here-check"><span class="slot-role">Supp</span><span class="slot-name empty">Empty</span><span></span></div>
-                <div class="node-slot" data-cell="nn-s3"><input type="checkbox" class="here-check"><span class="slot-role">Supp</span><span class="slot-name empty">Empty</span><span></span></div>
+            <div class="section"><div class="section-header dark-red"><span class="section-header-title">North/West Squad</span><span class="section-header-btns"><button onclick="addInfantrySlot('northWestSlots',10)" title="Add row">+</button><button onclick="removeLastSlot('northWestSlots')" title="Remove row">−</button></span><span class="section-chevron">▼</span></div><div class="section-content" id="northWestSlots"></div></div>
+            <div class="section"><div class="section-header orange"><span class="section-header-title">Defence</span><span class="section-header-btns"><button onclick="addInfantrySlot('defenceSlots',10)" title="Add row">+</button><button onclick="removeLastSlot('defenceSlots')" title="Remove row">−</button></span><span class="section-chevron">▼</span></div><div class="section-content" id="defenceSlots"></div></div>
+            <div class="section"><div class="section-header dark-red"><span class="section-header-title">Nodes North</span><span class="section-chevron">▼</span></div><div class="section-content">
+                <div class="node-slot" data-cell="nn-eng"><input type="checkbox" class="here-check"><span class="slot-role">Eng</span><span class="slot-name empty">Empty</span><span></span><button class="slot-clear" onclick="clearThisSlot(this)" title="Clear player">✕</button></div>
+                <div class="node-slot" data-cell="nn-s1"><input type="checkbox" class="here-check"><span class="slot-role">Supp</span><span class="slot-name empty">Empty</span><span></span><button class="slot-clear" onclick="clearThisSlot(this)" title="Clear player">✕</button></div>
+                <div class="node-slot" data-cell="nn-s2"><input type="checkbox" class="here-check"><span class="slot-role">Supp</span><span class="slot-name empty">Empty</span><span></span><button class="slot-clear" onclick="clearThisSlot(this)" title="Clear player">✕</button></div>
+                <div class="node-slot" data-cell="nn-s3"><input type="checkbox" class="here-check"><span class="slot-role">Supp</span><span class="slot-name empty">Empty</span><span></span><button class="slot-clear" onclick="clearThisSlot(this)" title="Clear player">✕</button></div>
             </div></div>
         </div>
         
         <!-- COLUMN 3 -->
         <div class="column">
-            <div class="section"><div class="section-header bright-green">Meat Grind</div><div class="section-content" id="meatGrindSlots"></div>
-                <button class="add-slot-btn" onclick="addInfantrySlot('meatGrindSlots',10)">+ Add (max 10)</button></div>
-            <div class="section"><div class="section-header gray">Flex</div><div class="section-content" id="flexSlots"></div>
-                <button class="add-slot-btn" onclick="addInfantrySlot('flexSlots',10)">+ Add (max 10)</button></div>
-            <div class="section"><div class="section-header bright-green">Nodes Middle</div><div class="section-content">
-                <div class="node-slot" data-cell="nm-eng"><input type="checkbox" class="here-check"><span class="slot-role">Eng</span><span class="slot-name empty">Empty</span><input type="checkbox" class="sl-check"></div>
-                <div class="node-slot" data-cell="nm-s1"><input type="checkbox" class="here-check"><span class="slot-role">Supp</span><span class="slot-name empty">Empty</span><span></span></div>
-                <div class="node-slot" data-cell="nm-s2"><input type="checkbox" class="here-check"><span class="slot-role">Supp</span><span class="slot-name empty">Empty</span><span></span></div>
-                <div class="node-slot" data-cell="nm-s3"><input type="checkbox" class="here-check"><span class="slot-role">Supp</span><span class="slot-name empty">Empty</span><span></span></div>
+            <div class="section"><div class="section-header bright-green"><span class="section-header-title">Meat Grind</span><span class="section-header-btns"><button onclick="addInfantrySlot('meatGrindSlots',10)" title="Add row">+</button><button onclick="removeLastSlot('meatGrindSlots')" title="Remove row">−</button></span><span class="section-chevron">▼</span></div><div class="section-content" id="meatGrindSlots"></div></div>
+            <div class="section"><div class="section-header gray"><span class="section-header-title">Flex</span><span class="section-header-btns"><button onclick="addInfantrySlot('flexSlots',10)" title="Add row">+</button><button onclick="removeLastSlot('flexSlots')" title="Remove row">−</button></span><span class="section-chevron">▼</span></div><div class="section-content" id="flexSlots"></div></div>
+            <div class="section"><div class="section-header bright-green"><span class="section-header-title">Nodes Middle</span><span class="section-chevron">▼</span></div><div class="section-content">
+                <div class="node-slot" data-cell="nm-eng"><input type="checkbox" class="here-check"><span class="slot-role">Eng</span><span class="slot-name empty">Empty</span><span></span><button class="slot-clear" onclick="clearThisSlot(this)" title="Clear player">✕</button></div>
+                <div class="node-slot" data-cell="nm-s1"><input type="checkbox" class="here-check"><span class="slot-role">Supp</span><span class="slot-name empty">Empty</span><span></span><button class="slot-clear" onclick="clearThisSlot(this)" title="Clear player">✕</button></div>
+                <div class="node-slot" data-cell="nm-s2"><input type="checkbox" class="here-check"><span class="slot-role">Supp</span><span class="slot-name empty">Empty</span><span></span><button class="slot-clear" onclick="clearThisSlot(this)" title="Clear player">✕</button></div>
+                <div class="node-slot" data-cell="nm-s3"><input type="checkbox" class="here-check"><span class="slot-role">Supp</span><span class="slot-name empty">Empty</span><span></span><button class="slot-clear" onclick="clearThisSlot(this)" title="Clear player">✕</button></div>
             </div></div>
         </div>
         
         <!-- COLUMN 4 -->
         <div class="column">
-            <div class="section"><div class="section-header blue">South/East Squad</div><div class="section-content" id="southEastSlots"></div>
-                <button class="add-slot-btn" onclick="addInfantrySlot('southEastSlots',10)">+ Add (max 10)</button></div>
-            <div class="section"><div class="section-header yellow">Infiltration</div><div class="section-content" id="infiltrationSlots"></div>
-                <button class="add-slot-btn" onclick="addInfantrySlot('infiltrationSlots',10)">+ Add (max 10)</button></div>
-            <div class="section"><div class="section-header blue">Nodes South</div><div class="section-content">
-                <div class="node-slot" data-cell="ns-eng"><input type="checkbox" class="here-check"><span class="slot-role">Eng</span><span class="slot-name empty">Empty</span><input type="checkbox" class="sl-check"></div>
-                <div class="node-slot" data-cell="ns-s1"><input type="checkbox" class="here-check"><span class="slot-role">Supp</span><span class="slot-name empty">Empty</span><input type="checkbox" class="sl-check"></div>
-                <div class="node-slot" data-cell="ns-s2"><input type="checkbox" class="here-check"><span class="slot-role">Supp</span><span class="slot-name empty">Empty</span><span></span></div>
-                <div class="node-slot" data-cell="ns-s3"><input type="checkbox" class="here-check"><span class="slot-role">Supp</span><span class="slot-name empty">Empty</span><span></span></div>
+            <div class="section"><div class="section-header blue"><span class="section-header-title">South/East Squad</span><span class="section-header-btns"><button onclick="addInfantrySlot('southEastSlots',10)" title="Add row">+</button><button onclick="removeLastSlot('southEastSlots')" title="Remove row">−</button></span><span class="section-chevron">▼</span></div><div class="section-content" id="southEastSlots"></div></div>
+            <div class="section"><div class="section-header yellow"><span class="section-header-title">Infiltration</span><span class="section-header-btns"><button onclick="addInfantrySlot('infiltrationSlots',10)" title="Add row">+</button><button onclick="removeLastSlot('infiltrationSlots')" title="Remove row">−</button></span><span class="section-chevron">▼</span></div><div class="section-content" id="infiltrationSlots"></div></div>
+            <div class="section"><div class="section-header blue"><span class="section-header-title">Nodes South</span><span class="section-chevron">▼</span></div><div class="section-content">
+                <div class="node-slot" data-cell="ns-eng"><input type="checkbox" class="here-check"><span class="slot-role">Eng</span><span class="slot-name empty">Empty</span><span></span><button class="slot-clear" onclick="clearThisSlot(this)" title="Clear player">✕</button></div>
+                <div class="node-slot" data-cell="ns-s1"><input type="checkbox" class="here-check"><span class="slot-role">Supp</span><span class="slot-name empty">Empty</span><input type="checkbox" class="sl-check"><button class="slot-clear" onclick="clearThisSlot(this)" title="Clear player">✕</button></div>
+                <div class="node-slot" data-cell="ns-s2"><input type="checkbox" class="here-check"><span class="slot-role">Supp</span><span class="slot-name empty">Empty</span><span></span><button class="slot-clear" onclick="clearThisSlot(this)" title="Clear player">✕</button></div>
+                <div class="node-slot" data-cell="ns-s3"><input type="checkbox" class="here-check"><span class="slot-role">Supp</span><span class="slot-name empty">Empty</span><span></span><button class="slot-clear" onclick="clearThisSlot(this)" title="Clear player">✕</button></div>
             </div></div>
         </div>
     </div>
     
     <div class="bottom-row">
-        <div class="section"><div class="section-header tan">Reserves (<span id="reserveCount">0</span>)</div>
+        <div class="section"><div class="section-header tan"><span class="section-header-title">Reserves (<span id="reserveCount">0</span>)</span><span class="section-chevron">▼</span></div>
             <div class="section-content"><div class="reserves-grid" id="reservesGrid"></div></div></div>
-        <div class="section"><div class="section-header gray">Dropouts</div>
+        <div class="section"><div class="section-header gray"><span class="section-header-title">Dropouts</span><span class="section-chevron">▼</span></div>
             <div class="section-content" id="dropoutsSection"></div></div>
     </div>
     
@@ -1042,6 +1058,9 @@
         
         // Players array - loaded from database or fallback
         let players = [];
+        
+        // Known enemy teams - loaded from database
+        let knownEnemyTeams = [];
         
         // Fallback players for offline mode
         const fallbackPlayers = [
@@ -1139,6 +1158,9 @@
                 
                 // Load players
                 await loadPlayersFromDatabase(defaultTeam);
+                
+                // Load known enemy teams for autocomplete
+                await loadEnemyTeams();
                 
                 // Initialize UI
                 initializeUI();
@@ -1615,6 +1637,88 @@
         // UI HELPERS
         // ========================================
         
+        // ========================================
+        // ENEMY TEAM AUTOCOMPLETE & SCOUTING
+        // ========================================
+        
+        async function loadEnemyTeams() {
+            if (!supabaseClient || !isOnline) return;
+            try {
+                const { data, error } = await supabaseClient
+                    .from('enemy_team_stats')
+                    .select('*')
+                    .order('total_matches', { ascending: false });
+                if (!error && data) {
+                    knownEnemyTeams = data;
+                    console.log(`Loaded ${data.length} known enemy teams`);
+                }
+            } catch (err) {
+                console.warn('Could not load enemy teams:', err);
+            }
+            initEnemyAutocomplete();
+        }
+        
+        function initEnemyAutocomplete() {
+            const input = document.getElementById('enemyTeamInput');
+            const ac = document.getElementById('enemyAutocomplete');
+            if (!input || !ac) return;
+            
+            input.addEventListener('input', () => {
+                const val = input.value.trim().toLowerCase();
+                if (val.length === 0) {
+                    // Show all known teams
+                    renderEnemyAutocomplete(knownEnemyTeams);
+                } else {
+                    const filtered = knownEnemyTeams.filter(t => 
+                        (t.tag && t.tag.toLowerCase().includes(val)) ||
+                        (t.name && t.name.toLowerCase().includes(val))
+                    );
+                    renderEnemyAutocomplete(filtered);
+                }
+            });
+            
+            input.addEventListener('focus', () => {
+                renderEnemyAutocomplete(knownEnemyTeams);
+            });
+            
+            // Close on click outside
+            document.addEventListener('click', (e) => {
+                if (!e.target.closest('.enemy-autocomplete-wrapper')) {
+                    ac.classList.remove('active');
+                }
+            });
+        }
+        
+        function renderEnemyAutocomplete(teams) {
+            const ac = document.getElementById('enemyAutocomplete');
+            if (!teams || teams.length === 0) {
+                ac.classList.remove('active');
+                return;
+            }
+            
+            ac.innerHTML = teams.map(t => {
+                const w = t.wins || 0;
+                const l = t.losses || 0;
+                const d = t.draws || 0;
+                return `<div class="enemy-ac-item" data-tag="${t.tag}">
+                    <span class="ac-tag">${t.tag}${t.name ? ' — ' + t.name : ''}</span>
+                    <span class="ac-record"><span class="ac-win">${w}W</span> <span class="ac-loss">${l}L</span>${d ? ' ' + d + 'D' : ''}</span>
+                </div>`;
+            }).join('');
+            
+            ac.classList.add('active');
+            
+            ac.querySelectorAll('.enemy-ac-item').forEach(item => {
+                item.addEventListener('mousedown', (e) => {
+                    e.preventDefault();
+                    const tag = item.dataset.tag;
+                    document.getElementById('enemyTeamInput').value = tag;
+                    ac.classList.remove('active');
+                    markModified();
+                });
+            });
+        }
+        
         function initializeUI() {
             initializeInfantrySections();
             initializeReserves();
@@ -1817,7 +1921,7 @@
         function getMatchInfo() {
             return {
                 team: document.querySelector('.vs-display select').value,
-                enemy: document.querySelector('.vs-display input').value,
+                enemy: document.getElementById('enemyTeamInput').value,
                 map: document.querySelectorAll('.match-field select')[1].value,
                 faction: document.querySelectorAll('.match-field select')[2].value,
                 date: document.querySelector('.match-field input[type="date"]').value
@@ -1851,9 +1955,8 @@
         function initCollapsibleSections() {
             document.querySelectorAll('.section-header').forEach(header => {
                 header.addEventListener('click', (e) => {
-                    // Don't collapse if clicking on something else
-                    if (e.target !== header) return;
-                    
+                    // Only collapse when clicking the title or chevron, not +/- buttons
+                    if (e.target.closest('.section-header-btns')) return;
                     const section = header.closest('.section');
                     section.classList.toggle('collapsed');
                 });
@@ -1966,8 +2069,7 @@
             const cellId = prefix + '-' + index;
             return `<div class="infantry-slot" data-cell="${cellId}"><input type="checkbox" class="here-check"><select class="sl-dropdown"><option value=""></option><option>SL-1</option><option>SL-2</option><option>SL-3</option></select><span class="slot-name empty">Empty</span>
                 <select class="note-dropdown"><option value=""></option><option>Rocket</option><option>AT</option><option>MG</option><option>Supp</option><option>Eng</option><option>Driver</option></select>
-                <button class="add-slot-inline-btn" onclick="addSlotAfter(this)" title="Add row">+</button>
-                <button class="remove-slot-btn" onclick="removeSlot(this)" title="Remove">−</button></div>`;
+                <button class="slot-clear" onclick="clearThisSlot(this)" title="Clear player">✕</button></div>`;
         }
         
         function initializeInfantrySections() {
@@ -1984,31 +2086,36 @@
             }
         }
         
-        function removeSlot(btn) {
-            const slot = btn.closest('.infantry-slot');
-            const container = slot.parentElement;
-            const minSlots = 6; // Minimum slots to keep (default squad size)
-            if (container.querySelectorAll('.infantry-slot').length > minSlots) {
-                slot.remove();
+        function removeLastSlot(sectionId) {
+            const container = document.getElementById(sectionId);
+            const minSlots = 6;
+            const slots = container.querySelectorAll('.infantry-slot');
+            if (slots.length > minSlots) {
+                slots[slots.length - 1].remove();
                 updateAddButtons();
                 updateCounters();
                 markModified();
             }
         }
         
-        function addSlotAfter(btn) {
-            const slot = btn.closest('.infantry-slot');
-            const container = slot.parentElement;
-            const sectionId = container.id;
-            const maxSlots = 10;
-            if (container.querySelectorAll('.infantry-slot').length < maxSlots) {
-                const newIndex = container.querySelectorAll('.infantry-slot').length + 1;
-                const newSlot = document.createElement('div');
-                newSlot.innerHTML = createInfantrySlotHTML(sectionId, newIndex);
-                const newSlotElement = newSlot.firstElementChild;
-                slot.after(newSlotElement);
-                attachSlotListeners();
-                updateAddButtons();
+        function clearThisSlot(btn) {
+            const slot = btn.closest('.infantry-slot, .player-slot, .node-slot');
+            if (!slot) return;
+            const n = slot.querySelector('.slot-name');
+            if (n && !n.classList.contains('empty')) {
+                n.textContent = 'Empty';
+                n.classList.add('empty');
+                n.classList.remove('unknown-player');
+                slot.classList.remove('filled');
+                delete slot.dataset.player;
+                delete slot.dataset.unknown;
+                // Reset dropdowns
+                const sl = slot.querySelector('.sl-dropdown');
+                if (sl) sl.value = '';
+                const note = slot.querySelector('.note-dropdown');
+                if (note) note.value = '';
+                const here = slot.querySelector('.here-check');
+                if (here) here.checked = false;
                 updateCounters();
                 markModified();
             }
@@ -2017,10 +2124,14 @@
         function updateAddButtons() {
             ['northWestSlots','defenceSlots','meatGrindSlots','flexSlots','southEastSlots','infiltrationSlots'].forEach(id => {
                 const c = document.getElementById(id);
-                const btn = c.nextElementSibling;
-                if (btn && btn.classList.contains('add-slot-btn')) {
-                    btn.style.display = c.querySelectorAll('.infantry-slot').length >= 10 ? 'none' : 'block';
-                }
+                const count = c.querySelectorAll('.infantry-slot').length;
+                // Find the section header's +/- buttons
+                const section = c.closest('.section');
+                if (!section) return;
+                const addBtn = section.querySelector('.section-header-btns button:first-child');
+                const remBtn = section.querySelector('.section-header-btns button:last-child');
+                if (addBtn) { addBtn.style.opacity = count >= 10 ? '0.2' : ''; addBtn.style.pointerEvents = count >= 10 ? 'none' : ''; }
+                if (remBtn) { remBtn.style.opacity = count <= 6 ? '0.2' : ''; remBtn.style.pointerEvents = count <= 6 ? 'none' : ''; }
             });
         }
         
@@ -2210,6 +2321,11 @@
                     if (e.target.closest('input, select, button')) return;
                     e.stopPropagation();
                     setFocusedSlot(this);
+                    
+                    // Only open player search when clicking directly on the name area
+                    const clickedName = e.target.closest('.slot-name');
+                    const clickedRole = e.target.closest('.slot-role');
+                    if (!clickedName && !clickedRole && !e.target.classList.contains('reserve-slot') && !e.target.closest('.dropout-item .dropout-name, .dropout-item .replacement-name')) return;
                     
                     // Use bottom sheet on mobile, dropdown on desktop
                     if (isMobile()) {
@@ -2574,7 +2690,7 @@
         function exportLineup() {
             // Generate unique filename
             const team = document.querySelector('.vs-display select').value || 'Team';
-            const enemy = document.querySelector('.vs-display input').value || 'Enemy';
+            const enemy = document.getElementById('enemyTeamInput').value || 'Enemy';
             const date = document.querySelector('.match-field input[type="date"]').value || '';
             const lineupNum = document.querySelector('.tab.active')?.textContent.replace('Lineup ', '') || '1';
             const timestamp = new Date().toISOString().slice(0, 19).replace(/[T:]/g, '-');
@@ -2882,11 +2998,8 @@
                     }
                 }
                 
-                // Show add button again
-                const addBtn = container.nextElementSibling;
-                if (addBtn && addBtn.classList.contains('add-slot-btn')) {
-                    addBtn.style.display = 'block';
-                }
+                // Update header buttons state
+                updateAddButtons();
             });
             
             updateCounters();
@@ -2926,7 +3039,7 @@
             const lineupData = {
                 matchInfo: {
                     team: document.querySelector('.vs-display select').value,
-                    enemy: document.querySelector('.vs-display input').value,
+                    enemy: document.getElementById('enemyTeamInput').value,
                     map: document.querySelectorAll('.match-field select')[1].value,
                     faction: document.querySelectorAll('.match-field select')[2].value,
                     date: document.querySelector('.match-field input[type="date"]').value
