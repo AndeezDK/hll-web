@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Roster - HLL Tool v0.6.20</title>
+    <title>Roster - HLL Tool v0.6.22</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <link rel="stylesheet" href="../css/styles.css">
     <style>
@@ -66,7 +66,7 @@
         <!-- Header -->
         <div class="page-header">
             <h1 class="page-title">Roster</h1>
-            <span class="version-badge">v0.6.20</span>
+            <span class="version-badge">v0.6.22</span>
         </div>
 
         <!-- Stats Summary -->
@@ -280,19 +280,65 @@
             try {
                 const { data: lineups, error } = await HLL.supabase
                     .from('match_lineups')
-                    .select('role, player_name, steam_id, match_id');
+                    .select('role, player_name, steam_id, match_id, sl_role, section');
                 
                 if (error) throw error;
                 if (!lineups || lineups.length === 0) return;
                 
-                // Group by player, count role occurrences
+                // Map raw lineup role to tracked display roles
+                // Tracked: Commander, Artillery, SL, Infantry, TC, Tank Crew, Spotter, Sniper, Defence
+                // Excluded: Nodes
+                // Double-counted: Defence SL → SL + Defence, Defence Infantry → Infantry + Defence
+                // Combined: Gunner + Driver → Tank Crew
+                function getMappedRoles(l) {
+                    const raw = l.role || '';
+                    const roles = [];
+                    
+                    // Exclude Nodes entirely
+                    if (raw === 'Nodes') return roles;
+                    
+                    // Defence squad members
+                    if (raw === 'Defence' || (l.section && l.section === 'Defence')) {
+                        roles.push('Defence');
+                        if (l.sl_role) {
+                            roles.push('SL');       // Defence SL double-counts as SL
+                        } else {
+                            roles.push('Infantry');  // Defence infantry double-counts as Infantry
+                        }
+                        return roles;
+                    }
+                    
+                    // SL in non-defence squads
+                    if (raw === 'SL') { roles.push('SL'); return roles; }
+                    
+                    // Infantry in non-defence squads
+                    if (raw === 'Infantry') { roles.push('Infantry'); return roles; }
+                    
+                    // Tank roles: Gunner + Driver → Tank Crew, TC stays TC
+                    if (raw === 'Gunner' || raw === 'Driver') { roles.push('Tank Crew'); return roles; }
+                    if (raw === 'TC') { roles.push('TC'); return roles; }
+                    
+                    // Direct mapping: Commander, Artillery, Spotter, Sniper
+                    if (['Commander', 'Artillery', 'Spotter', 'Sniper'].includes(raw)) {
+                        roles.push(raw);
+                        return roles;
+                    }
+                    
+                    return roles;
+                }
+                
+                // Group by player, count mapped role occurrences
                 playerRoleData = {};
                 lineups.forEach(l => {
                     const key = l.steam_id || l.player_name;
                     if (!playerRoleData[key]) playerRoleData[key] = { _total: 0 };
-                    const role = l.role || 'Unknown';
-                    playerRoleData[key][role] = (playerRoleData[key][role] || 0) + 1;
+                    const mapped = getMappedRoles(l);
+                    if (mapped.length === 0) return; // Skip excluded roles (Nodes)
+                    
                     playerRoleData[key]._total++;
+                    mapped.forEach(role => {
+                        playerRoleData[key][role] = (playerRoleData[key][role] || 0) + 1;
+                    });
                 });
                 
                 // Re-render now that we have role data
