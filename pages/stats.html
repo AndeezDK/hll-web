@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Stats - HLL Tool v0.6.9</title>
+    <title>Stats - HLL Tool v0.6.10</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <link rel="stylesheet" href="../css/styles.css">
     <style>
@@ -263,6 +263,16 @@
         .enemy-strength.easy { background: var(--accent-green); }
         .enemy-strength.medium { background: var(--accent-orange); }
         .enemy-strength.hard { background: var(--accent-red); }
+        
+        /* Role leaderboard chips */
+        .role-chips-bar { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+        .role-chip-btn {
+            padding: 4px 12px; border-radius: 14px; font-size: 12px; font-weight: 500;
+            border: 1px solid var(--border-color); background: transparent; color: var(--text-secondary);
+            cursor: pointer; transition: all 0.15s; white-space: nowrap;
+        }
+        .role-chip-btn:hover { border-color: var(--accent-orange); color: var(--text-primary); }
+        .role-chip-btn.active { background: var(--accent-orange); color: #000; border-color: var(--accent-orange); font-weight: 600; }
     </style>
 </head>
 <body>
@@ -289,7 +299,7 @@
         <!-- Header -->
         <div class="page-header">
             <h1 class="page-title">Team Stats</h1>
-            <span class="version-badge">v0.6.9</span>
+            <span class="version-badge">v0.6.10</span>
         </div>
 
         <!-- Tabs -->
@@ -477,20 +487,19 @@
 
         <!-- Role Leaderboards -->
         <div class="card mt-lg">
-            <div class="card-header">
+            <div class="card-header" style="flex-direction: column; align-items: flex-start; gap: 10px;">
                 <span class="card-title">🎯 Role Leaderboards (PPS)</span>
-                <select id="roleGroupFilter" style="background: var(--bg-input, #1a1a2e); border: 1px solid rgba(255,255,255,0.15); border-radius: 4px; color: var(--text-primary); padding: 4px 8px; font-size: 0.85rem;">
-                    <option value="">Select role...</option>
-                    <option value="Infantry">Infantry</option>
-                    <option value="Squad Leader">Squad Leader</option>
-                    <option value="Defence">Defence</option>
-                    <option value="Defence SL">Defence SL</option>
-                    <option value="Spotter">Spotter</option>
-                    <option value="Sniper">Sniper</option>
-                    <option value="Tank Crew">Tank Crew</option>
-                    <option value="Commander">Commander</option>
-                    <option value="Artillery">Artillery</option>
-                </select>
+                <div class="role-chips-bar" id="roleChipsBar">
+                    <button class="role-chip-btn" onclick="selectRoleChip(this, 'Infantry')">Infantry</button>
+                    <button class="role-chip-btn" onclick="selectRoleChip(this, 'Squad Leader')">Squad Leader</button>
+                    <button class="role-chip-btn" onclick="selectRoleChip(this, 'Defence')">Defence</button>
+                    <button class="role-chip-btn" onclick="selectRoleChip(this, 'Defence SL')">Defence SL</button>
+                    <button class="role-chip-btn" onclick="selectRoleChip(this, 'Spotter')">Spotter</button>
+                    <button class="role-chip-btn" onclick="selectRoleChip(this, 'Sniper')">Sniper</button>
+                    <button class="role-chip-btn" onclick="selectRoleChip(this, 'Tank Crew')">Tank Crew</button>
+                    <button class="role-chip-btn" onclick="selectRoleChip(this, 'Commander')">Commander</button>
+                    <button class="role-chip-btn" onclick="selectRoleChip(this, 'Artillery')">Artillery</button>
+                </div>
             </div>
             <div class="card-body" id="roleLeaderboard">
                 <div class="text-center text-muted">Select a role to see player rankings by PPS</div>
@@ -969,6 +978,7 @@
                 const roleHTML = [
                     renderAwardCard('🎖️', 'Top Commander', topCmd, p => `<span class="highlight">${p.kd}</span> K/D · ${p.avgKills} avg kills · ${p.games} games`, 'cmd'),
                     renderAwardCard('📣', 'Top SL', topByRole('SL'), p => `<span class="highlight">${p.kd}</span> K/D · ${p.avgKills} avg kills · ${p.games} games`, 'sl'),
+                    renderAwardCard('🔫', 'Top Infantry', topByRole('Infantry'), p => `<span class="highlight">${p.kd}</span> K/D · ${p.avgKills} avg kills · ${p.games} games`, 'infantry'),
                     renderAwardCard('🛡️', 'Top Defence SL', topDefSL, p => `<span class="highlight">${p.kd}</span> K/D · ${p.avgDef} def pts · ${p.games} games`, 'defsl'),
                     renderAwardCard('🏰', 'Top Defence Inf', topDefInf, p => `<span class="highlight">${p.kd}</span> K/D · ${p.games} games`, 'definf'),
                     renderAwardCard('🎯', 'Top TC', topTC, p => `<span class="highlight">${p.kd}</span> K/D · ${p.avgKills} avg kills · ${p.games} games`, 'tc'),
@@ -1110,9 +1120,14 @@
         // ROLE LEADERBOARDS
         // ============================================================================
         function initRoleLeaderboard() {
-            document.getElementById('roleGroupFilter').addEventListener('change', (e) => {
-                loadRoleLeaderboard(e.target.value);
-            });
+            // Chips are wired via onclick in HTML, no init needed
+        }
+
+        function selectRoleChip(btn, roleGroup) {
+            // Toggle active state
+            document.querySelectorAll('#roleChipsBar .role-chip-btn').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            loadRoleLeaderboard(roleGroup);
         }
 
         async function loadRoleLeaderboard(roleGroup) {
