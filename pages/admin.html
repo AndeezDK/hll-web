@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Admin - HLL Tool v0.6.16</title>
+    <title>Admin - HLL Tool v0.6.17</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <link rel="stylesheet" href="../css/styles.css">
     <style>
@@ -81,7 +81,7 @@
         <!-- Header -->
         <div class="page-header">
             <h1 class="page-title">Admin</h1>
-            <span class="version-badge">v0.6.16</span>
+            <span class="version-badge">v0.6.17</span>
         </div>
 
         <div class="admin-grid">
@@ -212,11 +212,19 @@
                 </div>
                 
                 <div class="mb-md">
-                    <button class="btn btn-secondary" onclick="exportDatabase()">
-                        💾 Export All Data
-                    </button>
+                    <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+                        <button class="btn btn-secondary" onclick="exportBackup('json')">
+                            💾 Backup (JSON)
+                        </button>
+                        <button class="btn btn-secondary" onclick="exportBackup('csv')">
+                            📄 Backup (CSV)
+                        </button>
+                        <button class="btn btn-secondary" onclick="exportBackup('both')">
+                            📦 Backup (Both)
+                        </button>
+                    </div>
                     <p class="text-muted mt-sm" style="font-size: 11px;">
-                        Downloads all data as JSON backup.
+                        Downloads a full backup of all tables. JSON for re-import, CSV for Excel. "Both" gives a zip containing both formats.
                     </p>
                 </div>
                 
@@ -1936,38 +1944,164 @@
             }, 1000);
         }
         
-        async function exportDatabase() {
-            HLL.showLoading('Exporting data...');
+        // ============================================================================
+        // BACKUP SYSTEM
+        // ============================================================================
+        
+        const BACKUP_TABLES = [
+            'players', 'matches', 'match_details', 'match_lineups', 
+            'no_shows', 'enemy_teams', 'enemy_team_divisions', 
+            'divisions', 'my_team_divisions', 'lineups'
+        ];
+        
+        async function fetchAllTables() {
+            const data = {};
+            for (const table of BACKUP_TABLES) {
+                try {
+                    const { data: rows, error } = await HLL.supabase.from(table).select('*');
+                    if (error) {
+                        console.warn(`Skipping ${table}: ${error.message}`);
+                        continue;
+                    }
+                    data[table] = rows || [];
+                } catch (e) {
+                    console.warn(`Skipping ${table}: ${e.message}`);
+                }
+            }
+            return data;
+        }
+        
+        function tableToCsv(rows) {
+            if (!rows || rows.length === 0) return '';
+            const headers = Object.keys(rows[0]);
+            const csvRows = [headers.join(',')];
+            rows.forEach(row => {
+                csvRows.push(headers.map(h => {
+                    let val = row[h];
+                    if (val === null || val === undefined) return '';
+                    val = String(val).replace(/"/g, '""');
+                    if (val.includes(',') || val.includes('"') || val.includes('\n')) {
+                        val = `"${val}"`;
+                    }
+                    return val;
+                }).join(','));
+            });
+            return csvRows.join('\n');
+        }
+        
+        async function exportBackup(format) {
+            HLL.showLoading('Creating backup...');
             
             try {
-                const { data: players } = await HLL.supabase.from('players').select('*');
-                const { data: matches } = await HLL.supabase.from('matches').select('*');
-                const { data: details } = await HLL.supabase.from('match_details').select('*');
+                const allData = await fetchAllTables();
+                const dateStr = new Date().toISOString().split('T')[0];
+                const tableCount = Object.keys(allData).length;
+                const rowCount = Object.values(allData).reduce((s, rows) => s + rows.length, 0);
                 
-                const exportData = {
-                    exported_at: new Date().toISOString(),
-                    version: HLL.version,
-                    players,
-                    matches,
-                    match_details: details
-                };
-                
-                const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
-                const url = URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                a.href = url;
-                a.download = `HLL_Backup_${new Date().toISOString().split('T')[0]}.json`;
-                a.click();
-                URL.revokeObjectURL(url);
-                
-                HLL.hideLoading();
-                HLL.showAlert('Database exported', 'success');
+                if (format === 'json') {
+                    // Single JSON file with all tables
+                    const exportData = {
+                        backup_type: 'full',
+                        exported_at: new Date().toISOString(),
+                        tables: allData,
+                        meta: { tableCount, rowCount }
+                    };
+                    downloadFile(
+                        JSON.stringify(exportData, null, 2),
+                        `HLL_Backup_${dateStr}.json`,
+                        'application/json'
+                    );
+                    HLL.hideLoading();
+                    HLL.showAlert(`Backup complete: ${tableCount} tables, ${rowCount} rows`, 'success');
+                    
+                } else if (format === 'csv') {
+                    // Zip of CSV files (one per table)
+                    await exportCsvZip(allData, dateStr, tableCount, rowCount);
+                    
+                } else if (format === 'both') {
+                    // Zip containing JSON + all CSVs
+                    await exportBothZip(allData, dateStr, tableCount, rowCount);
+                }
                 
             } catch (err) {
-                console.error('Export error:', err);
+                console.error('Backup error:', err);
                 HLL.hideLoading();
-                HLL.showAlert('Export failed', 'error');
+                HLL.showAlert('Backup failed: ' + err.message, 'error');
             }
+        }
+        
+        async function exportCsvZip(allData, dateStr, tableCount, rowCount) {
+            // Load JSZip
+            if (!window.JSZip) {
+                await loadScript('https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js');
+            }
+            const zip = new JSZip();
+            const folder = zip.folder(`HLL_Backup_${dateStr}`);
+            
+            for (const [table, rows] of Object.entries(allData)) {
+                if (rows.length > 0) {
+                    folder.file(`${table}.csv`, tableToCsv(rows));
+                }
+            }
+            
+            const blob = await zip.generateAsync({ type: 'blob' });
+            downloadBlob(blob, `HLL_Backup_CSV_${dateStr}.zip`);
+            HLL.hideLoading();
+            HLL.showAlert(`CSV backup: ${tableCount} tables, ${rowCount} rows`, 'success');
+        }
+        
+        async function exportBothZip(allData, dateStr, tableCount, rowCount) {
+            if (!window.JSZip) {
+                await loadScript('https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js');
+            }
+            const zip = new JSZip();
+            const folder = zip.folder(`HLL_Backup_${dateStr}`);
+            
+            // JSON
+            const exportData = {
+                backup_type: 'full',
+                exported_at: new Date().toISOString(),
+                tables: allData,
+                meta: { tableCount, rowCount }
+            };
+            folder.file('backup.json', JSON.stringify(exportData, null, 2));
+            
+            // CSVs
+            const csvFolder = folder.folder('csv');
+            for (const [table, rows] of Object.entries(allData)) {
+                if (rows.length > 0) {
+                    csvFolder.file(`${table}.csv`, tableToCsv(rows));
+                }
+            }
+            
+            const blob = await zip.generateAsync({ type: 'blob' });
+            downloadBlob(blob, `HLL_Backup_Full_${dateStr}.zip`);
+            HLL.hideLoading();
+            HLL.showAlert(`Full backup: ${tableCount} tables, ${rowCount} rows (JSON + CSV)`, 'success');
+        }
+        
+        function downloadFile(content, filename, mimeType) {
+            const blob = new Blob([content], { type: mimeType });
+            downloadBlob(blob, filename);
+        }
+        
+        function downloadBlob(blob, filename) {
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = filename;
+            a.click();
+            URL.revokeObjectURL(url);
+        }
+        
+        function loadScript(src) {
+            return new Promise((resolve, reject) => {
+                const s = document.createElement('script');
+                s.src = src;
+                s.onload = resolve;
+                s.onerror = reject;
+                document.head.appendChild(s);
+            });
         }
         
         async function clearAllLineups() {
