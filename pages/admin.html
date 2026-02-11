@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Admin - HLL Tool v0.6.18</title>
+    <title>Admin - HLL Tool v0.6.19</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <link rel="stylesheet" href="../css/styles.css">
     <style>
@@ -81,7 +81,7 @@
         <!-- Header -->
         <div class="page-header">
             <h1 class="page-title">Admin</h1>
-            <span class="version-badge">v0.6.18</span>
+            <span class="version-badge">v0.6.19</span>
         </div>
 
         <div class="admin-grid">
@@ -361,31 +361,117 @@
             reader.onload = (e) => {
                 const text = e.target.result;
                 const lines = text.split('\n').filter(l => l.trim());
+                if (lines.length === 0) return;
                 
-                // Skip header if present
-                const startIndex = lines[0].toLowerCase().includes('steam') ? 1 : 0;
+                // Parse all rows
+                const rows = lines.map(l => l.split(',').map(p => p.trim().replace(/^"|"$/g, '')));
                 
-                pendingPlayerImport = [];
+                // Detect columns: find which column is steam_id, name, team
+                // Steam IDs are 17-digit numbers starting with 7656
+                const header = rows[0];
+                let steamCol = -1, nameCol = -1, teamCol = -1, mercCol = -1;
+                let startRow = 0;
                 
-                for (let i = startIndex; i < lines.length; i++) {
-                    const parts = lines[i].split(',').map(p => p.trim().replace(/^"|"$/g, ''));
-                    
-                    if (parts.length >= 2) {
-                        pendingPlayerImport.push({
-                            steam_id: parts[0],
-                            name: stripClanTag(cleanPlayerName(parts[1])),
-                            team: parts[2] || 'Merc'
-                        });
+                // Try header-based detection first
+                for (let c = 0; c < header.length; c++) {
+                    const h = header[c].toLowerCase().replace(/[^a-z0-9]/g, '');
+                    if (h.includes('steam') || h.includes('64id')) steamCol = c;
+                    else if (h.includes('playername') || h.includes('name')) nameCol = c;
+                    else if (h === 'team') teamCol = c;
+                    else if (h.includes('merc') || h.includes('mainteam')) mercCol = c;
+                }
+                
+                // If header matched anything, skip it
+                if (steamCol >= 0 || nameCol >= 0) {
+                    startRow = 1;
+                }
+                
+                // If header detection didn't find steam column, detect by content
+                if (steamCol < 0) {
+                    // Check first data row for 17-digit number pattern
+                    const testRow = rows[startRow] || rows[0];
+                    for (let c = 0; c < testRow.length; c++) {
+                        if (/^7656\d{13}$/.test(testRow[c])) {
+                            steamCol = c;
+                            break;
+                        }
                     }
                 }
                 
-                // Show preview
+                // If name column not found, it's likely the column before or after steam
+                if (nameCol < 0 && steamCol >= 0) {
+                    // Check adjacent columns for non-numeric text
+                    for (let c = 0; c < (rows[startRow] || rows[0]).length; c++) {
+                        if (c === steamCol) continue;
+                        const val = (rows[startRow] || rows[0])[c];
+                        if (val && !/^\d+$/.test(val) && val.length > 1) {
+                            nameCol = c;
+                            break;
+                        }
+                    }
+                }
+                
+                // Fallback: assume steam_id=col0, name=col1, team=col2
+                if (steamCol < 0) steamCol = 0;
+                if (nameCol < 0) nameCol = 1;
+                
+                // Detect team from name tags if no team column
+                function detectTeam(name, row) {
+                    // Check merc column first
+                    if (mercCol >= 0 && row[mercCol] && row[mercCol].trim()) return 'Merc';
+                    // Check team column
+                    if (teamCol >= 0 && row[teamCol] && row[teamCol].trim()) return row[teamCol].trim();
+                    // Detect from name prefixes
+                    if (/^\[DKB\]/i.test(name)) return 'DKB';
+                    if (/^[◯〇○⭕]\s*[|I]/i.test(name)) return 'Circle';
+                    if (/^OVER\s*[|I]/i.test(name)) return 'Circle';
+                    if (/^UKLL\s*[|I]/i.test(name)) return 'Merc';
+                    return 'Circle'; // Default
+                }
+                
+                pendingPlayerImport = [];
+                const seenSteam = new Set();
+                const dupes = [];
+                
+                for (let i = startRow; i < rows.length; i++) {
+                    const row = rows[i];
+                    const steamId = row[steamCol]?.trim();
+                    const rawName = row[nameCol]?.trim();
+                    
+                    // Skip rows without valid steam ID or name
+                    if (!steamId || !rawName) continue;
+                    if (!/^7656\d{13}$/.test(steamId) && !/^\d{10,20}$/.test(steamId)) continue;
+                    
+                    // Skip duplicate steam IDs
+                    if (seenSteam.has(steamId)) {
+                        dupes.push(rawName);
+                        continue;
+                    }
+                    seenSteam.add(steamId);
+                    
+                    const team = detectTeam(rawName, row);
+                    const cleanName = rawName; // Keep original name with tags
+                    
+                    pendingPlayerImport.push({
+                        steam_id: steamId,
+                        name: cleanName,
+                        team: team
+                    });
+                }
+                
+                // Show preview with team breakdown
+                const teamCounts = {};
+                pendingPlayerImport.forEach(p => teamCounts[p.team] = (teamCounts[p.team] || 0) + 1);
+                const teamSummary = Object.entries(teamCounts).map(([t, c]) => `${c} ${t}`).join(', ');
+                
                 const preview = document.getElementById('playerImportPreview');
                 preview.classList.remove('hidden');
                 preview.innerHTML = `
-                    <strong>${pendingPlayerImport.length} players found:</strong><br>
-                    ${pendingPlayerImport.slice(0, 10).map(p => `${p.name} (${p.team})`).join('<br>')}
-                    ${pendingPlayerImport.length > 10 ? `<br>... and ${pendingPlayerImport.length - 10} more` : ''}
+                    <strong>${pendingPlayerImport.length} players found</strong> (${teamSummary})<br>
+                    ${dupes.length > 0 ? `<span style="color: var(--accent-orange);">⚠️ ${dupes.length} duplicate steam ID(s) skipped: ${dupes.join(', ')}</span><br>` : ''}
+                    <div style="max-height: 200px; overflow-y: auto; margin-top: 8px; font-size: 12px; font-family: monospace;">
+                        ${pendingPlayerImport.map(p => `${p.name} <span style="color:var(--text-muted)">(${p.team})</span>`).join('<br>')}
+                    </div>
                 `;
                 
                 document.getElementById('confirmPlayerImport').classList.remove('hidden');
