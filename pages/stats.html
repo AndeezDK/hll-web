@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Stats - HLL Tool v0.6.8</title>
+    <title>Stats - HLL Tool v0.6.9</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <link rel="stylesheet" href="../css/styles.css">
     <style>
@@ -185,6 +185,84 @@
             font-size: 12px;
             color: var(--text-secondary);
         }
+        
+        /* Form dots */
+        .form-dots { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+        .form-dot {
+            width: 28px; height: 28px; border-radius: 50%; display: flex; align-items: center; justify-content: center;
+            font-size: 11px; font-weight: 700; color: #fff;
+        }
+        .form-dot.W { background: var(--accent-green); }
+        .form-dot.L { background: var(--accent-red); }
+        .form-dot.D { background: var(--text-muted); }
+        
+        /* Streak cards */
+        .streak-grid {
+            display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px;
+        }
+        .streak-card {
+            background: var(--bg-tertiary); border-radius: 6px; padding: 10px; text-align: center;
+        }
+        .streak-value { font-size: 1.3rem; font-weight: 700; }
+        .streak-label { font-size: 11px; color: var(--text-muted); margin-top: 2px; }
+        
+        /* Faction comparison */
+        .faction-compare {
+            display: grid; grid-template-columns: 1fr auto 1fr; gap: 16px; align-items: start;
+        }
+        .faction-col { text-align: center; }
+        .faction-col h3 { margin-bottom: 10px; font-size: 1rem; }
+        .faction-vs { display: flex; align-items: center; justify-content: center; font-size: 1.2rem; font-weight: 700; color: var(--text-muted); padding-top: 30px; }
+        
+        /* Veto helper */
+        .veto-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+        .veto-section h4 { font-size: 13px; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px; }
+        .veto-map {
+            display: flex; justify-content: space-between; align-items: center; padding: 6px 10px;
+            border-radius: 4px; margin-bottom: 4px; font-size: 13px;
+        }
+        .veto-map.pick { background: rgba(63, 185, 80, 0.1); border-left: 3px solid var(--accent-green); }
+        .veto-map.ban { background: rgba(248, 81, 73, 0.1); border-left: 3px solid var(--accent-red); }
+        .veto-record { font-size: 11px; color: var(--text-secondary); }
+        .veto-winrate { font-weight: 700; min-width: 40px; text-align: right; }
+        
+        /* Map deep dive */
+        .map-expand-btn {
+            background: none; border: none; color: var(--text-muted); cursor: pointer;
+            font-size: 12px; padding: 0; margin-right: 8px; transition: color 0.15s;
+        }
+        .map-expand-btn:hover { color: var(--accent-orange); }
+        .map-faction-detail { display: none; padding: 4px 0 4px 24px; font-size: 12px; color: var(--text-secondary); }
+        .map-faction-detail.visible { display: block; }
+        
+        /* Monthly table */
+        .trend-bar {
+            display: inline-block; height: 6px; border-radius: 3px; vertical-align: middle; margin-left: 6px;
+        }
+        
+        /* Score analysis */
+        .score-category {
+            display: flex; align-items: center; padding: 8px 0; border-bottom: 1px solid var(--border-color); gap: 12px;
+        }
+        .score-category:last-child { border-bottom: none; }
+        .score-cat-label { min-width: 110px; font-weight: 500; font-size: 13px; }
+        .score-cat-count { min-width: 60px; font-size: 12px; color: var(--text-secondary); }
+        .score-cat-winrate { font-weight: 700; min-width: 50px; text-align: right; }
+        
+        /* Match history */
+        .match-result-badge {
+            display: inline-block; padding: 2px 8px; border-radius: 3px; font-size: 11px; font-weight: 700;
+        }
+        .match-result-badge.W { background: rgba(63, 185, 80, 0.2); color: var(--accent-green); }
+        .match-result-badge.L { background: rgba(248, 81, 73, 0.2); color: var(--accent-red); }
+        .match-result-badge.D { background: rgba(255,255,255,0.1); color: var(--text-secondary); }
+        .enemy-strength {
+            display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-left: 6px;
+            vertical-align: middle; title: '';
+        }
+        .enemy-strength.easy { background: var(--accent-green); }
+        .enemy-strength.medium { background: var(--accent-orange); }
+        .enemy-strength.hard { background: var(--accent-red); }
     </style>
 </head>
 <body>
@@ -211,12 +289,13 @@
         <!-- Header -->
         <div class="page-header">
             <h1 class="page-title">Team Stats</h1>
-            <span class="version-badge">v0.6.8</span>
+            <span class="version-badge">v0.6.9</span>
         </div>
 
         <!-- Tabs -->
         <div style="display: flex; gap: 0; margin-bottom: 20px; border-bottom: 2px solid rgba(255,255,255,0.1);">
             <div class="stats-tab active" onclick="switchStatsTab('players')" id="tab-btn-players" style="padding: 10px 20px; cursor: pointer; color: var(--accent-orange); border-bottom: 2px solid var(--accent-orange); margin-bottom: -2px; font-weight: 600;">Player Stats</div>
+            <div class="stats-tab" onclick="switchStatsTab('games')" id="tab-btn-games" style="padding: 10px 20px; cursor: pointer; color: var(--text-secondary); border-bottom: 2px solid transparent; margin-bottom: -2px;">Game Stats</div>
             <div class="stats-tab" onclick="switchStatsTab('compare')" id="tab-btn-compare" style="padding: 10px 20px; cursor: pointer; color: var(--text-secondary); border-bottom: 2px solid transparent; margin-bottom: -2px;">Team Compare</div>
         </div>
 
@@ -419,6 +498,77 @@
         </div>
 
         </div><!-- end tab-players -->
+
+        <!-- GAME STATS TAB -->
+        <div id="tab-games" style="display: none;">
+
+            <!-- Overall Summary -->
+            <div class="stat-row" id="gameOverallStats">
+                <div class="stat-box"><span class="stat-value" id="gTotalMatches">-</span><span class="stat-label">Total Matches</span></div>
+                <div class="stat-box"><span class="stat-value" id="gWins">-</span><span class="stat-label">Wins</span></div>
+                <div class="stat-box"><span class="stat-value" id="gLosses">-</span><span class="stat-label">Losses</span></div>
+                <div class="stat-box"><span class="stat-value" id="gWinRate">-</span><span class="stat-label">Win Rate</span></div>
+                <div class="stat-box"><span class="stat-value" id="gPtsFor">-</span><span class="stat-label">Points For</span></div>
+                <div class="stat-box"><span class="stat-value" id="gPtsAgainst">-</span><span class="stat-label">Points Against</span></div>
+            </div>
+
+            <!-- Form & Streaks -->
+            <div class="card mt-lg">
+                <div class="card-header"><span class="card-title">📊 Form & Streaks</span></div>
+                <div class="card-body" id="formStreaks">
+                    <div class="text-center text-muted">Loading...</div>
+                </div>
+            </div>
+
+            <!-- Faction Analysis -->
+            <div class="card mt-lg">
+                <div class="card-header"><span class="card-title">⚔️ Faction Analysis</span></div>
+                <div class="card-body" id="factionAnalysis">
+                    <div class="text-center text-muted">Loading...</div>
+                </div>
+            </div>
+
+            <!-- Map Veto Helper -->
+            <div class="card mt-lg">
+                <div class="card-header"><span class="card-title">🗺️ Map Veto Helper</span><span style="font-size: 11px; color: var(--text-muted); margin-left: 8px;">min 2 games played</span></div>
+                <div class="card-body" id="vetoHelper">
+                    <div class="text-center text-muted">Loading...</div>
+                </div>
+            </div>
+
+            <!-- Map Deep Dive -->
+            <div class="card mt-lg">
+                <div class="card-header"><span class="card-title">🗺️ Map Deep-Dive</span></div>
+                <div class="card-body" id="mapDeepDive">
+                    <div class="text-center text-muted">Loading...</div>
+                </div>
+            </div>
+
+            <!-- Performance Over Time -->
+            <div class="card mt-lg">
+                <div class="card-header"><span class="card-title">📈 Performance Over Time</span></div>
+                <div class="card-body" id="perfOverTime">
+                    <div class="text-center text-muted">Loading...</div>
+                </div>
+            </div>
+
+            <!-- Score Analysis -->
+            <div class="card mt-lg">
+                <div class="card-header"><span class="card-title">🎯 Score Analysis</span></div>
+                <div class="card-body" id="scoreAnalysis">
+                    <div class="text-center text-muted">Loading...</div>
+                </div>
+            </div>
+
+            <!-- Match History -->
+            <div class="card mt-lg">
+                <div class="card-header"><span class="card-title">📋 Match History</span></div>
+                <div class="card-body" id="matchHistory">
+                    <div class="text-center text-muted">Loading...</div>
+                </div>
+            </div>
+
+        </div><!-- end tab-games -->
 
         <!-- TEAM COMPARE TAB -->
         <div id="tab-compare" style="display: none;">
@@ -1039,13 +1189,17 @@
         // TAB SWITCHING
         // ============================================================================
         function switchStatsTab(tab) {
-            document.getElementById('tab-players').style.display = tab === 'players' ? 'block' : 'none';
-            document.getElementById('tab-compare').style.display = tab === 'compare' ? 'block' : 'none';
-            
-            document.getElementById('tab-btn-players').style.color = tab === 'players' ? 'var(--accent-orange)' : 'var(--text-secondary)';
-            document.getElementById('tab-btn-players').style.borderBottomColor = tab === 'players' ? 'var(--accent-orange)' : 'transparent';
-            document.getElementById('tab-btn-compare').style.color = tab === 'compare' ? 'var(--accent-orange)' : 'var(--text-secondary)';
-            document.getElementById('tab-btn-compare').style.borderBottomColor = tab === 'compare' ? 'var(--accent-orange)' : 'transparent';
+            const tabs = ['players', 'games', 'compare'];
+            tabs.forEach(t => {
+                document.getElementById('tab-' + t).style.display = t === tab ? 'block' : 'none';
+                document.getElementById('tab-btn-' + t).style.color = t === tab ? 'var(--accent-orange)' : 'var(--text-secondary)';
+                document.getElementById('tab-btn-' + t).style.borderBottomColor = t === tab ? 'var(--accent-orange)' : 'transparent';
+            });
+
+            if (tab === 'games' && !window._gamesLoaded) {
+                window._gamesLoaded = true;
+                loadGameStatsTab();
+            }
 
             if (tab === 'compare' && !window._compareLoaded) {
                 window._compareLoaded = true;
@@ -1424,6 +1578,446 @@
                             </tbody>
                         </table>
                     </div>
+                </div>`;
+        }
+
+        // ============================================================================
+        // GAME STATS TAB
+        // ============================================================================
+        async function loadGameStatsTab() {
+            const matches = await HLL.loadMatches(1000);
+            if (!matches || matches.length === 0) {
+                ['formStreaks','factionAnalysis','vetoHelper','mapDeepDive','perfOverTime','scoreAnalysis','matchHistory'].forEach(id => {
+                    document.getElementById(id).innerHTML = '<div class="text-center text-muted">No matches found</div>';
+                });
+                return;
+            }
+
+            // Sort by date ascending
+            const sorted = [...matches].sort((a, b) => (a.date || '').localeCompare(b.date || ''));
+
+            // Get match_details for team K/D calculations
+            const { data: allDetails } = await HLL.supabase
+                .from('match_details')
+                .select('match_id, kills, deaths, team');
+
+            // Build per-match K/D lookup
+            const matchKD = {};
+            (allDetails || []).forEach(d => {
+                if (!matchKD[d.match_id]) matchKD[d.match_id] = { fKills: 0, fDeaths: 0 };
+                if (d.team === 'Friendly') {
+                    matchKD[d.match_id].fKills += d.kills || 0;
+                    matchKD[d.match_id].fDeaths += d.deaths || 0;
+                }
+            });
+
+            // Overall summary
+            const wins = sorted.filter(m => m.result === 'W').length;
+            const losses = sorted.filter(m => m.result === 'L').length;
+            const ptsFor = sorted.reduce((s, m) => s + (m.my_score || 0), 0);
+            const ptsAgainst = sorted.reduce((s, m) => s + (m.enemy_score || 0), 0);
+            const winRate = sorted.length > 0 ? Math.round(wins / sorted.length * 100) : 0;
+            document.getElementById('gTotalMatches').textContent = sorted.length;
+            document.getElementById('gWins').textContent = wins;
+            document.getElementById('gLosses').textContent = losses;
+            document.getElementById('gWinRate').textContent = winRate + '%';
+            document.getElementById('gPtsFor').textContent = ptsFor;
+            document.getElementById('gPtsAgainst').textContent = ptsAgainst;
+
+            // Enemy record lookup for strength indicator
+            const enemyRecord = {};
+            sorted.forEach(m => {
+                const e = m.enemy_team;
+                if (!enemyRecord[e]) enemyRecord[e] = { wins: 0, losses: 0, total: 0 };
+                enemyRecord[e].total++;
+                if (m.result === 'W') enemyRecord[e].wins++;
+                if (m.result === 'L') enemyRecord[e].losses++;
+            });
+
+            renderFormStreaks(sorted);
+            renderFactionAnalysis(sorted, matchKD);
+            renderVetoHelper(sorted);
+            renderMapDeepDive(sorted, matchKD);
+            renderPerfOverTime(sorted, matchKD);
+            renderScoreAnalysis(sorted);
+            renderMatchHistory(sorted, enemyRecord);
+        }
+
+        function renderFormStreaks(matches) {
+            const section = document.getElementById('formStreaks');
+            const last10 = matches.slice(-10);
+
+            // Streak calculations
+            let currentStreak = 0, currentType = '';
+            let longestWin = 0, longestLoss = 0, tempWin = 0, tempLoss = 0;
+            matches.forEach(m => {
+                if (m.result === 'W') { tempWin++; tempLoss = 0; longestWin = Math.max(longestWin, tempWin); }
+                else if (m.result === 'L') { tempLoss++; tempWin = 0; longestLoss = Math.max(longestLoss, tempLoss); }
+                else { tempWin = 0; tempLoss = 0; }
+            });
+            // Current streak from end
+            for (let i = matches.length - 1; i >= 0; i--) {
+                if (currentStreak === 0) { currentType = matches[i].result; currentStreak = 1; }
+                else if (matches[i].result === currentType) { currentStreak++; }
+                else break;
+            }
+
+            const streakColor = currentType === 'W' ? 'var(--accent-green)' : currentType === 'L' ? 'var(--accent-red)' : 'var(--text-secondary)';
+
+            section.innerHTML = `
+                <div style="margin-bottom: 14px;">
+                    <div style="font-size: 12px; color: var(--text-muted); margin-bottom: 6px;">Last ${last10.length} Matches</div>
+                    <div class="form-dots">
+                        ${last10.map(m => `<div class="form-dot ${m.result}" title="${m.date || ''}: ${m.result} vs ${m.enemy_team || '?'} (${m.my_score || 0}-${m.enemy_score || 0})">${m.result}</div>`).join('')}
+                    </div>
+                </div>
+                <div class="streak-grid">
+                    <div class="streak-card">
+                        <div class="streak-value" style="color: ${streakColor}">${currentStreak}${currentType}</div>
+                        <div class="streak-label">Current Streak</div>
+                    </div>
+                    <div class="streak-card">
+                        <div class="streak-value" style="color: var(--accent-green)">${longestWin}</div>
+                        <div class="streak-label">Longest Win Streak</div>
+                    </div>
+                    <div class="streak-card">
+                        <div class="streak-value" style="color: var(--accent-red)">${longestLoss}</div>
+                        <div class="streak-label">Longest Loss Streak</div>
+                    </div>
+                    <div class="streak-card">
+                        <div class="streak-value">${last10.filter(m => m.result === 'W').length}/${last10.length}</div>
+                        <div class="streak-label">Last ${last10.length} Win Rate</div>
+                    </div>
+                </div>`;
+        }
+
+        function renderFactionAnalysis(matches, matchKD) {
+            const section = document.getElementById('factionAnalysis');
+            const factions = {};
+            matches.forEach(m => {
+                const f = m.my_faction || 'Unknown';
+                if (!factions[f]) factions[f] = { matches: 0, wins: 0, losses: 0, ptsFor: 0, ptsAgainst: 0, kills: 0, deaths: 0 };
+                factions[f].matches++;
+                if (m.result === 'W') factions[f].wins++;
+                if (m.result === 'L') factions[f].losses++;
+                factions[f].ptsFor += m.my_score || 0;
+                factions[f].ptsAgainst += m.enemy_score || 0;
+                const kd = matchKD[m.match_id];
+                if (kd) { factions[f].kills += kd.fKills; factions[f].deaths += kd.fDeaths; }
+            });
+
+            const allies = factions['Allies'] || { matches: 0, wins: 0, losses: 0, ptsFor: 0, ptsAgainst: 0, kills: 0, deaths: 0 };
+            const axis = factions['Axis'] || { matches: 0, wins: 0, losses: 0, ptsFor: 0, ptsAgainst: 0, kills: 0, deaths: 0 };
+
+            function factionCol(f, label, colorClass) {
+                const wr = f.matches > 0 ? Math.round(f.wins / f.matches * 100) : 0;
+                const avgPtsF = f.matches > 0 ? (f.ptsFor / f.matches).toFixed(1) : '-';
+                const avgPtsA = f.matches > 0 ? (f.ptsAgainst / f.matches).toFixed(1) : '-';
+                const kd = f.deaths > 0 ? (f.kills / f.deaths).toFixed(2) : '-';
+                return `
+                    <div class="faction-col">
+                        <h3><span class="faction-badge ${colorClass}">${label}</span></h3>
+                        <div style="display: flex; flex-direction: column; gap: 8px;">
+                            <div class="stat-box"><span class="stat-value">${f.matches}</span><span class="stat-label">Matches</span></div>
+                            <div class="stat-box"><span class="stat-value">${f.wins}W - ${f.losses}L</span><span class="stat-label">Record</span></div>
+                            <div class="stat-box"><span class="stat-value" style="color: ${wr >= 50 ? 'var(--accent-green)' : 'var(--accent-red)'}">${wr}%</span><span class="stat-label">Win Rate</span></div>
+                            <div class="stat-box"><span class="stat-value">${avgPtsF} - ${avgPtsA}</span><span class="stat-label">Avg Score F/A</span></div>
+                            <div class="stat-box"><span class="stat-value" style="color: ${parseFloat(kd) >= 1 ? 'var(--accent-green)' : 'var(--accent-red)'}">${kd}</span><span class="stat-label">Team K/D</span></div>
+                        </div>
+                    </div>`;
+            }
+
+            section.innerHTML = `
+                <div class="faction-compare">
+                    ${factionCol(allies, '★ Allies', 'faction-allies')}
+                    <div class="faction-vs">VS</div>
+                    ${factionCol(axis, '✠ Axis', 'faction-axis')}
+                </div>`;
+        }
+
+        function renderVetoHelper(matches) {
+            const section = document.getElementById('vetoHelper');
+            const mapStats = {};
+            matches.forEach(m => {
+                const map = m.map;
+                if (!map) return;
+                if (!mapStats[map]) mapStats[map] = { map, matches: 0, wins: 0 };
+                mapStats[map].matches++;
+                if (m.result === 'W') mapStats[map].wins++;
+            });
+
+            const qualified = Object.values(mapStats).filter(s => s.matches >= 2);
+            qualified.forEach(s => s.winRate = Math.round(s.wins / s.matches * 100));
+            const picks = [...qualified].sort((a, b) => b.winRate - a.winRate || b.matches - a.matches).slice(0, 3);
+            const bans = [...qualified].sort((a, b) => a.winRate - b.winRate || b.matches - a.matches).slice(0, 3);
+
+            if (qualified.length === 0) {
+                section.innerHTML = '<div class="text-center text-muted">Need at least 2 games on a map to generate suggestions</div>';
+                return;
+            }
+
+            function vetoList(items, cls) {
+                return items.map(s => `
+                    <div class="veto-map ${cls}">
+                        <span>${s.map}</span>
+                        <span style="display: flex; align-items: center; gap: 8px;">
+                            <span class="veto-record">${s.wins}W-${s.matches - s.wins}L</span>
+                            <span class="veto-winrate" style="color: ${s.winRate >= 50 ? 'var(--accent-green)' : 'var(--accent-red)'}">${s.winRate}%</span>
+                        </span>
+                    </div>
+                `).join('');
+            }
+
+            section.innerHTML = `
+                <div class="veto-grid">
+                    <div class="veto-section">
+                        <h4 style="color: var(--accent-green);">✓ Pick These</h4>
+                        ${vetoList(picks, 'pick')}
+                    </div>
+                    <div class="veto-section">
+                        <h4 style="color: var(--accent-red);">✗ Ban These</h4>
+                        ${vetoList(bans, 'ban')}
+                    </div>
+                </div>`;
+        }
+
+        function renderMapDeepDive(matches, matchKD) {
+            const section = document.getElementById('mapDeepDive');
+            const mapData = {};
+            matches.forEach(m => {
+                const map = m.map;
+                if (!map) return;
+                if (!mapData[map]) mapData[map] = { map, total: 0, wins: 0, losses: 0, ptsFor: 0, ptsAgainst: 0, kills: 0, deaths: 0, factions: {} };
+                mapData[map].total++;
+                if (m.result === 'W') mapData[map].wins++;
+                if (m.result === 'L') mapData[map].losses++;
+                mapData[map].ptsFor += m.my_score || 0;
+                mapData[map].ptsAgainst += m.enemy_score || 0;
+                const kd = matchKD[m.match_id];
+                if (kd) { mapData[map].kills += kd.fKills; mapData[map].deaths += kd.fDeaths; }
+
+                const f = m.my_faction || 'Unknown';
+                if (!mapData[map].factions[f]) mapData[map].factions[f] = { matches: 0, wins: 0, losses: 0, ptsFor: 0, ptsAgainst: 0 };
+                mapData[map].factions[f].matches++;
+                if (m.result === 'W') mapData[map].factions[f].wins++;
+                if (m.result === 'L') mapData[map].factions[f].losses++;
+                mapData[map].factions[f].ptsFor += m.my_score || 0;
+                mapData[map].factions[f].ptsAgainst += m.enemy_score || 0;
+            });
+
+            const sorted = Object.values(mapData).sort((a, b) => b.total - a.total);
+
+            section.innerHTML = `
+                <table class="data-table" style="font-size: 0.85rem;">
+                    <thead><tr>
+                        <th></th><th>Map</th><th>Played</th><th>W</th><th>L</th><th>Win%</th><th>Avg Score</th><th>Team K/D</th>
+                    </tr></thead>
+                    <tbody>
+                        ${sorted.map((s, i) => {
+                            const wr = s.total > 0 ? Math.round(s.wins / s.total * 100) : 0;
+                            const avgF = (s.ptsFor / s.total).toFixed(1);
+                            const avgA = (s.ptsAgainst / s.total).toFixed(1);
+                            const kd = s.deaths > 0 ? (s.kills / s.deaths).toFixed(2) : '-';
+                            const wrClass = wr >= 60 ? 'color: var(--accent-green)' : wr < 40 ? 'color: var(--accent-red)' : '';
+                            const factionRows = Object.entries(s.factions).map(([f, fd]) => {
+                                const fWr = fd.matches > 0 ? Math.round(fd.wins / fd.matches * 100) : 0;
+                                const badge = f === 'Allies' ? '<span class="faction-badge faction-allies" style="font-size:10px;">★ Allies</span>' : '<span class="faction-badge faction-axis" style="font-size:10px;">✠ Axis</span>';
+                                return `<div class="map-faction-detail" id="mf-${i}-detail" style="display:flex; gap:12px; align-items:center;">
+                                    ${badge} <span>${fd.wins}W-${fd.losses}L</span> <span style="font-weight:600; ${fWr >= 50 ? 'color:var(--accent-green)' : 'color:var(--accent-red)'}">${fWr}%</span> <span>${(fd.ptsFor/fd.matches).toFixed(1)}-${(fd.ptsAgainst/fd.matches).toFixed(1)} avg</span>
+                                </div>`;
+                            }).join('');
+                            return `<tr>
+                                <td><button class="map-expand-btn" onclick="toggleMapDetail(${i})">▸</button></td>
+                                <td>${s.map}</td>
+                                <td>${s.total}</td>
+                                <td style="color: var(--accent-green)">${s.wins}</td>
+                                <td style="color: var(--accent-red)">${s.losses}</td>
+                                <td style="${wrClass}; font-weight:700;">${wr}%</td>
+                                <td>${avgF} - ${avgA}</td>
+                                <td style="color: ${parseFloat(kd) >= 1 ? 'var(--accent-green)' : 'var(--accent-red)'}">${kd}</td>
+                            </tr>
+                            <tr class="map-detail-row" id="mf-${i}-row" style="display:none;">
+                                <td colspan="8" style="padding: 4px 8px 8px 30px;">${factionRows}</td>
+                            </tr>`;
+                        }).join('')}
+                    </tbody>
+                </table>`;
+        }
+
+        function toggleMapDetail(idx) {
+            const row = document.getElementById('mf-' + idx + '-row');
+            const btn = row?.previousElementSibling?.querySelector('.map-expand-btn');
+            if (row) {
+                const visible = row.style.display !== 'none';
+                row.style.display = visible ? 'none' : 'table-row';
+                // Show all faction detail divs inside
+                row.querySelectorAll('.map-faction-detail').forEach(el => el.style.display = visible ? 'none' : 'flex');
+                if (btn) btn.textContent = visible ? '▸' : '▾';
+            }
+        }
+
+        function renderPerfOverTime(matches, matchKD) {
+            const section = document.getElementById('perfOverTime');
+            const months = {};
+            matches.forEach(m => {
+                const d = m.date || '';
+                const month = d.substring(0, 7); // YYYY-MM
+                if (!month) return;
+                if (!months[month]) months[month] = { month, matches: 0, wins: 0, losses: 0, ptsFor: 0, ptsAgainst: 0, kills: 0, deaths: 0 };
+                months[month].matches++;
+                if (m.result === 'W') months[month].wins++;
+                if (m.result === 'L') months[month].losses++;
+                months[month].ptsFor += m.my_score || 0;
+                months[month].ptsAgainst += m.enemy_score || 0;
+                const kd = matchKD[m.match_id];
+                if (kd) { months[month].kills += kd.fKills; months[month].deaths += kd.fDeaths; }
+            });
+
+            const sorted = Object.values(months).sort((a, b) => a.month.localeCompare(b.month));
+            if (sorted.length === 0) {
+                section.innerHTML = '<div class="text-center text-muted">No date data available</div>';
+                return;
+            }
+
+            // Format month name
+            function fmtMonth(m) {
+                const [y, mo] = m.split('-');
+                const names = ['', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+                return `${names[parseInt(mo)] || mo} ${y}`;
+            }
+
+            section.innerHTML = `
+                <table class="data-table" style="font-size: 0.85rem;">
+                    <thead><tr>
+                        <th>Month</th><th>Matches</th><th>W</th><th>L</th><th>Win%</th><th>Avg Score</th><th>Team K/D</th><th></th>
+                    </tr></thead>
+                    <tbody>
+                        ${sorted.map(s => {
+                            const wr = s.matches > 0 ? Math.round(s.wins / s.matches * 100) : 0;
+                            const avgF = (s.ptsFor / s.matches).toFixed(1);
+                            const avgA = (s.ptsAgainst / s.matches).toFixed(1);
+                            const kd = s.deaths > 0 ? (s.kills / s.deaths).toFixed(2) : '-';
+                            const wrClass = wr >= 60 ? 'color: var(--accent-green)' : wr < 40 ? 'color: var(--accent-red)' : '';
+                            const barWidth = Math.min(wr, 100);
+                            const barColor = wr >= 60 ? 'var(--accent-green)' : wr < 40 ? 'var(--accent-red)' : 'var(--accent-orange)';
+                            return `<tr>
+                                <td style="font-weight:500;">${fmtMonth(s.month)}</td>
+                                <td>${s.matches}</td>
+                                <td style="color: var(--accent-green)">${s.wins}</td>
+                                <td style="color: var(--accent-red)">${s.losses}</td>
+                                <td style="${wrClass}; font-weight:700;">${wr}%</td>
+                                <td>${avgF} - ${avgA}</td>
+                                <td style="color: ${parseFloat(kd) >= 1 ? 'var(--accent-green)' : 'var(--accent-red)'}">${kd}</td>
+                                <td style="width:80px;"><span class="trend-bar" style="width:${barWidth}%; background:${barColor};"></span></td>
+                            </tr>`;
+                        }).join('')}
+                    </tbody>
+                </table>`;
+        }
+
+        function renderScoreAnalysis(matches) {
+            const section = document.getElementById('scoreAnalysis');
+
+            const avgFor = matches.length > 0 ? (matches.reduce((s, m) => s + (m.my_score || 0), 0) / matches.length).toFixed(1) : '-';
+            const avgAgainst = matches.length > 0 ? (matches.reduce((s, m) => s + (m.enemy_score || 0), 0) / matches.length).toFixed(1) : '-';
+
+            // Score diff categories
+            const categories = [
+                { label: 'Close (1 pt diff)', filter: m => Math.abs((m.my_score || 0) - (m.enemy_score || 0)) === 1 },
+                { label: 'Standard (2-3 pts)', filter: m => { const d = Math.abs((m.my_score || 0) - (m.enemy_score || 0)); return d >= 2 && d <= 3; } },
+                { label: 'Blowout (4-5 pts)', filter: m => Math.abs((m.my_score || 0) - (m.enemy_score || 0)) >= 4 },
+                { label: 'Shutout (5-0)', filter: m => (m.my_score === 5 && m.enemy_score === 0) || (m.my_score === 0 && m.enemy_score === 5) },
+            ];
+
+            const catHTML = categories.map(c => {
+                const catMatches = matches.filter(c.filter);
+                const catWins = catMatches.filter(m => m.result === 'W').length;
+                const wr = catMatches.length > 0 ? Math.round(catWins / catMatches.length * 100) : 0;
+                const wrClass = wr >= 60 ? 'color: var(--accent-green)' : wr < 40 ? 'color: var(--accent-red)' : '';
+                return `<div class="score-category">
+                    <span class="score-cat-label">${c.label}</span>
+                    <span class="score-cat-count">${catMatches.length} games</span>
+                    <span style="flex:1;">
+                        <div class="win-bar" style="max-width:120px;">
+                            <div class="win-bar-fill" style="width: ${wr}%"></div>
+                        </div>
+                    </span>
+                    <span class="score-cat-winrate" style="${wrClass}">${catMatches.length > 0 ? wr + '%' : '-'}</span>
+                </div>`;
+            }).join('');
+
+            // Biggest win & worst loss
+            let biggestWin = null, worstLoss = null;
+            matches.forEach(m => {
+                const diff = (m.my_score || 0) - (m.enemy_score || 0);
+                if (m.result === 'W' && (!biggestWin || diff > biggestWin.diff)) biggestWin = { ...m, diff };
+                if (m.result === 'L' && (!worstLoss || diff < worstLoss.diff)) worstLoss = { ...m, diff };
+            });
+
+            section.innerHTML = `
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 10px; margin-bottom: 16px;">
+                    <div class="stat-box"><span class="stat-value">${avgFor}</span><span class="stat-label">Avg Points For</span></div>
+                    <div class="stat-box"><span class="stat-value">${avgAgainst}</span><span class="stat-label">Avg Points Against</span></div>
+                    ${biggestWin ? `<div class="stat-box"><span class="stat-value" style="color: var(--accent-green)">${biggestWin.my_score}-${biggestWin.enemy_score}</span><span class="stat-label">Biggest Win</span><span style="font-size:10px; color:var(--text-muted);">vs ${biggestWin.enemy_team || '?'}</span></div>` : ''}
+                    ${worstLoss ? `<div class="stat-box"><span class="stat-value" style="color: var(--accent-red)">${worstLoss.my_score}-${worstLoss.enemy_score}</span><span class="stat-label">Worst Loss</span><span style="font-size:10px; color:var(--text-muted);">vs ${worstLoss.enemy_team || '?'}</span></div>` : ''}
+                </div>
+                <div style="margin-top: 4px;">
+                    <div style="font-size: 12px; color: var(--text-muted); margin-bottom: 8px;">Win Rate by Score Margin</div>
+                    ${catHTML}
+                </div>`;
+        }
+
+        function renderMatchHistory(matches, enemyRecord) {
+            const section = document.getElementById('matchHistory');
+            // Show newest first
+            const reversed = [...matches].reverse();
+
+            function enemyStrength(enemyTag) {
+                const rec = enemyRecord[enemyTag];
+                if (!rec || rec.total < 2) return '';
+                const wr = Math.round(rec.wins / rec.total * 100);
+                let cls = 'medium', tip = `${rec.wins}W-${rec.losses}L (${wr}%)`;
+                if (wr >= 65) cls = 'easy';
+                if (wr <= 35) cls = 'hard';
+                return `<span class="enemy-strength ${cls}" title="${enemyTag}: ${tip}"></span>`;
+            }
+
+            function fmtDate(d) {
+                if (!d) return '-';
+                const dt = new Date(d);
+                const day = String(dt.getDate()).padStart(2, '0');
+                const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+                return `${day} ${months[dt.getMonth()]} ${String(dt.getFullYear()).slice(-2)}`;
+            }
+
+            section.innerHTML = `
+                <table class="data-table" style="font-size: 0.85rem;">
+                    <thead><tr>
+                        <th>Date</th><th>Enemy</th><th>Map</th><th>Faction</th><th>Score</th><th>Result</th>
+                    </tr></thead>
+                    <tbody>
+                        ${reversed.map(m => {
+                            const factionBadge = m.my_faction === 'Allies'
+                                ? '<span class="faction-badge faction-allies" style="font-size:10px;">★ Allies</span>'
+                                : m.my_faction === 'Axis'
+                                ? '<span class="faction-badge faction-axis" style="font-size:10px;">✠ Axis</span>'
+                                : (m.my_faction || '-');
+                            return `<tr>
+                                <td style="white-space:nowrap;">${fmtDate(m.date)}</td>
+                                <td>${m.enemy_team || '-'}${enemyStrength(m.enemy_team)}</td>
+                                <td>${m.map || '-'}</td>
+                                <td>${factionBadge}</td>
+                                <td style="font-weight:600;">${m.my_score ?? '-'}-${m.enemy_score ?? '-'}</td>
+                                <td><span class="match-result-badge ${m.result || ''}">${m.result || '-'}</span></td>
+                            </tr>`;
+                        }).join('')}
+                    </tbody>
+                </table>
+                <div style="font-size:10px; color: var(--text-muted); margin-top: 8px;">
+                    Enemy strength: <span class="enemy-strength easy" style="display:inline-block;"></span> favourable
+                    <span class="enemy-strength medium" style="display:inline-block; margin-left:6px;"></span> even
+                    <span class="enemy-strength hard" style="display:inline-block; margin-left:6px;"></span> tough
+                    <span style="margin-left:6px;">(based on overall record, min 2 games)</span>
                 </div>`;
         }
 
