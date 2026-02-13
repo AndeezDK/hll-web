@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Lineups - HLL Tool v0.12.9</title>
+    <title>Lineups - HLL Tool v0.13.1</title>
     <!-- Supabase JS Client -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <style>
@@ -853,7 +853,7 @@
     
     <div class="page-header">
         <h1 class="page-title">Lineups</h1>
-        <span class="version-badge">v0.12.9</span>
+        <span class="version-badge">v0.13.1</span>
         <select class="team-selector" id="teamSelector" onchange="switchTeam(this.value)">
             <option value="">Loading teams...</option>
         </select>
@@ -871,16 +871,16 @@
     
     <div class="match-info">
         <div class="match-field vs-display">
-            <select><option>Circle</option><option>DKB</option><option>Unity</option></select>
+            <select id="matchTeamSelect"><option>Circle</option><option>DKB</option><option>Unity</option></select>
             <span class="vs-badge">vs</span>
             <div class="enemy-autocomplete-wrapper">
-                <input type="text" id="enemyTeamInput" value="Oktogon" placeholder="Enemy..." autocomplete="off">
+                <input type="text" id="enemyTeamInput" value="" placeholder="Enemy..." autocomplete="off">
                 <div class="enemy-autocomplete" id="enemyAutocomplete"></div>
             </div>
         </div>
         <div class="match-field">
             <label>Map</label>
-            <select>
+            <select id="matchMapSelect">
                 <option value="">— Select Map —</option><option>Carentan</option><option>Driel</option><option>El Alamein</option><option>Elsenborn Ridge</option>
                 <option>Foy</option><option>Hill 400</option><option>Hürtgen Forest</option><option>Kharkov</option>
                 <option>Kursk</option><option>Mortain</option><option>Omaha Beach</option><option>Purple Heart Lane</option>
@@ -890,7 +890,7 @@
         </div>
         <div class="match-field">
             <label>Faction</label>
-            <select><option value="">—</option><option>Allies</option><option>Axis</option></select>
+            <select id="matchFactionSelect"><option value="">—</option><option>Allies</option><option>Axis</option></select>
         </div>
         <div class="match-field">
             <label>Mid Cap</label>
@@ -898,7 +898,7 @@
         </div>
         <div class="match-field">
             <label>Date</label>
-            <input type="date" value="2026-02-15">
+            <input type="date" id="matchDateInput">
         </div>
         <div class="match-field">
             <label>Status</label>
@@ -1395,12 +1395,13 @@
                 if (savedMatch) {
                     try {
                         const m = JSON.parse(savedMatch);
-                        if (m.team) document.querySelector('.vs-display select').value = m.team;
+                        if (m.team) document.getElementById('matchTeamSelect').value = m.team;
                         if (m.enemy) document.getElementById('enemyTeamInput').value = m.enemy;
-                        if (m.map) document.querySelectorAll('.match-field select')[1].value = m.map;
-                        if (m.faction) document.querySelectorAll('.match-field select')[2].value = m.faction;
+                        if (m.map) document.getElementById('matchMapSelect').value = m.map;
+                        if (m.faction) document.getElementById('matchFactionSelect').value = m.faction;
                         if (m.mid_cap) document.getElementById('midCapInput').value = m.mid_cap;
-                        if (m.date) document.querySelector('.match-field input[type="date"]').value = m.date;
+                        if (m.date) document.getElementById('matchDateInput').value = m.date;
+                        console.log('Restored match info from localStorage:', m);
                     } catch (e) { console.warn('Failed to restore match info:', e); }
                 }
                 
@@ -1842,7 +1843,7 @@
             
             // Set today's date as default (will be overwritten by localStorage if saved)
             const today = new Date().toISOString().split('T')[0];
-            document.querySelector('.match-field input[type="date"]').value = today;
+            document.getElementById('matchDateInput').value = today;
             
             // Auto-save match info on any change
             document.querySelectorAll('.match-info select, .match-info input').forEach(el => {
@@ -2019,6 +2020,46 @@
                 populateUIFromLineupData(lineupData[num]);
             }
             
+            // Restore match info for this lineup tab
+            const matchKey = `hll_match_${currentTeamId}_${currentLineupNumber}`;
+            const savedMatch = localStorage.getItem(matchKey);
+            if (savedMatch) {
+                try {
+                    const m = JSON.parse(savedMatch);
+                    if (m.team) document.getElementById('matchTeamSelect').value = m.team;
+                    if (m.enemy) document.getElementById('enemyTeamInput').value = m.enemy;
+                    if (m.map) document.getElementById('matchMapSelect').value = m.map;
+                    if (m.faction) document.getElementById('matchFactionSelect').value = m.faction;
+                    if (m.mid_cap) document.getElementById('midCapInput').value = m.mid_cap;
+                    if (m.date) document.getElementById('matchDateInput').value = m.date;
+                } catch (e) {}
+            }
+            
+            // Restore tasks
+            const taskKey = `hll_tasks_${currentTeamId}_${currentLineupNumber}`;
+            const savedTasks = localStorage.getItem(taskKey);
+            loadTasksData(savedTasks ? JSON.parse(savedTasks) : []);
+            
+            // Restore reserves
+            const reserveKey = `hll_reserves_${currentTeamId}_${currentLineupNumber}`;
+            const savedReserves = localStorage.getItem(reserveKey);
+            if (savedReserves) {
+                try {
+                    const reserves = JSON.parse(savedReserves);
+                    const reserveSlots = document.querySelectorAll('.reserve-slot');
+                    reserves.forEach((name, i) => {
+                        if (i < reserveSlots.length && name) {
+                            const slot = reserveSlots[i];
+                            const rosterPlayer = findRosterPlayer(name);
+                            slot.textContent = rosterPlayer ? formatPlayerName(name, rosterPlayer.team) : name;
+                            slot.classList.remove('empty');
+                            slot.dataset.player = name;
+                        }
+                    });
+                    updateCounters();
+                } catch (e) {}
+            }
+            
             lineupModified = false;
             updateStatusBadge('draft');
         }
@@ -2055,12 +2096,12 @@
         
         function getMatchInfo() {
             return {
-                team: document.querySelector('.vs-display select').value,
+                team: document.getElementById('matchTeamSelect').value,
                 enemy: document.getElementById('enemyTeamInput').value,
-                map: document.querySelectorAll('.match-field select')[1].value,
-                faction: document.querySelectorAll('.match-field select')[2].value,
+                map: document.getElementById('matchMapSelect').value,
+                faction: document.getElementById('matchFactionSelect').value,
                 mid_cap: document.getElementById('midCapInput').value.trim(),
-                date: document.querySelector('.match-field input[type="date"]').value
+                date: document.getElementById('matchDateInput').value
             };
         }
         
@@ -3467,9 +3508,9 @@
         
         function exportLineup() {
             // Generate unique filename
-            const team = document.querySelector('.vs-display select').value || 'Team';
+            const team = document.getElementById('matchTeamSelect').value || 'Team';
             const enemy = document.getElementById('enemyTeamInput').value || 'Enemy';
-            const date = document.querySelector('.match-field input[type="date"]').value || '';
+            const date = document.getElementById('matchDateInput').value || '';
             const lineupNum = document.querySelector('.tab.active')?.textContent.replace('Lineup ', '') || '1';
             const timestamp = new Date().toISOString().slice(0, 19).replace(/[T:]/g, '-');
             
@@ -3784,14 +3825,7 @@
             
             // Collect all lineup data for submission
             const lineupData = {
-                matchInfo: {
-                    team: document.querySelector('.vs-display select').value,
-                    enemy: document.getElementById('enemyTeamInput').value,
-                    map: document.querySelectorAll('.match-field select')[1].value,
-                    faction: document.querySelectorAll('.match-field select')[2].value,
-                    mid_cap: document.getElementById('midCapInput').value.trim(),
-                    date: document.querySelector('.match-field input[type="date"]').value
-                },
+                matchInfo: getMatchInfo(),
                 players: [],
                 noShows: [],
                 reserves: []
