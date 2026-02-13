@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Lineups - HLL Tool v0.8.3</title>
+    <title>Lineups - HLL Tool v0.8.4</title>
     <!-- Supabase JS Client -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <style>
@@ -838,7 +838,7 @@
     
     <div class="page-header">
         <h1 class="page-title">Lineups</h1>
-        <span class="version-badge">v0.8.3</span>
+        <span class="version-badge">v0.8.4</span>
         <select class="team-selector" id="teamSelector" onchange="switchTeam(this.value)">
             <option value="">Loading teams...</option>
         </select>
@@ -2150,9 +2150,10 @@
         
         // Format player name with team tag for display
         function formatPlayerName(name, team) {
-            if (team === 'Circle') return '◯ | ' + name;
-            if (team === 'DKB') return '[DKB] ' + name;
-            return name; // Merc or other - no tag
+            const clean = getRawPlayerName(name);
+            if (team === 'Circle') return '◯ | ' + clean;
+            if (team === 'DKB') return '[DKB] ' + clean;
+            return clean; // Merc or other - no tag
         }
         
         // Get raw name from formatted display name
