@@ -7,7 +7,7 @@
 // ============================================================================
 
 const HLL = {
-    version: '0.6.22',
+    version: '0.7.0',
     
     // Default Supabase config (can be overridden via localStorage)
     config: {
@@ -20,6 +20,7 @@ const HLL = {
     supabase: null,
     isOnline: false,
     currentTeam: null,
+    currentUser: null,
     players: [],
     
     // Maps list
@@ -579,6 +580,340 @@ HLL.initSortableTable = function(tableId, data, renderRow) {
             tbody.innerHTML = sorted.map(renderRow).join('');
         });
     });
+};
+
+// ============================================================================
+// AUTHENTICATION
+// ============================================================================
+
+HLL._authWallMode = 'login';
+
+HLL.injectAuthWall = function() {
+    // Inject CSS
+    const style = document.createElement('style');
+    style.textContent = `
+        .auth-wall {
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: #0d1117;
+            z-index: 4000;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+        }
+        .auth-wall.hidden { display: none; }
+        .auth-wall-box {
+            background: #1c2128;
+            border: 1px solid #30363d;
+            border-radius: 12px;
+            padding: 32px;
+            width: 360px;
+            max-width: 90vw;
+            text-align: center;
+        }
+        .auth-wall-logo {
+            font-size: 28px;
+            font-weight: 700;
+            color: #f5a623;
+            margin-bottom: 4px;
+        }
+        .auth-wall-subtitle {
+            color: #8b949e;
+            font-size: 12px;
+            margin-bottom: 24px;
+        }
+        .auth-wall-box label {
+            display: block;
+            color: #8b949e;
+            font-size: 11px;
+            margin-bottom: 4px;
+            font-weight: 600;
+            text-align: left;
+        }
+        .auth-wall-box input {
+            width: 100%;
+            padding: 10px 12px;
+            background: #0d1117;
+            border: 1px solid #30363d;
+            border-radius: 6px;
+            color: #e7e9ea;
+            font-size: 14px;
+            margin-bottom: 14px;
+            box-sizing: border-box;
+            font-family: inherit;
+        }
+        .auth-wall-box input:focus {
+            outline: none;
+            border-color: #f5a623;
+        }
+        .auth-wall-error {
+            color: #f85149;
+            font-size: 11px;
+            margin-bottom: 10px;
+            display: none;
+        }
+        .auth-wall-error.visible { display: block; }
+        .auth-wall-btn {
+            width: 100%;
+            padding: 10px;
+            background: #f5a623;
+            color: #0f1419;
+            border: none;
+            border-radius: 6px;
+            font-size: 14px;
+            font-weight: 700;
+            cursor: pointer;
+            transition: 0.15s ease;
+            margin-top: 4px;
+            font-family: inherit;
+        }
+        .auth-wall-btn:hover { background: #f7b84e; }
+        .auth-wall-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+        .auth-wall-toggle {
+            color: #f5a623;
+            font-size: 11px;
+            margin-top: 16px;
+            cursor: pointer;
+        }
+        .auth-wall-toggle:hover { text-decoration: underline; }
+        .auth-wall-loading {
+            color: #8b949e;
+            font-size: 12px;
+            margin-top: 12px;
+        }
+        .nav-user {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 11px;
+            color: #8b949e;
+            margin-right: 8px;
+        }
+        .nav-user-email {
+            max-width: 140px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            color: #c9d1d9;
+            font-weight: 500;
+        }
+        .nav-logout-btn {
+            background: none;
+            border: 1px solid #30363d;
+            color: #8b949e;
+            padding: 4px 10px;
+            border-radius: 6px;
+            font-size: 11px;
+            cursor: pointer;
+            transition: 0.15s ease;
+            font-family: inherit;
+        }
+        .nav-logout-btn:hover { background: #2d333b; color: #f85149; border-color: #f85149; }
+    `;
+    document.head.appendChild(style);
+
+    // Inject auth wall HTML
+    const wall = document.createElement('div');
+    wall.className = 'auth-wall';
+    wall.id = 'authWall';
+    wall.innerHTML = `
+        <div class="auth-wall-box">
+            <div class="auth-wall-logo">HLL Tool</div>
+            <div class="auth-wall-subtitle">Sign in to access this page</div>
+            <label for="wallEmail">Email</label>
+            <input type="email" id="wallEmail" placeholder="you@example.com" autocomplete="email">
+            <label for="wallPassword">Password</label>
+            <input type="password" id="wallPassword" placeholder="Password" autocomplete="current-password">
+            <div class="auth-wall-error" id="wallError"></div>
+            <button class="auth-wall-btn" id="wallSubmitBtn">Log In</button>
+            <div class="auth-wall-toggle" id="wallToggleLink">Don't have an account? Sign up</div>
+            <div class="auth-wall-loading" id="wallLoading" style="display:none;">Checking session...</div>
+        </div>
+    `;
+    document.body.prepend(wall);
+
+    // Bind events
+    document.getElementById('wallSubmitBtn').addEventListener('click', () => HLL.authWallSubmit());
+    document.getElementById('wallToggleLink').addEventListener('click', () => HLL.toggleAuthWallMode());
+    ['wallEmail', 'wallPassword'].forEach(id => {
+        document.getElementById(id).addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') { e.preventDefault(); HLL.authWallSubmit(); }
+        });
+    });
+
+    // Inject nav user area (before nav-status if it exists)
+    const navStatus = document.querySelector('.nav-status');
+    if (navStatus) {
+        const navUser = document.createElement('div');
+        navUser.className = 'nav-user';
+        navUser.id = 'navUser';
+        navUser.style.display = 'none';
+        navUser.innerHTML = `
+            <span class="nav-user-email" id="navUserEmail"></span>
+            <button class="nav-logout-btn" id="navLogoutBtn">Log out</button>
+        `;
+        navStatus.parentNode.insertBefore(navUser, navStatus);
+        document.getElementById('navLogoutBtn').addEventListener('click', () => HLL.authSignOut());
+    }
+};
+
+HLL.toggleAuthWallMode = function() {
+    this._authWallMode = this._authWallMode === 'login' ? 'signup' : 'login';
+    const isLogin = this._authWallMode === 'login';
+    document.getElementById('wallSubmitBtn').textContent = isLogin ? 'Log In' : 'Sign Up';
+    document.getElementById('wallToggleLink').textContent = isLogin 
+        ? "Don't have an account? Sign up" 
+        : 'Already have an account? Log in';
+    document.getElementById('wallPassword').autocomplete = isLogin ? 'current-password' : 'new-password';
+    document.getElementById('wallError').classList.remove('visible');
+};
+
+HLL.authWallSubmit = async function() {
+    const email = document.getElementById('wallEmail').value.trim();
+    const password = document.getElementById('wallPassword').value;
+    const errorEl = document.getElementById('wallError');
+    const submitBtn = document.getElementById('wallSubmitBtn');
+    
+    if (!email || !password) {
+        errorEl.textContent = 'Please enter email and password.';
+        errorEl.classList.add('visible');
+        return;
+    }
+    
+    if (this._authWallMode === 'signup' && password.length < 6) {
+        errorEl.textContent = 'Password must be at least 6 characters.';
+        errorEl.classList.add('visible');
+        return;
+    }
+    
+    if (!this.supabase) {
+        errorEl.textContent = 'Failed to connect to database.';
+        errorEl.classList.add('visible');
+        return;
+    }
+    
+    submitBtn.disabled = true;
+    submitBtn.textContent = this._authWallMode === 'login' ? 'Signing in...' : 'Creating account...';
+    errorEl.classList.remove('visible');
+    
+    try {
+        let result;
+        if (this._authWallMode === 'login') {
+            result = await this.supabase.auth.signInWithPassword({ email, password });
+        } else {
+            result = await this.supabase.auth.signUp({ email, password });
+        }
+        
+        if (result.error) throw result.error;
+        
+        if (this._authWallMode === 'signup' && result.data?.user?.identities?.length === 0) {
+            errorEl.textContent = 'An account with this email already exists.';
+            errorEl.classList.add('visible');
+            return;
+        }
+        
+        if (this._authWallMode === 'signup' && !result.data?.session) {
+            errorEl.textContent = 'Check your email to confirm your account, then log in.';
+            errorEl.classList.add('visible');
+            errorEl.style.color = '#3fb950';
+            setTimeout(() => { errorEl.style.color = ''; }, 5000);
+            return;
+        }
+        
+        // Success
+        this.currentUser = result.data.session.user;
+        this._onAuthSuccess();
+        
+    } catch (err) {
+        console.error('Auth error:', err);
+        errorEl.textContent = err.message || 'Authentication failed.';
+        errorEl.classList.add('visible');
+    } finally {
+        submitBtn.disabled = false;
+        submitBtn.textContent = this._authWallMode === 'login' ? 'Log In' : 'Sign Up';
+    }
+};
+
+HLL._onAuthSuccess = function() {
+    // Hide wall
+    document.getElementById('authWall').classList.add('hidden');
+    
+    // Update nav
+    const navUser = document.getElementById('navUser');
+    if (navUser) {
+        navUser.style.display = 'flex';
+        document.getElementById('navUserEmail').textContent = this.currentUser.email;
+    }
+    
+    // Fire callback if page registered one
+    if (typeof this._authCallback === 'function') {
+        this._authCallback();
+    }
+};
+
+HLL.authSignOut = async function() {
+    if (!this.supabase) return;
+    try {
+        await this.supabase.auth.signOut();
+        this.currentUser = null;
+        
+        // Update nav
+        const navUser = document.getElementById('navUser');
+        if (navUser) navUser.style.display = 'none';
+        
+        // Show wall again
+        document.getElementById('authWall').classList.remove('hidden');
+        document.getElementById('wallEmail').value = '';
+        document.getElementById('wallPassword').value = '';
+    } catch (err) {
+        console.error('Sign out error:', err);
+    }
+};
+
+/**
+ * Main entry point for pages using auth.
+ * Call HLL.initWithAuth(callback) instead of HLL.init().
+ * The callback runs only after successful authentication.
+ */
+HLL.initWithAuth = async function(callback) {
+    this._authCallback = callback;
+    
+    // Inject auth wall UI
+    this.injectAuthWall();
+    
+    // Show "checking session" state
+    document.getElementById('wallLoading').style.display = 'block';
+    document.getElementById('wallSubmitBtn').style.display = 'none';
+    document.getElementById('wallToggleLink').style.display = 'none';
+    
+    // Load config and create Supabase client
+    this.loadConfig();
+    try {
+        this.supabase = window.supabase.createClient(
+            this.config.supabaseUrl, 
+            this.config.supabaseKey
+        );
+        
+        // Check for existing session
+        const { data: { session } } = await this.supabase.auth.getSession();
+        
+        if (session?.user) {
+            // Already logged in — skip wall
+            this.currentUser = session.user;
+            this.isOnline = true;
+            this._onAuthSuccess();
+            return;
+        }
+    } catch (err) {
+        console.error('Session check failed:', err);
+    }
+    
+    // No session — show login form
+    document.getElementById('wallLoading').style.display = 'none';
+    document.getElementById('wallSubmitBtn').style.display = '';
+    document.getElementById('wallToggleLink').style.display = '';
+    document.getElementById('wallEmail').focus();
 };
 
 // ============================================================================
