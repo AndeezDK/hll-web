@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Admin - HLL Tool v0.6.20</title>
+    <title>Admin - HLL Tool v0.6.22</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <link rel="stylesheet" href="../css/styles.css">
     <style>
@@ -81,7 +81,7 @@
         <!-- Header -->
         <div class="page-header">
             <h1 class="page-title">Admin</h1>
-            <span class="version-badge">v0.6.20</span>
+            <span class="version-badge">v0.6.22</span>
         </div>
 
         <div class="admin-grid">
@@ -412,20 +412,29 @@
                     const rawName = row[nameCol]?.trim();
                     const team = (teamCol >= 0 && row[teamCol]?.trim()) ? row[teamCol].trim() : 'Circle';
                     
-                    // Skip rows without valid steam ID or name
+                    // Skip rows without ID or name, or broken spreadsheet refs
                     if (!steamId || !rawName) continue;
-                    if (!/^\d{10,20}$/.test(steamId)) continue;
+                    if (rawName.includes('#REF') || steamId.includes('#REF')) continue;
+                    
+                    // Strip clan tags from name (e.g. "[DKB] Wrench" → "Wrench", "◯ | Jack" → "Jack")
+                    const cleanName = rawName
+                        .replace(/^\[DKB\]\s*/i, '')
+                        .replace(/^◯\s*\|\s*/g, '')
+                        .replace(/^〇\s*[|I]\s*/g, '')
+                        .replace(/^Ⓡ\s*\|\s*/g, '')
+                        .trim();
+                    if (!cleanName) continue;
                     
                     // Skip duplicate steam IDs
                     if (seenSteam.has(steamId)) {
-                        dupes.push(rawName);
+                        dupes.push(cleanName);
                         continue;
                     }
                     seenSteam.add(steamId);
                     
                     pendingPlayerImport.push({
                         steam_id: steamId,
-                        name: rawName,
+                        name: cleanName,
                         team: team
                     });
                 }
