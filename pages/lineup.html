@@ -1106,26 +1106,11 @@
         <div class="loading-text" id="loadingText">Loading...</div>
     </div>
     
-    <!-- Config Modal -->
-    <div class="config-modal hidden" id="configModal">
-        <h2>⚙️ Supabase Configuration</h2>
-        <p style="color: #8b949e; margin-bottom: 16px; font-size: 11px;">
-            Enter your Supabase project details to connect to the database.
-        </p>
-        <label for="supabaseUrl">Project URL</label>
-        <input type="text" id="supabaseUrl" value="https://mtcfoncuegnokymtebpg.supabase.co">
-        <label for="supabaseKey">Anon/Public Key</label>
-        <input type="text" id="supabaseKey" value="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im10Y2ZvbmN1ZWdub2t5bXRlYnBnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njk5NjAzODAsImV4cCI6MjA4NTUzNjM4MH0.-i2hVz1jDGSrm0pOsUrKUfdsip1gg8wpcOx7k75j8pc">
-        <label for="defaultTeam">Default Team</label>
-        <select id="defaultTeam">
-            <option value="Circle">Circle</option>
-            <option value="DKB">DKB</option>
-            <option value="Unity">Unity</option>
-        </select>
-        <div class="btn-row">
-            <button class="btn btn-secondary" onclick="useOfflineMode()">Use Offline</button>
-            <button class="btn btn-primary" onclick="saveConfig()">Connect</button>
-        </div>
+    <!-- Config fields (hidden - credentials managed internally) -->
+    <div style="display:none;">
+        <input type="hidden" id="supabaseUrl">
+        <input type="hidden" id="supabaseKey">
+        <select id="defaultTeam"><option value="Circle">Circle</option></select>
     </div>
     
     <button class="share-toggle" onclick="toggleShareMode()">📷 Share</button>

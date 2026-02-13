@@ -131,35 +131,6 @@
                 </div>
             </div>
         </div>
-
-        <!-- Connection Settings -->
-        <div class="card mt-lg" id="settingsCard">
-            <div class="card-header">
-                <span class="card-title">⚙️ Connection Settings</span>
-            </div>
-            <div class="card-body">
-                <div class="form-group">
-                    <label class="form-label">Supabase URL</label>
-                    <input type="text" class="form-input" id="supabaseUrl" placeholder="https://xxx.supabase.co">
-                </div>
-                <div class="form-group">
-                    <label class="form-label">Supabase Anon Key</label>
-                    <input type="text" class="form-input" id="supabaseKey" placeholder="eyJ...">
-                </div>
-                <div class="form-group">
-                    <label class="form-label">Default Team</label>
-                    <select class="form-select" id="defaultTeam">
-                        <option value="Circle">Circle</option>
-                        <option value="DKB">DKB</option>
-                        <option value="Unity">Unity</option>
-                    </select>
-                </div>
-                <div class="flex gap-sm">
-                    <button class="btn btn-primary" onclick="saveSettings()">Save & Connect</button>
-                    <button class="btn btn-secondary" onclick="testConnection()">Test Connection</button>
-                </div>
-            </div>
-        </div>
     </div>
 
     <!-- Loading Overlay -->
@@ -175,19 +146,15 @@
         // ============================================================================
         
         async function init() {
-            // Populate settings form with saved values
-            document.getElementById('supabaseUrl').value = HLL.config.supabaseUrl;
-            document.getElementById('supabaseKey').value = HLL.config.supabaseKey;
-            document.getElementById('defaultTeam').value = HLL.config.defaultTeam;
-            
-            // Initialize connection
-            HLL.showLoading('Connecting to database...');
-            await HLL.init();
-            HLL.hideLoading();
-            
-            if (HLL.isOnline) {
-                loadDashboardData();
-            }
+            await HLL.initWithAuth(async () => {
+                HLL.showLoading('Loading dashboard...');
+                
+                if (HLL.isOnline) {
+                    await loadDashboardData();
+                }
+                
+                HLL.hideLoading();
+            });
         }
         
         async function loadDashboardData() {
@@ -243,63 +210,6 @@
                     <td><span class="badge ${HLL.getResultBadgeClass(m.result)}">${m.result}</span></td>
                 </tr>
             `).join('');
-        }
-        
-        // ============================================================================
-        // SETTINGS
-        // ============================================================================
-        
-        async function saveSettings() {
-            const url = document.getElementById('supabaseUrl').value.trim();
-            const key = document.getElementById('supabaseKey').value.trim();
-            const team = document.getElementById('defaultTeam').value;
-            
-            if (!url || !key) {
-                HLL.showAlert('Please enter both URL and Key', 'error');
-                return;
-            }
-            
-            HLL.saveConfig(url, key, team);
-            
-            HLL.showLoading('Reconnecting...');
-            await HLL.initSupabase();
-            HLL.updateNavStatus();
-            HLL.hideLoading();
-            
-            if (HLL.isOnline) {
-                HLL.showAlert('Connected successfully!', 'success');
-                loadDashboardData();
-            } else {
-                HLL.showAlert('Connection failed', 'error');
-            }
-        }
-        
-        async function testConnection() {
-            const url = document.getElementById('supabaseUrl').value.trim();
-            const key = document.getElementById('supabaseKey').value.trim();
-            
-            if (!url || !key) {
-                HLL.showAlert('Please enter both URL and Key', 'error');
-                return;
-            }
-            
-            HLL.showLoading('Testing connection...');
-            
-            try {
-                const client = window.supabase.createClient(url, key);
-                const { data, error } = await client.from('teams').select('*').limit(1);
-                
-                HLL.hideLoading();
-                
-                if (error) {
-                    HLL.showAlert('Connection failed: ' + error.message, 'error');
-                } else {
-                    HLL.showAlert('Connection successful!', 'success');
-                }
-            } catch (err) {
-                HLL.hideLoading();
-                HLL.showAlert('Connection failed: ' + err.message, 'error');
-            }
         }
         
         // Start
