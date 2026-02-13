@@ -1238,7 +1238,6 @@
             await loadLineupsFromDatabase();
             hideLoading();
             
-            const team = allTeams.find(t => t.id === teamId);
             showToast(`Switched to ${team?.name || 'team'}`);
         }
         
