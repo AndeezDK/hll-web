@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Lineups - HLL Tool v0.10.6</title>
+    <title>Lineups - HLL Tool v0.10.7</title>
     <!-- Supabase JS Client -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <style>
@@ -847,7 +847,7 @@
     
     <div class="page-header">
         <h1 class="page-title">Lineups</h1>
-        <span class="version-badge">v0.10.6</span>
+        <span class="version-badge">v0.10.7</span>
         <select class="team-selector" id="teamSelector" onchange="switchTeam(this.value)">
             <option value="">Loading teams...</option>
         </select>
@@ -2609,10 +2609,13 @@
             document.querySelectorAll('.slot-name:not(.empty)').forEach(e => {
                 if (e.textContent !== 'Empty') { 
                     const slot = e.closest('.player-slot, .infantry-slot, .node-slot, .reserve-slot');
-                    if (!slot) return; // skip if no matching slot (e.g. streamer)
+                    if (!slot) return;
                     
                     // Skip streamer slot from roster count
                     if (slot.closest('[data-counts-sl="true"]')) return;
+                    
+                    // Skip node slots — those are duplicate assignments from infantry
+                    if (slot.classList.contains('node-slot')) return;
                     
                     roster++; 
                     if (slot.dataset.unknown === 'true') {
