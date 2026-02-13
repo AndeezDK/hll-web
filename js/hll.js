@@ -7,7 +7,7 @@
 // ============================================================================
 
 const HLL = {
-    version: '0.6.19',
+    version: '0.6.20',
     
     // Default Supabase config (can be overridden via localStorage)
     config: {
@@ -407,9 +407,10 @@ HLL.clearLineup = async function(teamId, lineupNumber) {
 // ============================================================================
 
 HLL.formatPlayerName = function(name, team) {
-    if (team === 'Circle') return '◯ | ' + name;
-    if (team === 'DKB') return '[DKB] ' + name;
-    return name;
+    const clean = HLL.stripPlayerTag(name);
+    if (team === 'Circle') return '◯ | ' + clean;
+    if (team === 'DKB') return '[DKB] ' + clean;
+    return clean;
 };
 
 HLL.stripPlayerTag = function(displayName) {
