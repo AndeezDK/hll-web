@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Lineups - HLL Tool v0.12.6</title>
+    <title>Lineups - HLL Tool v0.12.7</title>
     <!-- Supabase JS Client -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <style>
@@ -853,7 +853,7 @@
     
     <div class="page-header">
         <h1 class="page-title">Lineups</h1>
-        <span class="version-badge">v0.12.6</span>
+        <span class="version-badge">v0.12.7</span>
         <select class="team-selector" id="teamSelector" onchange="switchTeam(this.value)">
             <option value="">Loading teams...</option>
         </select>
@@ -1034,10 +1034,35 @@
         <button class="btn btn-primary" id="lockBtn" onclick="toggleLock()">🔒 Lock Lineup</button>
         <button class="btn btn-secondary" onclick="exportLineup()">📤 Export</button>
         <button class="btn btn-secondary" onclick="processAttendance()">📋 Process Attendance</button>
+        <button class="btn btn-secondary" onclick="openImportPlayersModal()">📥 Import Players</button>
         <button class="btn btn-danger" onclick="clearLineup()">🗑️ Clear</button>
         <button class="btn btn-submit" onclick="submitLineup()">✅ Submit</button>
     </div>
     
+    <!-- Import Players Modal -->
+    <div class="modal-overlay" id="importPlayersModal" style="display:none;">
+        <div class="modal" style="max-width:700px;max-height:85vh;overflow-y:auto;">
+            <div class="modal-header">
+                <span class="modal-title">📥 Import Players</span>
+                <button class="modal-close" onclick="closeImportPlayersModal()">×</button>
+            </div>
+            <div style="margin-bottom:10px;font-size:12px;color:#8b949e;">Paste player names from Discord, signup sheets, etc. The tool will match them to the roster and place unassigned players into reserves.</div>
+            <textarea id="importPlayersText" placeholder="Paste player names here..." style="width:100%;height:120px;background:#161b22;border:1px solid #30363d;color:#c9d1d9;padding:8px;border-radius:4px;font-size:12px;font-family:monospace;resize:vertical;box-sizing:border-box;"></textarea>
+            <div style="margin:8px 0;display:flex;gap:8px;">
+                <button class="btn btn-primary" onclick="parseImportPlayers()">🔍 Parse & Match</button>
+                <span style="font-size:11px;color:#8b949e;align-self:center;" id="importParseStatus"></span>
+            </div>
+            <div id="importPreview" style="display:none;">
+                <div style="margin-bottom:8px;font-size:13px;font-weight:600;color:#c9d1d9;">Preview</div>
+                <div id="importMatchedList"></div>
+                <div style="margin-top:12px;display:flex;gap:8px;justify-content:flex-end;">
+                    <button class="btn btn-secondary" onclick="closeImportPlayersModal()">Cancel</button>
+                    <button class="btn btn-save" onclick="confirmImportPlayers()">✅ Import to Reserves</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <div id="playerDropdown" class="player-dropdown">
         <input type="text" class="dropdown-search" placeholder="Search..." id="dropdownSearch">
         <div class="dropdown-list" id="dropdownList"></div>
@@ -1443,21 +1468,10 @@
         let _isSaving = false;
         
         function handleRealtimeChange(payload) {
-            // Skip our own saves
-            if (_isSaving) return;
-            
-            const { eventType, new: newRecord, old: oldRecord } = payload;
-            
-            // Refresh the lineup data
-            if (newRecord?.lineup_number === currentLineupNumber || oldRecord?.lineup_number === currentLineupNumber) {
-                const indicator = document.getElementById('syncIndicator');
-                indicator.querySelector('.sync-text').textContent = 'Syncing...';
-                
-                setTimeout(async () => {
-                    await loadLineupsFromDatabase();
-                    updateSyncIndicator('synced', 'Live');
-                }, 500);
-            }
+            // Disabled — realtime reloads were overwriting local edits (match info, reserves, etc.)
+            // Since only one user edits at a time, this is not needed.
+            // If multi-user editing is added later, this needs a smarter merge strategy.
+            console.log('Realtime change received (ignored):', payload.eventType);
         }
         
         async function saveLineup() {
@@ -3194,6 +3208,173 @@
         function loadTasksData(data) {
             tasks = data || [];
             renderTasks();
+        }
+
+        // ========================================
+        // IMPORT PLAYERS (PASTE → RESERVES)
+        // ========================================
+        let parsedImportPlayers = [];
+        
+        function openImportPlayersModal() {
+            document.getElementById('importPlayersModal').style.display = 'flex';
+            document.getElementById('importPlayersText').value = '';
+            document.getElementById('importPreview').style.display = 'none';
+            document.getElementById('importParseStatus').textContent = '';
+            parsedImportPlayers = [];
+            setTimeout(() => document.getElementById('importPlayersText').focus(), 100);
+        }
+        
+        function closeImportPlayersModal() {
+            document.getElementById('importPlayersModal').style.display = 'none';
+        }
+        
+        function parseImportPlayers() {
+            const raw = document.getElementById('importPlayersText').value.trim();
+            if (!raw) return;
+            
+            // Split by common separators: newlines, or detect inline format
+            // Handle the Discord paste format: names separated by clan tags
+            let names = [];
+            
+            // First try splitting by newlines
+            if (raw.includes('\n')) {
+                names = raw.split('\n').map(s => s.trim()).filter(Boolean);
+            } else {
+                // Inline format — split before each clan tag pattern
+                // Patterns: ◯ | , Ⓡ | , UKLL | , [TAG] , # , VLidlK ·
+                const tagPattern = /(?=[\u25CB\u3007]\s*\|)|(?=\u24C7\s*\|)|(?=UKLL\s*\|)|(?=\[[A-Za-z0-9]+\]\s*)|(?=#[a-zA-Z])|(?=VLidlK\s*[·.])/gi;
+                const parts = raw.split(tagPattern).map(s => s.trim()).filter(Boolean);
+                
+                if (parts.length > 1) {
+                    names = parts;
+                } else {
+                    // Fallback: just use the whole thing, try comma or space separated
+                    names = raw.split(/[,;]/).map(s => s.trim()).filter(Boolean);
+                }
+            }
+            
+            // Strip clan tags from each name
+            const cleaned = names.map(n => {
+                let name = n;
+                let prev;
+                do {
+                    prev = name;
+                    name = name
+                        .replace(/^[\u25CB\u3007]\s*[|I]\s*/i, '')
+                        .replace(/^\u24C7\s*[|I]\s*/i, '')
+                        .replace(/^\[[A-Za-z0-9]+\]\s*/i, '')
+                        .replace(/^UKLL\s*[|I]\s*/i, '')
+                        .replace(/^VLidlK\s*[·.]\s*/i, '')
+                        .replace(/^#/, '')
+                        .trim();
+                } while (name !== prev);
+                return name;
+            }).filter(n => n.length > 0);
+            
+            // Match to roster
+            const assigned = getAssignedPlayers();
+            const results = [];
+            
+            cleaned.forEach(name => {
+                const rosterMatch = findRosterPlayer(name);
+                const alreadyInLineup = rosterMatch ? assigned.includes(rosterMatch.name) : assigned.includes(name);
+                
+                results.push({
+                    raw: name,
+                    matched: rosterMatch ? rosterMatch.name : null,
+                    team: rosterMatch ? rosterMatch.team : null,
+                    display: rosterMatch ? formatPlayerName(rosterMatch.name, rosterMatch.team) : name,
+                    alreadyInLineup: alreadyInLineup,
+                    unknown: !rosterMatch,
+                    include: !alreadyInLineup
+                });
+            });
+            
+            parsedImportPlayers = results;
+            renderImportPreview();
+        }
+        
+        function renderImportPreview() {
+            const container = document.getElementById('importMatchedList');
+            const inLineup = parsedImportPlayers.filter(p => p.alreadyInLineup);
+            const toImport = parsedImportPlayers.filter(p => !p.alreadyInLineup && !p.unknown);
+            const unknown = parsedImportPlayers.filter(p => !p.alreadyInLineup && p.unknown);
+            
+            let html = '';
+            
+            if (toImport.length > 0) {
+                html += `<div style="margin-bottom:8px;"><span style="color:#3fb950;font-size:12px;font-weight:600;">✅ Will import to reserves (${toImport.length})</span></div>`;
+                html += '<div style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:12px;">';
+                toImport.forEach(p => {
+                    html += `<span style="background:#238636;color:#fff;padding:2px 8px;border-radius:3px;font-size:11px;">${p.display}</span>`;
+                });
+                html += '</div>';
+            }
+            
+            if (inLineup.length > 0) {
+                html += `<div style="margin-bottom:8px;"><span style="color:#8b949e;font-size:12px;font-weight:600;">⏭ Already in lineup (${inLineup.length})</span></div>`;
+                html += '<div style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:12px;">';
+                inLineup.forEach(p => {
+                    html += `<span style="background:#30363d;color:#8b949e;padding:2px 8px;border-radius:3px;font-size:11px;">${p.display}</span>`;
+                });
+                html += '</div>';
+            }
+            
+            if (unknown.length > 0) {
+                html += `<div style="margin-bottom:8px;"><span style="color:#d29922;font-size:12px;font-weight:600;">⚠ Not in roster — will import as unknown (${unknown.length})</span></div>`;
+                html += '<div style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:12px;">';
+                unknown.forEach(p => {
+                    html += `<span style="background:#d299221a;color:#d29922;padding:2px 8px;border-radius:3px;font-size:11px;border:1px solid #d2992244;">${p.raw}</span>`;
+                });
+                html += '</div>';
+            }
+            
+            const total = toImport.length + unknown.length;
+            document.getElementById('importParseStatus').textContent = `${parsedImportPlayers.length} names parsed, ${total} to import`;
+            container.innerHTML = html;
+            document.getElementById('importPreview').style.display = 'block';
+        }
+        
+        function confirmImportPlayers() {
+            const toImport = parsedImportPlayers.filter(p => !p.alreadyInLineup);
+            if (toImport.length === 0) {
+                alert('No new players to import — all are already in the lineup.');
+                closeImportPlayersModal();
+                return;
+            }
+            
+            // Find empty reserve slots
+            const reserveSlots = [...document.querySelectorAll('.reserve-slot.empty')];
+            
+            // Need more reserve slots? Add them
+            const grid = document.getElementById('reservesGrid');
+            while (reserveSlots.length < toImport.length) {
+                const newSlot = document.createElement('div');
+                newSlot.className = 'reserve-slot empty';
+                newSlot.textContent = 'Empty';
+                grid.appendChild(newSlot);
+                reserveSlots.push(newSlot);
+            }
+            // Re-attach click handlers for new slots
+            attachSlotListeners();
+            
+            let imported = 0;
+            toImport.forEach((p, i) => {
+                if (i < reserveSlots.length) {
+                    const slot = reserveSlots[i];
+                    const name = p.matched || p.raw;
+                    const rosterPlayer = findRosterPlayer(name);
+                    slot.textContent = rosterPlayer ? formatPlayerName(name, rosterPlayer.team) : name;
+                    slot.classList.remove('empty');
+                    slot.dataset.player = name;
+                    imported++;
+                }
+            });
+            
+            updateCounters();
+            markModified();
+            closeImportPlayersModal();
+            showToast(`Imported ${imported} players to reserves`);
         }
 
         function processAttendance() {
