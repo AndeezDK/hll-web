@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Lineups - HLL Tool v0.12.4</title>
+    <title>Lineups - HLL Tool v0.12.6</title>
     <!-- Supabase JS Client -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <style>
@@ -853,7 +853,7 @@
     
     <div class="page-header">
         <h1 class="page-title">Lineups</h1>
-        <span class="version-badge">v0.12.4</span>
+        <span class="version-badge">v0.12.6</span>
         <select class="team-selector" id="teamSelector" onchange="switchTeam(this.value)">
             <option value="">Loading teams...</option>
         </select>
@@ -1364,6 +1364,41 @@
                 const savedTasks = localStorage.getItem(taskKey);
                 loadTasksData(savedTasks ? JSON.parse(savedTasks) : []);
                 
+                // Load match info from localStorage
+                const matchKey = `hll_match_${currentTeamId}_${currentLineupNumber}`;
+                const savedMatch = localStorage.getItem(matchKey);
+                if (savedMatch) {
+                    try {
+                        const m = JSON.parse(savedMatch);
+                        if (m.team) document.querySelector('.vs-display select').value = m.team;
+                        if (m.enemy) document.getElementById('enemyTeamInput').value = m.enemy;
+                        if (m.map) document.querySelectorAll('.match-field select')[1].value = m.map;
+                        if (m.faction) document.querySelectorAll('.match-field select')[2].value = m.faction;
+                        if (m.mid_cap) document.getElementById('midCapInput').value = m.mid_cap;
+                        if (m.date) document.querySelector('.match-field input[type="date"]').value = m.date;
+                    } catch (e) { console.warn('Failed to restore match info:', e); }
+                }
+                
+                // Load reserves from localStorage
+                const reserveKey = `hll_reserves_${currentTeamId}_${currentLineupNumber}`;
+                const savedReserves = localStorage.getItem(reserveKey);
+                if (savedReserves) {
+                    try {
+                        const reserves = JSON.parse(savedReserves);
+                        const reserveSlots = document.querySelectorAll('.reserve-slot');
+                        reserves.forEach((name, i) => {
+                            if (i < reserveSlots.length && name) {
+                                const slot = reserveSlots[i];
+                                const rosterPlayer = findRosterPlayer(name);
+                                slot.textContent = rosterPlayer ? formatPlayerName(name, rosterPlayer.team) : name;
+                                slot.classList.remove('empty');
+                                slot.dataset.player = name;
+                            }
+                        });
+                        updateCounters();
+                    } catch (e) { console.warn('Failed to restore reserves:', e); }
+                }
+                
             } catch (err) {
                 console.error('Error loading lineups:', err);
             }
@@ -1405,17 +1440,19 @@
                 });
         }
         
+        let _isSaving = false;
+        
         function handleRealtimeChange(payload) {
-            // Only process if it's not our own change
+            // Skip our own saves
+            if (_isSaving) return;
+            
             const { eventType, new: newRecord, old: oldRecord } = payload;
             
             // Refresh the lineup data
             if (newRecord?.lineup_number === currentLineupNumber || oldRecord?.lineup_number === currentLineupNumber) {
-                // Show brief notification
                 const indicator = document.getElementById('syncIndicator');
                 indicator.querySelector('.sync-text').textContent = 'Syncing...';
                 
-                // Reload lineup data (simplified - could be more granular)
                 setTimeout(async () => {
                     await loadLineupsFromDatabase();
                     updateSyncIndicator('synced', 'Live');
@@ -1429,6 +1466,7 @@
                 return;
             }
             
+            _isSaving = true;
             updateSyncIndicator('syncing', 'Saving...');
             
             try {
@@ -1474,6 +1512,19 @@
                 const taskKey = `hll_tasks_${currentTeamId}_${currentLineupNumber}`;
                 localStorage.setItem(taskKey, JSON.stringify(tasks));
                 
+                // Save match info to localStorage
+                const matchKey = `hll_match_${currentTeamId}_${currentLineupNumber}`;
+                localStorage.setItem(matchKey, JSON.stringify(getMatchInfo()));
+                
+                // Save reserves to localStorage
+                const reserveKey = `hll_reserves_${currentTeamId}_${currentLineupNumber}`;
+                const reserves = [];
+                document.querySelectorAll('.reserve-slot').forEach(slot => {
+                    const name = slot.dataset.player || (slot.classList.contains('empty') ? '' : slot.textContent);
+                    if (name && name !== 'Empty') reserves.push(name);
+                });
+                localStorage.setItem(reserveKey, JSON.stringify(reserves));
+                
                 console.log('Saved ' + slots.length + ' slots to Lineup ' + currentLineupNumber);
                 updateUndoButton();
                 
@@ -1481,6 +1532,8 @@
                 console.error('Error saving lineup:', err);
                 updateSyncIndicator('error', 'Save failed');
                 alert('Save failed: ' + err.message);
+            } finally {
+                setTimeout(() => { _isSaving = false; }, 2000);
             }
         }
         
@@ -2453,7 +2506,25 @@
             
             if (data.badge !== null) addTeamBadge(slot);
         }
-        function clearSlot() { if (currentSlot) { const n = currentSlot.querySelector('.slot-name'); n.textContent = 'Empty'; n.classList.add('empty'); currentSlot.classList.remove('filled'); delete currentSlot.dataset.player; removeTeamBadge(currentSlot); } closeDropdown(); updateCounters(); markModified(); }
+        function clearSlot() { 
+            if (currentSlot) { 
+                if (currentSlot.classList.contains('reserve-slot')) {
+                    currentSlot.textContent = 'Empty';
+                    currentSlot.classList.add('empty');
+                    delete currentSlot.dataset.player;
+                } else {
+                    const n = currentSlot.querySelector('.slot-name'); 
+                    n.textContent = 'Empty'; 
+                    n.classList.add('empty'); 
+                    n.classList.remove('unknown-player');
+                    currentSlot.classList.remove('filled'); 
+                    delete currentSlot.dataset.player; 
+                    delete currentSlot.dataset.unknown;
+                    removeTeamBadge(currentSlot); 
+                }
+            } 
+            closeDropdown(); updateCounters(); markModified(); 
+        }
         function openDropdown(slot) {
             if (currentSlot === slot && dropdown.classList.contains('active')) { closeDropdown(); return; }
             currentSlot = slot; const r = slot.getBoundingClientRect();
@@ -2600,7 +2671,9 @@
         // Enter key in search field selects first non-assigned item
         searchInput.addEventListener('keydown', e => {
             if (e.key === 'Enter') {
-                const first = dropdownList.querySelector('.dropdown-item:not(.already-assigned)');
+                e.preventDefault();
+                // Prefer roster match, skip freetext-add
+                const first = dropdownList.querySelector('.dropdown-item:not(.already-assigned):not(.freetext-add)');
                 if (first) { selectPlayer(first.dataset.name, first.dataset.team); }
             }
         });
@@ -2648,8 +2721,8 @@
                     selectPlayer(highlighted.dataset.name, highlighted.dataset.team);
                     return;
                 }
-                // Otherwise select first item
-                const first = dropdownList.querySelector('.dropdown-item:not(.already-assigned)');
+                // Otherwise select first roster item (skip freetext)
+                const first = dropdownList.querySelector('.dropdown-item:not(.already-assigned):not(.freetext-add)');
                 if (first) { e.preventDefault(); selectPlayer(first.dataset.name, first.dataset.team); }
                 return;
             }
