@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Lineups - HLL Tool v0.12.3</title>
+    <title>Lineups - HLL Tool v0.12.4</title>
     <!-- Supabase JS Client -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <style>
@@ -853,7 +853,7 @@
     
     <div class="page-header">
         <h1 class="page-title">Lineups</h1>
-        <span class="version-badge">v0.12.3</span>
+        <span class="version-badge">v0.12.4</span>
         <select class="team-selector" id="teamSelector" onchange="switchTeam(this.value)">
             <option value="">Loading teams...</option>
         </select>
@@ -2280,20 +2280,27 @@
         }
         
         function getAssignedPlayers() { 
-            return [...document.querySelectorAll('.slot-name:not(.empty)')].map(e => {
+            const names = [...document.querySelectorAll('.slot-name:not(.empty)')].map(e => {
                 const slot = e.closest('.player-slot, .infantry-slot, .node-slot, .reserve-slot');
                 // Skip node slots — nodes are additional duty, not exclusive assignments
                 if (slot?.classList.contains('node-slot')) return null;
                 return slot?.dataset.player || getRawPlayerName(e.textContent);
-            }).filter(t => t && t !== 'Empty'); 
+            }).filter(t => t && t !== 'Empty');
+            
+            // Also include reserve slots (they don't have .slot-name children)
+            document.querySelectorAll('.reserve-slot:not(.empty)').forEach(slot => {
+                const name = slot.dataset.player || getRawPlayerName(slot.textContent);
+                if (name && name !== 'Empty') names.push(name);
+            });
+            
+            return names;
         }
         function renderDropdown(filter = '') {
             const assigned = getAssignedPlayers();
             const isNodeSlot = currentSlot && currentSlot.classList.contains('node-slot');
-            const isReserveSlot = currentSlot && currentSlot.classList.contains('reserve-slot');
             const filtered = players.filter(p => p.name.toLowerCase().includes(filter.toLowerCase()));
             dropdownList.innerHTML = filtered
-                .map(p => `<div class="dropdown-item ${!isNodeSlot && !isReserveSlot && assigned.includes(p.name) ? 'already-assigned' : ''}" data-name="${p.name}" data-team="${p.team}"><span>${formatPlayerName(p.name, p.team)}</span><span class="player-team">${p.team}</span></div>`).join('');
+                .map(p => `<div class="dropdown-item ${!isNodeSlot && assigned.includes(p.name) ? 'already-assigned' : ''}" data-name="${p.name}" data-team="${p.team}"><span>${formatPlayerName(p.name, p.team)}</span><span class="player-team">${p.team}</span></div>`).join('');
             // Freetext option: show if filter has text and no exact name match
             const trimmed = filter.trim();
             if (trimmed.length > 0 && !players.some(p => p.name.toLowerCase() === trimmed.toLowerCase())) {
