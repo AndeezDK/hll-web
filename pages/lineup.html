@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Lineups - HLL Tool v0.11.4</title>
+    <title>Lineups - HLL Tool v0.12.2</title>
     <!-- Supabase JS Client -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <style>
@@ -239,6 +239,13 @@
         .player-slot.drag-over, .infantry-slot.drag-over, .node-slot.drag-over { outline: 2px dashed #f0a500; outline-offset: -2px; background: #f0a50011; }
         .player-slot.dragging, .infantry-slot.dragging, .node-slot.dragging { opacity: 0.4; }
         .infantry-slot.unassigned { border: 2px solid #c9d1d9; background: #c9d1d90a; }
+        .task-item { display: flex; align-items: center; gap: 6px; padding: 4px 6px; border: 1px solid #30363d; border-radius: 4px; margin-bottom: 4px; background: #0d1117; font-size: 12px; }
+        .task-item .task-name { flex: 1; color: #c9d1d9; }
+        .task-item .task-player { background: #161b22; border: 1px solid #30363d; color: #c9d1d9; padding: 2px 6px; border-radius: 3px; font-size: 11px; cursor: pointer; min-width: 100px; text-align: center; }
+        .task-item .task-player.empty { color: #f85149; font-style: italic; }
+        .task-item .task-player.filled { color: #3fb950; }
+        .task-item .task-remove { background: none; border: none; color: #f85149; cursor: pointer; font-size: 14px; padding: 0 4px; }
+        .task-item .task-check { width: 14px; height: 14px; }
         .dropdown-item.freetext-add { color: #d29922; border-top: 1px solid #30363d; font-style: italic; }
         .dropdown-item.freetext-add:hover { background: #d299221a; }
         .bottom-sheet-item.freetext-add { color: #d29922; border-top: 1px solid #30363d; font-style: italic; }
@@ -846,7 +853,7 @@
     
     <div class="page-header">
         <h1 class="page-title">Lineups</h1>
-        <span class="version-badge">v0.11.4</span>
+        <span class="version-badge">v0.12.2</span>
         <select class="team-selector" id="teamSelector" onchange="switchTeam(this.value)">
             <option value="">Loading teams...</option>
         </select>
@@ -998,6 +1005,19 @@
         </div>
     </div>
     
+    <div class="bottom-row">
+        <div class="section" style="flex:1;"><div class="section-header" style="background:#2d333b;"><span class="section-header-title">📋 Task List <span id="taskStatus" style="font-weight:normal;font-size:11px;"></span></span><span class="section-chevron">▼</span></div>
+            <div class="section-content" id="taskListSection">
+                <div id="taskItems"></div>
+                <div style="display:flex;gap:6px;margin-top:6px;">
+                    <input type="text" id="newTaskInput" placeholder="Add task (e.g. Supply Drops, Repair Station...)" style="flex:1;background:#161b22;border:1px solid #30363d;color:#c9d1d9;padding:6px 8px;border-radius:4px;font-size:12px;">
+                    <button class="btn btn-secondary" onclick="addTask()" style="padding:4px 10px;font-size:12px;">+ Add</button>
+                </div>
+                <div style="margin-top:6px;font-size:11px;color:#8b949e;" id="taskSummary"></div>
+            </div>
+        </div>
+    </div>
+
     <div class="bottom-row">
         <div class="section"><div class="section-header tan"><span class="section-header-title">Reserves (<span id="reserveCount">0</span>)</span><span class="section-chevron">▼</span></div>
             <div class="section-content"><div class="reserves-grid" id="reservesGrid"></div></div></div>
@@ -1339,6 +1359,11 @@
                     populateUIFromLineupData(lineupData[currentLineupNumber]);
                 }
                 
+                // Load tasks from localStorage
+                const taskKey = `hll_tasks_${currentTeamId}_${currentLineupNumber}`;
+                const savedTasks = localStorage.getItem(taskKey);
+                loadTasksData(savedTasks ? JSON.parse(savedTasks) : []);
+                
             } catch (err) {
                 console.error('Error loading lineups:', err);
             }
@@ -1444,6 +1469,10 @@
                 updateSyncIndicator('synced', 'Saved');
                 updateStatusBadge('saved');
                 updateTabIndicators();
+                
+                // Save tasks to localStorage
+                const taskKey = `hll_tasks_${currentTeamId}_${currentLineupNumber}`;
+                localStorage.setItem(taskKey, JSON.stringify(tasks));
                 
                 console.log('Saved ' + slots.length + ' slots to Lineup ' + currentLineupNumber);
                 updateUndoButton();
@@ -2261,9 +2290,10 @@
         function renderDropdown(filter = '') {
             const assigned = getAssignedPlayers();
             const isNodeSlot = currentSlot && currentSlot.classList.contains('node-slot');
+            const isReserveSlot = currentSlot && currentSlot.classList.contains('reserve-slot');
             const filtered = players.filter(p => p.name.toLowerCase().includes(filter.toLowerCase()));
             dropdownList.innerHTML = filtered
-                .map(p => `<div class="dropdown-item ${!isNodeSlot && assigned.includes(p.name) ? 'already-assigned' : ''}" data-name="${p.name}" data-team="${p.team}"><span>${formatPlayerName(p.name, p.team)}</span><span class="player-team">${p.team}</span></div>`).join('');
+                .map(p => `<div class="dropdown-item ${!isNodeSlot && !isReserveSlot && assigned.includes(p.name) ? 'already-assigned' : ''}" data-name="${p.name}" data-team="${p.team}"><span>${formatPlayerName(p.name, p.team)}</span><span class="player-team">${p.team}</span></div>`).join('');
             // Freetext option: show if filter has text and no exact name match
             const trimmed = filter.trim();
             if (trimmed.length > 0 && !players.some(p => p.name.toLowerCase() === trimmed.toLowerCase())) {
@@ -2273,21 +2303,29 @@
         }
         function selectPlayer(name, team) { 
             if (currentSlot) { 
-                const n = currentSlot.querySelector('.slot-name'); 
                 // Normalize team name freetext entries
                 const teamNames = { 'dkb': 'DKB', 'circle': 'Circle', 'merc': 'Merc' };
                 const normalized = teamNames[name.toLowerCase().trim()];
                 if (normalized) name = normalized;
                 
-                const isUnknown = !findRosterPlayer(name);
-                currentSlot.dataset.player = name;
-                currentSlot.dataset.unknown = isUnknown ? 'true' : '';
-                n.textContent = isUnknown ? name : formatPlayerName(name, team || getPlayerTeam(name)); 
-                n.classList.remove('empty');
-                n.classList.toggle('unknown-player', isUnknown);
-                currentSlot.classList.add('filled');
-                if (isUnknown) addTeamBadge(currentSlot);
-                else removeTeamBadge(currentSlot);
+                // Reserve slots have no .slot-name child — text is directly in the div
+                if (currentSlot.classList.contains('reserve-slot')) {
+                    const rosterPlayer = findRosterPlayer(name);
+                    currentSlot.textContent = rosterPlayer ? formatPlayerName(name, rosterPlayer.team) : name;
+                    currentSlot.classList.remove('empty');
+                    currentSlot.dataset.player = name;
+                } else {
+                    const n = currentSlot.querySelector('.slot-name'); 
+                    const isUnknown = !findRosterPlayer(name);
+                    currentSlot.dataset.player = name;
+                    currentSlot.dataset.unknown = isUnknown ? 'true' : '';
+                    n.textContent = isUnknown ? name : formatPlayerName(name, team || getPlayerTeam(name)); 
+                    n.classList.remove('empty');
+                    n.classList.toggle('unknown-player', isUnknown);
+                    currentSlot.classList.add('filled');
+                    if (isUnknown) addTeamBadge(currentSlot);
+                    else removeTeamBadge(currentSlot);
+                }
             } 
             closeDropdown(); updateCounters(); markModified(); 
         }
@@ -2860,6 +2898,9 @@
                 if (name && name !== 'Empty') onNodes.add(name);
             });
             
+            // Collect all names assigned to tasks
+            const onTasks = new Set(tasks.filter(t => t.player).map(t => t.player));
+            
             // Check all infantry slots across all squads
             const allSections = ['northWestSlots', 'defenceSlots', 'meatGrindSlots', 'flexSlots', 'southEastSlots', 'infiltrationSlots'];
             allSections.forEach(sectionId => {
@@ -2878,12 +2919,177 @@
                     const playerName = slot.dataset.player || nameEl.textContent;
                     const isOnNodes = onNodes.has(playerName);
                     
-                    // Unassigned = no SL, no role, not on nodes
-                    if (!hasSL && !hasRole && !isOnNodes) {
+                    // Unassigned = no SL, no role, not on nodes, not on tasks
+                    if (!hasSL && !hasRole && !isOnNodes && !onTasks.has(playerName)) {
                         slot.classList.add('unassigned');
                     }
                 });
             });
+        }
+
+        // ========================================
+        // TASK LIST
+        // ========================================
+        let tasks = [];
+        const defaultTasks = ['Node Building North', 'Node Building Middle', 'Node Building South', 'Supply Drops', 'Repair Station'];
+        
+        function addTask(name) {
+            if (!name) {
+                name = document.getElementById('newTaskInput').value.trim();
+                document.getElementById('newTaskInput').value = '';
+            }
+            if (!name) return;
+            tasks.push({ name: name, player: '', done: false });
+            renderTasks();
+            markModified();
+        }
+        
+        document.getElementById('newTaskInput').addEventListener('keydown', e => {
+            if (e.key === 'Enter') addTask();
+        });
+        
+        function removeTask(index) {
+            tasks.splice(index, 1);
+            renderTasks();
+            markModified();
+        }
+        
+        function toggleTaskDone(index) {
+            tasks[index].done = !tasks[index].done;
+            renderTasks();
+            markModified();
+        }
+        
+        function assignTaskPlayer(index) {
+            // Get unassigned infantry (same logic as highlight)
+            const onNodes = new Set();
+            document.querySelectorAll('.node-slot .slot-name:not(.empty)').forEach(el => {
+                const slot = el.closest('.node-slot');
+                const name = slot?.dataset.player || el.textContent;
+                if (name && name !== 'Empty') onNodes.add(name);
+            });
+            
+            // Get players already assigned to tasks
+            const onTasks = new Set(tasks.filter((t, i) => i !== index && t.player).map(t => t.player));
+            
+            const allSections = ['northWestSlots', 'defenceSlots', 'meatGrindSlots', 'flexSlots', 'southEastSlots', 'infiltrationSlots'];
+            const available = [];
+            allSections.forEach(sectionId => {
+                const container = document.getElementById(sectionId);
+                if (!container) return;
+                container.querySelectorAll('.infantry-slot.filled').forEach(slot => {
+                    const nameEl = slot.querySelector('.slot-name');
+                    if (!nameEl || nameEl.classList.contains('empty')) return;
+                    const slDropdown = slot.querySelector('.sl-dropdown');
+                    const noteDropdown = slot.querySelector('.note-dropdown');
+                    const hasSL = slDropdown && slDropdown.value !== '';
+                    const hasRole = noteDropdown && noteDropdown.value !== '';
+                    const playerName = slot.dataset.player || nameEl.textContent;
+                    if (!hasSL && !hasRole && !onNodes.has(playerName) && !onTasks.has(playerName)) {
+                        available.push({ name: playerName, display: nameEl.textContent });
+                    }
+                });
+            });
+            
+            // Show simple selection
+            if (available.length === 0 && !tasks[index].player) {
+                alert('No unassigned infantry available for this task.');
+                return;
+            }
+            
+            const options = available.map(p => p.display);
+            if (tasks[index].player) options.unshift('(Clear assignment)');
+            
+            const choice = prompt(
+                `Assign player to "${tasks[index].name}":\n\n` +
+                options.map((o, i) => `${i + 1}. ${o}`).join('\n') +
+                '\n\nEnter number (or empty to cancel):'
+            );
+            
+            if (!choice) return;
+            const num = parseInt(choice) - 1;
+            if (tasks[index].player && num === 0) {
+                tasks[index].player = '';
+            } else {
+                const offset = tasks[index].player ? 1 : 0;
+                const selected = available[num - offset];
+                if (selected) tasks[index].player = selected.name;
+            }
+            renderTasks();
+            markModified();
+        }
+        
+        function renderTasks() {
+            const container = document.getElementById('taskItems');
+            container.innerHTML = tasks.map((t, i) => `
+                <div class="task-item">
+                    <input type="checkbox" class="task-check" ${t.done ? 'checked' : ''} onchange="toggleTaskDone(${i})">
+                    <span class="task-name" style="${t.done ? 'text-decoration:line-through;opacity:0.5;' : ''}">${t.name}</span>
+                    <span class="task-player ${t.player ? 'filled' : 'empty'}" onclick="assignTaskPlayer(${i})">${t.player ? formatPlayerName(t.player, getPlayerTeam(t.player)) : '+ Assign'}</span>
+                    <button class="task-remove" onclick="removeTask(${i})">✕</button>
+                </div>
+            `).join('');
+            
+            updateTaskSummary();
+        }
+        
+        function updateTaskSummary() {
+            const total = tasks.length;
+            const assigned = tasks.filter(t => t.player).length;
+            const done = tasks.filter(t => t.done).length;
+            
+            // Count unassigned infantry (not on SL, role, nodes, or tasks)
+            const onNodes = new Set();
+            document.querySelectorAll('.node-slot .slot-name:not(.empty)').forEach(el => {
+                const slot = el.closest('.node-slot');
+                const name = slot?.dataset.player || el.textContent;
+                if (name && name !== 'Empty') onNodes.add(name);
+            });
+            const onTasks = new Set(tasks.filter(t => t.player).map(t => t.player));
+            
+            let freeInfantry = 0;
+            const allSections = ['northWestSlots', 'defenceSlots', 'meatGrindSlots', 'flexSlots', 'southEastSlots', 'infiltrationSlots'];
+            allSections.forEach(sectionId => {
+                const container = document.getElementById(sectionId);
+                if (!container) return;
+                container.querySelectorAll('.infantry-slot.filled').forEach(slot => {
+                    const nameEl = slot.querySelector('.slot-name');
+                    if (!nameEl || nameEl.classList.contains('empty')) return;
+                    const slDropdown = slot.querySelector('.sl-dropdown');
+                    const noteDropdown = slot.querySelector('.note-dropdown');
+                    const hasSL = slDropdown && slDropdown.value !== '';
+                    const hasRole = noteDropdown && noteDropdown.value !== '';
+                    const playerName = slot.dataset.player || nameEl.textContent;
+                    if (!hasSL && !hasRole && !onNodes.has(playerName) && !onTasks.has(playerName)) freeInfantry++;
+                });
+            });
+            
+            const unassignedTasks = total - assigned;
+            const status = document.getElementById('taskStatus');
+            const summary = document.getElementById('taskSummary');
+            
+            if (total === 0) {
+                status.textContent = '';
+                summary.textContent = '';
+                return;
+            }
+            
+            const color = unassignedTasks > freeInfantry ? '#f85149' : unassignedTasks > 0 ? '#d29922' : '#3fb950';
+            status.innerHTML = `<span style="color:${color};">${assigned}/${total} assigned</span>`;
+            
+            let summaryParts = [`${done}/${total} done`];
+            if (unassignedTasks > 0) summaryParts.push(`${freeInfantry} free infantry for ${unassignedTasks} remaining tasks`);
+            if (unassignedTasks > freeInfantry) summaryParts.push('⚠ Not enough free players!');
+            summary.innerHTML = summaryParts.join(' · ');
+        }
+        
+        function getTasksData() {
+            return tasks;
+        }
+        
+        function loadTasksData(data) {
+            tasks = data || [];
+            renderTasks();
         }
 
         function processAttendance() {
