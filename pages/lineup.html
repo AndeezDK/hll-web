@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Lineups - HLL Tool v0.11.0</title>
+    <title>Lineups - HLL Tool v0.11.2</title>
     <!-- Supabase JS Client -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <style>
@@ -239,7 +239,6 @@
         .player-slot.drag-over, .infantry-slot.drag-over, .node-slot.drag-over { outline: 2px dashed #f0a500; outline-offset: -2px; background: #f0a50011; }
         .player-slot.dragging, .infantry-slot.dragging, .node-slot.dragging { opacity: 0.4; }
         .infantry-slot.unassigned { border-color: #d29922; background: #d299220f; }
-        .infantry-slot.unassigned .slot-name { color: #d29922; }
         .dropdown-item.freetext-add { color: #d29922; border-top: 1px solid #30363d; font-style: italic; }
         .dropdown-item.freetext-add:hover { background: #d299221a; }
         .bottom-sheet-item.freetext-add { color: #d29922; border-top: 1px solid #30363d; font-style: italic; }
@@ -847,7 +846,7 @@
     
     <div class="page-header">
         <h1 class="page-title">Lineups</h1>
-        <span class="version-badge">v0.11.0</span>
+        <span class="version-badge">v0.11.2</span>
         <select class="team-selector" id="teamSelector" onchange="switchTeam(this.value)">
             <option value="">Loading teams...</option>
         </select>
@@ -1836,16 +1835,24 @@
                 // Check roster match: try exact name first, then try stripped name (handles legacy saves with clan tags)
                 const rawName = getRawPlayerName(playerName);
                 const rosterPlayer = findRosterPlayer(playerName);
-                const isUnknown = !rosterPlayer;
+                let isUnknown = !rosterPlayer;
+                let closestMatch = null;
                 if (isUnknown) {
                     const strip = s => s.replace(/[^\x20-\x7E]/g, '').trim().toLowerCase();
-                    const closestMatch = players.find(p => strip(p.name) === strip(rawName));
-                    console.warn(`[Unknown] "${playerName}" (raw: "${rawName}") not found in roster.`,
-                        `Chars: [${[...rawName].map(c => c.charCodeAt(0)).join(',')}]`,
-                        closestMatch ? `MATCH BY STRIP: "${closestMatch.name}" chars: [${[...closestMatch.name].map(c => c.charCodeAt(0)).join(',')}]` : 'No strip match either');
+                    closestMatch = players.find(p => strip(p.name) === strip(rawName));
+                    if (closestMatch) {
+                        // Strip match found — treat as known
+                        isUnknown = false;
+                        console.log(`[Resolved] "${playerName}" matched to "${closestMatch.name}" via strip`);
+                    } else {
+                        console.warn(`[Unknown] "${playerName}" (raw: "${rawName}") not found in roster.`,
+                            `Chars: [${[...rawName].map(c => c.charCodeAt(0)).join(',')}]`,
+                            'No strip match either');
+                    }
                 }
-                const matchedName = rosterPlayer ? rosterPlayer.name : rawName;
-                const team = rosterPlayer ? rosterPlayer.team : '';
+                const resolved = rosterPlayer || closestMatch;
+                const matchedName = resolved ? resolved.name : rawName;
+                const team = resolved ? resolved.team : '';
                 slot.dataset.player = matchedName;
                 slot.dataset.unknown = isUnknown ? 'true' : '';
                 nameEl.textContent = isUnknown ? matchedName : formatPlayerName(matchedName, team);
@@ -1915,8 +1922,10 @@
                 el.classList.add('empty');
             });
             document.querySelectorAll('.player-slot, .infantry-slot, .node-slot').forEach(slot => {
-                slot.classList.remove('filled', 'conflict');
+                slot.classList.remove('filled', 'conflict', 'unassigned');
                 delete slot.dataset.player;
+                delete slot.dataset.unknown;
+                delete slot.dataset.team;
             });
             document.querySelectorAll('.here-check, .sl-check').forEach(cb => {
                 cb.checked = false;
@@ -2836,6 +2845,13 @@
         }
         
         function highlightUnassignedInfantry() {
+            // Toggle — if already highlighted, clear and return
+            const anyHighlighted = document.querySelector('.infantry-slot.unassigned');
+            if (anyHighlighted) {
+                document.querySelectorAll('.infantry-slot.unassigned').forEach(s => s.classList.remove('unassigned'));
+                return;
+            }
+            
             // Collect all names currently on nodes
             const onNodes = new Set();
             document.querySelectorAll('.node-slot .slot-name:not(.empty)').forEach(el => {
