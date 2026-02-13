@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Lineups - HLL Tool v0.10.0</title>
+    <title>Lineups - HLL Tool v0.10.1</title>
     <!-- Supabase JS Client -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <style>
@@ -845,7 +845,7 @@
     
     <div class="page-header">
         <h1 class="page-title">Lineups</h1>
-        <span class="version-badge">v0.10.0</span>
+        <span class="version-badge">v0.10.1</span>
         <select class="team-selector" id="teamSelector" onchange="switchTeam(this.value)">
             <option value="">Loading teams...</option>
         </select>
@@ -2601,11 +2601,14 @@
                     
                     roster++; 
                     if (slot.dataset.unknown === 'true') {
-                        // Check if unknown player has a team assigned via badge
+                        // Check badge, then check if name itself is a team name
                         const assignedTeam = slot.dataset.team;
-                        if (assignedTeam === 'DKB') dkb++;
-                        else if (assignedTeam === 'Circle') circle++;
-                        else if (assignedTeam === 'Merc') merc++;
+                        const nameAsTeam = (slot.dataset.player || '').toLowerCase().trim();
+                        const effectiveTeam = assignedTeam || 
+                            (nameAsTeam === 'dkb' ? 'DKB' : nameAsTeam === 'circle' ? 'Circle' : nameAsTeam === 'merc' ? 'Merc' : '');
+                        if (effectiveTeam === 'DKB') dkb++;
+                        else if (effectiveTeam === 'Circle') circle++;
+                        else if (effectiveTeam === 'Merc') merc++;
                         else unknown++;
                         return;
                     }
