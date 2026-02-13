@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Lineups - HLL Tool v0.9.3</title>
+    <title>Lineups - HLL Tool v0.9.4</title>
     <!-- Supabase JS Client -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <style>
@@ -843,7 +843,7 @@
     
     <div class="page-header">
         <h1 class="page-title">Lineups</h1>
-        <span class="version-badge">v0.9.3</span>
+        <span class="version-badge">v0.9.4</span>
         <select class="team-selector" id="teamSelector" onchange="switchTeam(this.value)">
             <option value="">Loading teams...</option>
         </select>
@@ -2008,8 +2008,7 @@
             const assigned = getAssignedPlayers();
             const isNodeSlot = bottomSheetSlot && bottomSheetSlot.classList.contains('node-slot');
             const filtered = players.filter(p => 
-                p.name.toLowerCase().includes(filter.toLowerCase()) || 
-                p.team.toLowerCase().includes(filter.toLowerCase())
+                p.name.toLowerCase().includes(filter.toLowerCase())
             );
             
             bottomSheetList.innerHTML = filtered.map(p => {
@@ -2241,7 +2240,7 @@
         function renderDropdown(filter = '') {
             const assigned = getAssignedPlayers();
             const isNodeSlot = currentSlot && currentSlot.classList.contains('node-slot');
-            const filtered = players.filter(p => p.name.toLowerCase().includes(filter.toLowerCase()) || p.team.toLowerCase().includes(filter.toLowerCase()));
+            const filtered = players.filter(p => p.name.toLowerCase().includes(filter.toLowerCase()));
             dropdownList.innerHTML = filtered
                 .map(p => `<div class="dropdown-item ${!isNodeSlot && assigned.includes(p.name) ? 'already-assigned' : ''}" data-name="${p.name}" data-team="${p.team}"><span>${formatPlayerName(p.name, p.team)}</span><span class="player-team">${p.team}</span></div>`).join('');
             // Freetext option: show if filter has text and no exact name match
