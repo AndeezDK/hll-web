@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Roster - HLL Tool v0.6.23</title>
+    <title>Roster - HLL Tool v0.6.24</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <link rel="stylesheet" href="../css/styles.css">
     <style>
@@ -66,7 +66,7 @@
         <!-- Header -->
         <div class="page-header">
             <h1 class="page-title">Roster</h1>
-            <span class="version-badge">v0.6.23</span>
+            <span class="version-badge">v0.6.24</span>
         </div>
 
         <!-- Stats Summary -->
@@ -149,7 +149,8 @@
             <div class="modal-body" id="modalBody">
                 <!-- Populated by JS -->
             </div>
-            <div class="modal-footer">
+            <div class="modal-footer" style="justify-content: space-between;">
+                <button class="btn btn-danger" onclick="deletePlayer()" style="margin-right: auto; background: #f8514922; color: #f85149; border: 1px solid #f8514944;">🗑️ Delete</button>
                 <button class="btn btn-secondary" onclick="closePlayerModal()">Close</button>
                 <button class="btn btn-primary" onclick="savePlayerChanges()">Save Changes</button>
             </div>
@@ -674,6 +675,34 @@
                 await loadRoster(); // Refresh
             } else {
                 HLL.showAlert('Failed to update player', 'error');
+            }
+        }
+        
+        async function deletePlayer() {
+            if (!currentPlayerSteamId) return;
+            const player = allPlayers.find(p => p.steam_id === currentPlayerSteamId);
+            if (!player) return;
+            
+            if (!confirm(`Delete "${player.name}" from the roster?\n\nThis cannot be undone.`)) return;
+            
+            HLL.showLoading('Deleting...');
+            
+            try {
+                const { error } = await HLL.supabase
+                    .from('players')
+                    .delete()
+                    .eq('steam_id', currentPlayerSteamId);
+                
+                if (error) throw error;
+                
+                HLL.hideLoading();
+                HLL.showAlert(`Deleted ${player.name}`, 'success');
+                closePlayerModal();
+                await loadRoster();
+            } catch (err) {
+                console.error('Delete error:', err);
+                HLL.hideLoading();
+                HLL.showAlert('Delete failed: ' + err.message, 'error');
             }
         }
         
