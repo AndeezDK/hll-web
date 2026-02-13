@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Lineups - HLL Tool v0.9.4</title>
+    <title>Lineups - HLL Tool v0.9.5</title>
     <!-- Supabase JS Client -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <style>
@@ -843,7 +843,7 @@
     
     <div class="page-header">
         <h1 class="page-title">Lineups</h1>
-        <span class="version-badge">v0.9.4</span>
+        <span class="version-badge">v0.9.5</span>
         <select class="team-selector" id="teamSelector" onchange="switchTeam(this.value)">
             <option value="">Loading teams...</option>
         </select>
@@ -2268,10 +2268,19 @@
         
         function addTeamBadge(slot) {
             if (slot.querySelector('.unknown-team-badge')) return;
+            
+            // Auto-detect team from player name
+            const playerName = (slot.dataset.player || '').toLowerCase().trim();
+            const teamMap = { 'dkb': 'DKB', 'circle': 'Circle', 'merc': 'Merc' };
+            const autoTeam = teamMap[playerName] || '';
+            const autoLabel = autoTeam === 'DKB' ? 'DKB' : autoTeam === 'Circle' ? 'CRC' : autoTeam === 'Merc' ? 'MERC' : 'TEAM?';
+            
             const badge = document.createElement('span');
             badge.className = 'unknown-team-badge';
-            badge.dataset.team = '';
-            badge.textContent = 'TEAM?';
+            badge.dataset.team = autoTeam;
+            badge.textContent = autoLabel;
+            slot.dataset.team = autoTeam;
+            
             badge.addEventListener('click', (e) => {
                 e.stopPropagation();
                 const teams = ['', 'DKB', 'Circle', 'Merc'];
