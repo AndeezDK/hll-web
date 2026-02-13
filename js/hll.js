@@ -7,7 +7,7 @@
 // ============================================================================
 
 const HLL = {
-    version: '0.6.20',
+    version: '0.6.21',
     
     // Default Supabase config (can be overridden via localStorage)
     config: {
@@ -56,9 +56,9 @@ HLL.init = async function() {
     // Update nav status
     this.updateNavStatus();
     
-    // Auto-populate version badges on all pages
+    // Auto-populate version badges only if not already set by the page
     document.querySelectorAll('.version-badge').forEach(el => {
-        el.textContent = 'v' + this.version;
+        if (!el.textContent.trim()) el.textContent = 'v' + this.version;
     });
     
     return this.isOnline;
