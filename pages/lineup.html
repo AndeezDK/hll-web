@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Lineups - HLL Tool v0.10.7</title>
+    <title>Lineups - HLL Tool v0.11.0</title>
     <!-- Supabase JS Client -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <style>
@@ -847,7 +847,7 @@
     
     <div class="page-header">
         <h1 class="page-title">Lineups</h1>
-        <span class="version-badge">v0.10.7</span>
+        <span class="version-badge">v0.11.0</span>
         <select class="team-selector" id="teamSelector" onchange="switchTeam(this.value)">
             <option value="">Loading teams...</option>
         </select>
@@ -1011,6 +1011,7 @@
         <button class="btn btn-secondary" onclick="undoLineup()" id="undoBtn" disabled title="No undo history">↩ Undo</button>
         <button class="btn btn-secondary" onclick="checkConflicts()">🔍 Check Conflicts</button>
         <button class="btn btn-secondary" onclick="autoPopulateNodes()">⚡ Auto-fill Nodes</button>
+        <button class="btn btn-secondary" onclick="highlightUnassignedInfantry()" style="background:#d299221a;color:#d29922;border-color:#d2992244;">🔦 Highlight Unassigned</button>
         <button class="btn btn-primary" id="lockBtn" onclick="toggleLock()">🔒 Lock Lineup</button>
         <button class="btn btn-secondary" onclick="exportLineup()">📤 Export</button>
         <button class="btn btn-secondary" onclick="processAttendance()">📋 Process Attendance</button>
@@ -2243,6 +2244,8 @@
         function getAssignedPlayers() { 
             return [...document.querySelectorAll('.slot-name:not(.empty)')].map(e => {
                 const slot = e.closest('.player-slot, .infantry-slot, .node-slot, .reserve-slot');
+                // Skip node slots — nodes are additional duty, not exclusive assignments
+                if (slot?.classList.contains('node-slot')) return null;
                 return slot?.dataset.player || getRawPlayerName(e.textContent);
             }).filter(t => t && t !== 'Empty'); 
         }
@@ -2648,8 +2651,15 @@
                 }
             });
             document.querySelectorAll('.sl-dropdown').forEach(s => { if (s.value && s.value.startsWith('SL-')) sl++; });
-            const streamer = document.querySelector('[data-counts-sl="true"]');
-            if (streamer && !streamer.querySelector('.slot-name').classList.contains('empty')) sl++;
+            // Count Commander, Artillery, Spotters, TCs as leadership
+            const leaderCells = ['cmd-1', 'art-1', 'r1-spot', 'r2-spot', 't1-tc', 't2-tc', 't3-tc', 't4-tc'];
+            leaderCells.forEach(cell => {
+                const slot = document.querySelector(`[data-cell="${cell}"]`);
+                if (slot) {
+                    const nameEl = slot.querySelector('.slot-name');
+                    if (nameEl && !nameEl.classList.contains('empty') && nameEl.textContent !== 'Empty') sl++;
+                }
+            });
             document.getElementById('rosterTotal').textContent = roster;
             document.getElementById('slTotal').textContent = sl;
             document.getElementById('dkbCount').textContent = dkb;
