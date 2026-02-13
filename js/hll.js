@@ -7,7 +7,7 @@
 // ============================================================================
 
 const HLL = {
-    version: '0.6.21',
+    version: '0.6.22',
     
     // Default Supabase config (can be overridden via localStorage)
     config: {
@@ -414,9 +414,18 @@ HLL.formatPlayerName = function(name, team) {
 };
 
 HLL.stripPlayerTag = function(displayName) {
-    if (displayName.startsWith('◯ | ')) return displayName.substring(4);
-    if (displayName.startsWith('[DKB] ')) return displayName.substring(6);
-    return displayName;
+    if (!displayName) return displayName;
+    // Loop to strip nested/multiple tags: ◯ | , ◯ I , 〇 I , 〇 | , Ⓡ | , Ⓡ I , [DKB] , [CRC]
+    let name = displayName;
+    let prev;
+    do {
+        prev = name;
+        name = name.replace(/^[\u25CB\u3007]\s*[|I]\s*/i, '')  // ◯ | or ◯ I or 〇 | or 〇 I
+                   .replace(/^\u24C7\s*[|I]\s*/i, '')           // Ⓡ | or Ⓡ I
+                   .replace(/^\[[A-Za-z0-9]+\]\s*/i, '')        // [DKB], [CRC], etc.
+                   .trim();
+    } while (name !== prev);
+    return name;
 };
 
 HLL.getTeamBadgeClass = function(team) {

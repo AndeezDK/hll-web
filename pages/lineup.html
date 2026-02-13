@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Lineups - HLL Tool v0.8.4</title>
+    <title>Lineups - HLL Tool v0.8.6</title>
     <!-- Supabase JS Client -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <style>
@@ -838,7 +838,7 @@
     
     <div class="page-header">
         <h1 class="page-title">Lineups</h1>
-        <span class="version-badge">v0.8.4</span>
+        <span class="version-badge">v0.8.6</span>
         <select class="team-selector" id="teamSelector" onchange="switchTeam(this.value)">
             <option value="">Loading teams...</option>
         </select>
@@ -2158,9 +2158,17 @@
         
         // Get raw name from formatted display name
         function getRawPlayerName(displayName) {
-            if (displayName.startsWith('◯ | ')) return displayName.substring(4);
-            if (displayName.startsWith('[DKB] ')) return displayName.substring(6);
-            return displayName;
+            if (!displayName) return displayName;
+            let name = displayName;
+            let prev;
+            do {
+                prev = name;
+                name = name.replace(/^[\u25CB\u3007]\s*[|I]\s*/i, '')
+                           .replace(/^\u24C7\s*[|I]\s*/i, '')
+                           .replace(/^\[[A-Za-z0-9]+\]\s*/i, '')
+                           .trim();
+            } while (name !== prev);
+            return name;
         }
         
         // Helper to get team from players array
@@ -2531,7 +2539,7 @@
             }
 
             // 3. Get role data for smart matching
-            const { data: rosterData } = await HLL.supabase
+            const { data: rosterData } = await supabaseClient
                 .from('players')
                 .select('name, primary_role, secondary_role, tertiary_role')
                 .in('name', eligibleInfantry.map(p => p.name));
@@ -2603,6 +2611,7 @@
             });
 
             updateCounters();
+            markModified();
 
             const total = emptyEngSlots.length + emptySuppSlots.length;
             if (filled < total) {
