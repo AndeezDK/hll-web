@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Lineups - HLL Tool v0.9.5</title>
+    <title>Lineups - HLL Tool v0.10.0</title>
     <!-- Supabase JS Client -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <style>
@@ -236,6 +236,8 @@
         .unknown-team-badge[data-team="DKB"] { background: #1a3a1a; color: #3fb950; border-color: #2a5a2a; }
         .unknown-team-badge[data-team="Circle"] { background: #1a2a3a; color: #58a6ff; border-color: #2a4a6a; }
         .unknown-team-badge[data-team="Merc"] { background: #3a3a1a; color: #d29922; border-color: #5a5a2a; }
+        .player-slot.drag-over, .infantry-slot.drag-over, .node-slot.drag-over { outline: 2px dashed #f0a500; outline-offset: -2px; background: #f0a50011; }
+        .player-slot.dragging, .infantry-slot.dragging, .node-slot.dragging { opacity: 0.4; }
         .dropdown-item.freetext-add { color: #d29922; border-top: 1px solid #30363d; font-style: italic; }
         .dropdown-item.freetext-add:hover { background: #d299221a; }
         .bottom-sheet-item.freetext-add { color: #d29922; border-top: 1px solid #30363d; font-style: italic; }
@@ -843,7 +845,7 @@
     
     <div class="page-header">
         <h1 class="page-title">Lineups</h1>
-        <span class="version-badge">v0.9.5</span>
+        <span class="version-badge">v0.10.0</span>
         <select class="team-selector" id="teamSelector" onchange="switchTeam(this.value)">
             <option value="">Loading teams...</option>
         </select>
@@ -2300,6 +2302,64 @@
             if (badge) badge.remove();
             delete slot.dataset.team;
         }
+        
+        function swapSlots(sourceSlot, targetSlot) {
+            const srcName = sourceSlot.querySelector('.slot-name');
+            const tgtName = targetSlot.querySelector('.slot-name');
+            if (!srcName || !tgtName) return;
+            
+            // Capture source state
+            const srcData = {
+                text: srcName.textContent,
+                empty: srcName.classList.contains('empty'),
+                unknown: srcName.classList.contains('unknown-player'),
+                player: sourceSlot.dataset.player || '',
+                unknownFlag: sourceSlot.dataset.unknown || '',
+                team: sourceSlot.dataset.team || '',
+                filled: sourceSlot.classList.contains('filled'),
+                badge: sourceSlot.querySelector('.unknown-team-badge')?.dataset.team || null
+            };
+            
+            // Capture target state
+            const tgtData = {
+                text: tgtName.textContent,
+                empty: tgtName.classList.contains('empty'),
+                unknown: tgtName.classList.contains('unknown-player'),
+                player: targetSlot.dataset.player || '',
+                unknownFlag: targetSlot.dataset.unknown || '',
+                team: targetSlot.dataset.team || '',
+                filled: targetSlot.classList.contains('filled'),
+                badge: targetSlot.querySelector('.unknown-team-badge')?.dataset.team || null
+            };
+            
+            // Apply target data to source
+            applySlotData(sourceSlot, srcName, tgtData);
+            // Apply source data to target
+            applySlotData(targetSlot, tgtName, srcData);
+            
+            updateCounters();
+            markModified();
+            showToast('Players swapped');
+        }
+        
+        function applySlotData(slot, nameEl, data) {
+            removeTeamBadge(slot);
+            nameEl.textContent = data.text;
+            nameEl.classList.toggle('empty', data.empty);
+            nameEl.classList.toggle('unknown-player', data.unknown);
+            slot.classList.toggle('filled', data.filled);
+            
+            if (data.player) slot.dataset.player = data.player;
+            else delete slot.dataset.player;
+            
+            if (data.unknownFlag) slot.dataset.unknown = data.unknownFlag;
+            else delete slot.dataset.unknown;
+            
+            if (data.team) slot.dataset.team = data.team;
+            else delete slot.dataset.team;
+            
+            if (data.badge !== null) addTeamBadge(slot);
+        }
         function clearSlot() { if (currentSlot) { const n = currentSlot.querySelector('.slot-name'); n.textContent = 'Empty'; n.classList.add('empty'); currentSlot.classList.remove('filled'); delete currentSlot.dataset.player; removeTeamBadge(currentSlot); } closeDropdown(); updateCounters(); markModified(); }
         function openDropdown(slot) {
             if (currentSlot === slot && dropdown.classList.contains('active')) { closeDropdown(); return; }
@@ -2396,6 +2456,48 @@
                         openDropdown(this);
                     }
                 };
+            });
+            
+            // Drag and drop
+            document.querySelectorAll('.player-slot, .infantry-slot, .node-slot').forEach(slot => {
+                const nameEl = slot.querySelector('.slot-name');
+                if (!nameEl) return;
+                
+                // Make filled slots draggable
+                nameEl.setAttribute('draggable', 'true');
+                
+                nameEl.addEventListener('dragstart', (e) => {
+                    if (nameEl.classList.contains('empty')) { e.preventDefault(); return; }
+                    slot.classList.add('dragging');
+                    e.dataTransfer.effectAllowed = 'move';
+                    window._dragSourceSlot = slot;
+                });
+                
+                nameEl.addEventListener('dragend', () => {
+                    slot.classList.remove('dragging');
+                    document.querySelectorAll('.drag-over').forEach(el => el.classList.remove('drag-over'));
+                    window._dragSourceSlot = null;
+                });
+                
+                slot.addEventListener('dragover', (e) => {
+                    e.preventDefault();
+                    if (window._dragSourceSlot && window._dragSourceSlot !== slot) {
+                        slot.classList.add('drag-over');
+                        e.dataTransfer.dropEffect = 'move';
+                    }
+                });
+                
+                slot.addEventListener('dragleave', () => {
+                    slot.classList.remove('drag-over');
+                });
+                
+                slot.addEventListener('drop', (e) => {
+                    e.preventDefault();
+                    slot.classList.remove('drag-over');
+                    const source = window._dragSourceSlot;
+                    if (!source || source === slot) return;
+                    swapSlots(source, slot);
+                });
             });
         }
         searchInput.addEventListener('input', e => renderDropdown(e.target.value));
@@ -2515,7 +2617,12 @@
                         else if (p.team === 'Merc') merc++;
                         else unknown++;
                     } else {
-                        unknown++; // Player not found in roster
+                        // Check if the name itself is a team name (freetext "circle", "dkb", etc.)
+                        const nameAsTeam = (slot.dataset.player || '').toLowerCase().trim();
+                        if (nameAsTeam === 'dkb') dkb++;
+                        else if (nameAsTeam === 'circle') circle++;
+                        else if (nameAsTeam === 'merc') merc++;
+                        else unknown++; // Player not found in roster
                     }
                 }
             });
