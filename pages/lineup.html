@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Lineups - HLL Tool v0.12.7</title>
+    <title>Lineups - HLL Tool v0.12.9</title>
     <!-- Supabase JS Client -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <style>
@@ -853,7 +853,7 @@
     
     <div class="page-header">
         <h1 class="page-title">Lineups</h1>
-        <span class="version-badge">v0.12.7</span>
+        <span class="version-badge">v0.12.9</span>
         <select class="team-selector" id="teamSelector" onchange="switchTeam(this.value)">
             <option value="">Loading teams...</option>
         </select>
@@ -881,16 +881,16 @@
         <div class="match-field">
             <label>Map</label>
             <select>
-                <option>Carentan</option><option>Driel</option><option>El Alamein</option><option>Elsenborn Ridge</option>
+                <option value="">— Select Map —</option><option>Carentan</option><option>Driel</option><option>El Alamein</option><option>Elsenborn Ridge</option>
                 <option>Foy</option><option>Hill 400</option><option>Hürtgen Forest</option><option>Kharkov</option>
-                <option selected>Kursk</option><option>Mortain</option><option>Omaha Beach</option><option>Purple Heart Lane</option>
+                <option>Kursk</option><option>Mortain</option><option>Omaha Beach</option><option>Purple Heart Lane</option>
                 <option>Remagen</option><option>SMDM</option><option>SME</option>
                 <option>Smolensk</option><option>Stalingrad</option><option>Tobruk</option><option>Utah Beach</option>
             </select>
         </div>
         <div class="match-field">
             <label>Faction</label>
-            <select><option>Allies</option><option selected>Axis</option></select>
+            <select><option value="">—</option><option>Allies</option><option>Axis</option></select>
         </div>
         <div class="match-field">
             <label>Mid Cap</label>
@@ -1840,9 +1840,21 @@
             initCollapsibleSections();
             updateCounters();
             
-            // Set today's date
+            // Set today's date as default (will be overwritten by localStorage if saved)
             const today = new Date().toISOString().split('T')[0];
             document.querySelector('.match-field input[type="date"]').value = today;
+            
+            // Auto-save match info on any change
+            document.querySelectorAll('.match-info select, .match-info input').forEach(el => {
+                el.addEventListener('change', saveMatchInfoToLocalStorage);
+                el.addEventListener('input', saveMatchInfoToLocalStorage);
+            });
+        }
+        
+        function saveMatchInfoToLocalStorage() {
+            if (!currentTeamId) return;
+            const matchKey = `hll_match_${currentTeamId}_${currentLineupNumber}`;
+            localStorage.setItem(matchKey, JSON.stringify(getMatchInfo()));
         }
         
         function markModified() {
@@ -3910,7 +3922,14 @@ In production, this will:
         }
         
         attachSlotListeners(); updateCounters();
-        document.addEventListener('change', e => { if (e.target.classList.contains('sl-dropdown') || e.target.classList.contains('note-dropdown')) { updateCounters(); markModified(); highlightUnassignedInfantry(); } });
+        document.addEventListener('change', e => { 
+            if (e.target.classList.contains('sl-dropdown') || e.target.classList.contains('note-dropdown')) { 
+                updateCounters(); markModified(); highlightUnassignedInfantry(); 
+            }
+            if (e.target.classList.contains('here-check') || e.target.classList.contains('sl-check')) {
+                markModified();
+            }
+        });
         
         // Add lineup tab click handlers
         document.querySelectorAll('.tab').forEach((tab, i) => {
