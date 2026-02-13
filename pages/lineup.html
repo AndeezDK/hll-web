@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Lineups - HLL Tool v0.9.0</title>
+    <title>Lineups - HLL Tool v0.9.1</title>
     <!-- Supabase JS Client -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <style>
@@ -843,7 +843,7 @@
     
     <div class="page-header">
         <h1 class="page-title">Lineups</h1>
-        <span class="version-badge">v0.9.0</span>
+        <span class="version-badge">v0.9.1</span>
         <select class="team-selector" id="teamSelector" onchange="switchTeam(this.value)">
             <option value="">Loading teams...</option>
         </select>
@@ -1220,6 +1220,10 @@
             
             currentTeamId = teamId;
             currentLineupNumber = 1;
+            
+            // Remember selected team
+            const team = allTeams.find(t => t.id === teamId);
+            if (team) localStorage.setItem('hll_default_team', team.name);
             
             // Reset tab UI
             document.querySelectorAll('.tab').forEach((tab, i) => {
@@ -2997,7 +3001,7 @@
             closeConflictModal();
         }
         
-        function clearLineup() {
+        async function clearLineup() {
             if (!confirm('Are you sure you want to clear the entire lineup?\n\nThis will remove all players from all slots.')) {
                 return;
             }
@@ -3063,6 +3067,32 @@
             });
             
             updateCounters();
+            
+            // Delete from database
+            if (isOnline && supabaseClient && currentTeamId) {
+                try {
+                    const { error } = await supabaseClient
+                        .from('lineups')
+                        .delete()
+                        .eq('team_id', currentTeamId)
+                        .eq('lineup_number', currentLineupNumber);
+                    
+                    if (error) throw error;
+                    
+                    // Clear local data too
+                    if (lineupData[currentLineupNumber]) {
+                        lineupData[currentLineupNumber] = { slots: [], metadata: {} };
+                    }
+                    updateTabIndicators();
+                    lineupModified = false;
+                    updateSyncIndicator('synced', 'Cleared');
+                    console.log('Lineup cleared from database');
+                } catch (err) {
+                    console.error('Failed to clear lineup from database:', err);
+                    alert('Cleared locally but failed to delete from database: ' + err.message);
+                }
+            }
+            
             alert('Lineup cleared.');
         }
         
