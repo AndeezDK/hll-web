@@ -639,21 +639,22 @@
     <script src="../js/hll.js"></script>
     <script>
         async function init() {
-            HLL.showLoading('Loading stats...');
-            await HLL.init();
-            
-            if (HLL.isOnline) {
-                await Promise.all([
-                    loadOverallStats(),
-                    loadMapStats(),
-                    loadEnemyStats(),
-                    loadPlayerLeaderboards(),
-                    loadAwardCards()
-                ]);
-                initRoleLeaderboard();
-            }
-            
-            HLL.hideLoading();
+            await HLL.initWithAuth(async () => {
+                HLL.showLoading('Loading stats...');
+                
+                if (HLL.isOnline) {
+                    await Promise.all([
+                        loadOverallStats(),
+                        loadMapStats(),
+                        loadEnemyStats(),
+                        loadPlayerLeaderboards(),
+                        loadAwardCards()
+                    ]);
+                    initRoleLeaderboard();
+                }
+                
+                HLL.hideLoading();
+            });
         }
         
         async function loadOverallStats() {

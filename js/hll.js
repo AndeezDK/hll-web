@@ -823,7 +823,7 @@ HLL.authWallSubmit = async function() {
         
         // Success
         this.currentUser = result.data.session.user;
-        this._onAuthSuccess();
+        await this._onAuthSuccess();
         
     } catch (err) {
         console.error('Auth error:', err);
@@ -835,7 +835,7 @@ HLL.authWallSubmit = async function() {
     }
 };
 
-HLL._onAuthSuccess = function() {
+HLL._onAuthSuccess = async function() {
     // Hide wall
     document.getElementById('authWall').classList.add('hidden');
     
@@ -846,9 +846,18 @@ HLL._onAuthSuccess = function() {
         document.getElementById('navUserEmail').textContent = this.currentUser.email;
     }
     
+    // Complete normal HLL.init() steps if not already done
+    if (!this.isOnline) {
+        await this.initSupabase();
+    }
+    this.updateNavStatus();
+    document.querySelectorAll('.version-badge').forEach(el => {
+        if (!el.textContent.trim()) el.textContent = 'v' + this.version;
+    });
+    
     // Fire callback if page registered one
     if (typeof this._authCallback === 'function') {
-        this._authCallback();
+        await this._authCallback();
     }
 };
 
@@ -902,7 +911,7 @@ HLL.initWithAuth = async function(callback) {
             // Already logged in — skip wall
             this.currentUser = session.user;
             this.isOnline = true;
-            this._onAuthSuccess();
+            await this._onAuthSuccess();
             return;
         }
     } catch (err) {

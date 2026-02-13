@@ -237,17 +237,18 @@
         // ========================================
 
         async function init() {
-            HLL.showLoading('Loading matches...');
-            await HLL.init();
-            if (HLL.isOnline) {
-                await loadMatches();
-                populateFilters();
-            } else {
-                document.getElementById('matchesBody').innerHTML =
-                    '<tr><td colspan="10" class="text-center text-muted">Database offline</td></tr>';
-            }
-            HLL.hideLoading();
-            setupEventListeners();
+            await HLL.initWithAuth(async () => {
+                HLL.showLoading('Loading matches...');
+                if (HLL.isOnline) {
+                    await loadMatches();
+                    populateFilters();
+                } else {
+                    document.getElementById('matchesBody').innerHTML =
+                        '<tr><td colspan="10" class="text-center text-muted">Database offline</td></tr>';
+                }
+                HLL.hideLoading();
+                setupEventListeners();
+            });
         }
 
         function setupEventListeners() {

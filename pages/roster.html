@@ -181,21 +181,22 @@
         // ============================================================================
         
         async function init() {
-            HLL.showLoading('Loading roster...');
-            await HLL.init();
-            
-            if (HLL.isOnline) {
-                await loadRoster();
-                await loadPlayerRoleData();
-            } else {
-                document.getElementById('rosterBody').innerHTML = 
-                    '<tr><td colspan="13" class="text-center text-muted">Offline - Connect to database</td></tr>';
-            }
-            
-            HLL.hideLoading();
-            
-            // Set up event listeners
-            setupEventListeners();
+            await HLL.initWithAuth(async () => {
+                HLL.showLoading('Loading roster...');
+                
+                if (HLL.isOnline) {
+                    await loadRoster();
+                    await loadPlayerRoleData();
+                } else {
+                    document.getElementById('rosterBody').innerHTML = 
+                        '<tr><td colspan="13" class="text-center text-muted">Offline - Connect to database</td></tr>';
+                }
+                
+                HLL.hideLoading();
+                
+                // Set up event listeners
+                setupEventListeners();
+            });
         }
         
         function setupEventListeners() {

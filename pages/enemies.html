@@ -434,8 +434,9 @@
         // INIT
         // ============================================================================
         document.addEventListener('DOMContentLoaded', async () => {
-            await HLL.init();
-            await loadTeamList();
+            await HLL.initWithAuth(async () => {
+                await loadTeamList();
+            });
         });
 
         // ============================================================================
