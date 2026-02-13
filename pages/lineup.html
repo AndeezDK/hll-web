@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Lineups - HLL Tool v0.8.6</title>
+    <title>Lineups - HLL Tool v0.9.0</title>
     <!-- Supabase JS Client -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <style>
@@ -231,6 +231,11 @@
         .stat-box.warning .stat-value { color: #f85149; }
         .stat-box.unknown-highlight .stat-value { color: #d29922; }
         .slot-name.unknown-player { color: #d29922; font-style: italic; }
+        .unknown-team-badge { display: inline-block; font-size: 10px; padding: 1px 6px; border-radius: 3px; margin-left: 6px; cursor: pointer; background: #30363d; color: #8b949e; border: 1px solid #444c56; vertical-align: middle; user-select: none; }
+        .unknown-team-badge:hover { border-color: #768390; }
+        .unknown-team-badge[data-team="DKB"] { background: #1a3a1a; color: #3fb950; border-color: #2a5a2a; }
+        .unknown-team-badge[data-team="Circle"] { background: #1a2a3a; color: #58a6ff; border-color: #2a4a6a; }
+        .unknown-team-badge[data-team="Merc"] { background: #3a3a1a; color: #d29922; border-color: #5a5a2a; }
         .dropdown-item.freetext-add { color: #d29922; border-top: 1px solid #30363d; font-style: italic; }
         .dropdown-item.freetext-add:hover { background: #d299221a; }
         .bottom-sheet-item.freetext-add { color: #d29922; border-top: 1px solid #30363d; font-style: italic; }
@@ -838,7 +843,7 @@
     
     <div class="page-header">
         <h1 class="page-title">Lineups</h1>
-        <span class="version-badge">v0.8.6</span>
+        <span class="version-badge">v0.9.0</span>
         <select class="team-selector" id="teamSelector" onchange="switchTeam(this.value)">
             <option value="">Loading teams...</option>
         </select>
@@ -866,15 +871,20 @@
         <div class="match-field">
             <label>Map</label>
             <select>
-                <option>Carentan</option><option>SME</option><option>SMDM</option><option>Purple Heart Lane</option>
-                <option>Hill 400</option><option>Hurtgen Forest</option><option>Foy</option><option selected>Kursk</option>
-                <option>Stalingrad</option><option>Remagen</option><option>Kharkov</option><option>Driel</option>
-                <option>El Alamein</option><option>Omaha Beach</option><option>Utah Beach</option><option>Mortain</option>
+                <option>Carentan</option><option>Driel</option><option>El Alamein</option><option>Elsenborn Ridge</option>
+                <option>Foy</option><option>Hill 400</option><option>Hürtgen Forest</option><option>Kharkov</option>
+                <option selected>Kursk</option><option>Mortain</option><option>Omaha Beach</option><option>Purple Heart Lane</option>
+                <option>Remagen</option><option>SMDM</option><option>SMDM V2</option><option>SME</option>
+                <option>Smolensk</option><option>Stalingrad</option><option>Tobruk</option><option>Utah Beach</option>
             </select>
         </div>
         <div class="match-field">
             <label>Faction</label>
             <select><option>Allies</option><option selected>Axis</option></select>
+        </div>
+        <div class="match-field">
+            <label>Mid Cap</label>
+            <input type="text" class="form-input" id="midCapInput" placeholder="e.g. Church" style="width: 140px; padding: 4px 8px; font-size: 13px; background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 4px; color: var(--text-primary);">
         </div>
         <div class="match-field">
             <label>Date</label>
@@ -1924,6 +1934,7 @@
                 enemy: document.getElementById('enemyTeamInput').value,
                 map: document.querySelectorAll('.match-field select')[1].value,
                 faction: document.querySelectorAll('.match-field select')[2].value,
+                mid_cap: document.getElementById('midCapInput').value.trim(),
                 date: document.querySelector('.match-field input[type="date"]').value
             };
         }
@@ -2031,6 +2042,8 @@
                 nameEl.classList.remove('empty');
                 nameEl.classList.toggle('unknown-player', isUnknown);
                 bottomSheetSlot.classList.add('filled');
+                if (isUnknown) addTeamBadge(bottomSheetSlot);
+                else removeTeamBadge(bottomSheetSlot);
             }
             closeBottomSheet();
             updateCounters();
@@ -2044,6 +2057,7 @@
                 nameEl.classList.add('empty');
                 bottomSheetSlot.classList.remove('filled');
                 delete bottomSheetSlot.dataset.player;
+                removeTeamBadge(bottomSheetSlot);
             }
             closeBottomSheet();
             updateCounters();
@@ -2243,11 +2257,39 @@
                 n.textContent = isUnknown ? name : formatPlayerName(name, team || getPlayerTeam(name)); 
                 n.classList.remove('empty');
                 n.classList.toggle('unknown-player', isUnknown);
-                currentSlot.classList.add('filled'); 
+                currentSlot.classList.add('filled');
+                if (isUnknown) addTeamBadge(currentSlot);
+                else removeTeamBadge(currentSlot);
             } 
             closeDropdown(); updateCounters(); markModified(); 
         }
-        function clearSlot() { if (currentSlot) { const n = currentSlot.querySelector('.slot-name'); n.textContent = 'Empty'; n.classList.add('empty'); currentSlot.classList.remove('filled'); delete currentSlot.dataset.player; } closeDropdown(); updateCounters(); markModified(); }
+        
+        function addTeamBadge(slot) {
+            if (slot.querySelector('.unknown-team-badge')) return;
+            const badge = document.createElement('span');
+            badge.className = 'unknown-team-badge';
+            badge.dataset.team = '';
+            badge.textContent = 'TEAM?';
+            badge.addEventListener('click', (e) => {
+                e.stopPropagation();
+                const teams = ['', 'DKB', 'Circle', 'Merc'];
+                const labels = ['TEAM?', 'DKB', 'CRC', 'MERC'];
+                const idx = (teams.indexOf(badge.dataset.team) + 1) % teams.length;
+                badge.dataset.team = teams[idx];
+                badge.textContent = labels[idx];
+                slot.dataset.team = teams[idx];
+                updateCounters(); markModified();
+            });
+            const nameEl = slot.querySelector('.slot-name');
+            if (nameEl) nameEl.after(badge);
+        }
+        
+        function removeTeamBadge(slot) {
+            const badge = slot.querySelector('.unknown-team-badge');
+            if (badge) badge.remove();
+            delete slot.dataset.team;
+        }
+        function clearSlot() { if (currentSlot) { const n = currentSlot.querySelector('.slot-name'); n.textContent = 'Empty'; n.classList.add('empty'); currentSlot.classList.remove('filled'); delete currentSlot.dataset.player; removeTeamBadge(currentSlot); } closeDropdown(); updateCounters(); markModified(); }
         function openDropdown(slot) {
             if (currentSlot === slot && dropdown.classList.contains('active')) { closeDropdown(); return; }
             currentSlot = slot; const r = slot.getBoundingClientRect();
@@ -2440,7 +2482,15 @@
                 if (e.textContent !== 'Empty') { 
                     roster++; 
                     const slot = e.closest('.player-slot, .infantry-slot, .node-slot, .reserve-slot');
-                    if (slot?.dataset.unknown === 'true') { unknown++; return; }
+                    if (slot?.dataset.unknown === 'true') {
+                        // Check if unknown player has a team assigned via badge
+                        const assignedTeam = slot.dataset.team;
+                        if (assignedTeam === 'DKB') dkb++;
+                        else if (assignedTeam === 'Circle') circle++;
+                        else if (assignedTeam === 'Merc') merc++;
+                        else unknown++;
+                        return;
+                    }
                     const rawName = slot?.dataset.player || getRawPlayerName(e.textContent);
                     const p = players.find(x => x.name === rawName);
                     if (p) { if (p.team === 'DKB') dkb++; else if (p.team === 'Circle') circle++; else if (p.team === 'Merc') merc++; } 
@@ -3052,6 +3102,7 @@
                     enemy: document.getElementById('enemyTeamInput').value,
                     map: document.querySelectorAll('.match-field select')[1].value,
                     faction: document.querySelectorAll('.match-field select')[2].value,
+                    mid_cap: document.getElementById('midCapInput').value.trim(),
                     date: document.querySelector('.match-field input[type="date"]').value
                 },
                 players: [],
@@ -3125,7 +3176,7 @@
 LINEUP SUBMISSION SUMMARY
 ========================
 Match: ${lineupData.matchInfo.team} vs ${lineupData.matchInfo.enemy}
-Map: ${lineupData.matchInfo.map} (${lineupData.matchInfo.faction})
+Map: ${lineupData.matchInfo.map} (${lineupData.matchInfo.faction})${lineupData.matchInfo.mid_cap ? '\nMid Cap: ' + lineupData.matchInfo.mid_cap : ''}
 Date: ${lineupData.matchInfo.date}
 
 Players: ${lineupData.players.length}
