@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Lineups - HLL Tool v0.11.3</title>
+    <title>Lineups - HLL Tool v0.11.4</title>
     <!-- Supabase JS Client -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <style>
@@ -238,7 +238,7 @@
         .unknown-team-badge[data-team="Merc"] { background: #3a3a1a; color: #d29922; border-color: #5a5a2a; }
         .player-slot.drag-over, .infantry-slot.drag-over, .node-slot.drag-over { outline: 2px dashed #f0a500; outline-offset: -2px; background: #f0a50011; }
         .player-slot.dragging, .infantry-slot.dragging, .node-slot.dragging { opacity: 0.4; }
-        .infantry-slot.unassigned { outline: 1px dashed #8b949e; outline-offset: -1px; }
+        .infantry-slot.unassigned { border: 2px solid #c9d1d9; background: #c9d1d90a; }
         .dropdown-item.freetext-add { color: #d29922; border-top: 1px solid #30363d; font-style: italic; }
         .dropdown-item.freetext-add:hover { background: #d299221a; }
         .bottom-sheet-item.freetext-add { color: #d29922; border-top: 1px solid #30363d; font-style: italic; }
@@ -846,7 +846,7 @@
     
     <div class="page-header">
         <h1 class="page-title">Lineups</h1>
-        <span class="version-badge">v0.11.3</span>
+        <span class="version-badge">v0.11.4</span>
         <select class="team-selector" id="teamSelector" onchange="switchTeam(this.value)">
             <option value="">Loading teams...</option>
         </select>
