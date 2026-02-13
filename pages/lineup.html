@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Lineups - HLL Tool v0.10.1</title>
+    <title>Lineups - HLL Tool v0.10.2</title>
     <!-- Supabase JS Client -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <style>
@@ -845,7 +845,7 @@
     
     <div class="page-header">
         <h1 class="page-title">Lineups</h1>
-        <span class="version-badge">v0.10.1</span>
+        <span class="version-badge">v0.10.2</span>
         <select class="team-selector" id="teamSelector" onchange="switchTeam(this.value)">
             <option value="">Loading teams...</option>
         </select>
@@ -2440,6 +2440,7 @@
         function attachSlotListeners() {
             document.querySelectorAll('.player-slot, .infantry-slot, .node-slot, .reserve-slot, .dropout-item').forEach(s => {
                 s.onclick = function(e) { 
+                    if (window._isDragging) return;
                     if (e.target.closest('input, select, button')) return;
                     e.stopPropagation();
                     setFocusedSlot(this);
@@ -2459,15 +2460,16 @@
             });
             
             // Drag and drop
-            document.querySelectorAll('.player-slot, .infantry-slot, .node-slot').forEach(slot => {
+            document.querySelectorAll('.player-slot:not(.drag-init), .infantry-slot:not(.drag-init), .node-slot:not(.drag-init)').forEach(slot => {
+                slot.classList.add('drag-init');
                 const nameEl = slot.querySelector('.slot-name');
                 if (!nameEl) return;
                 
-                // Make filled slots draggable
                 nameEl.setAttribute('draggable', 'true');
                 
                 nameEl.addEventListener('dragstart', (e) => {
                     if (nameEl.classList.contains('empty')) { e.preventDefault(); return; }
+                    window._isDragging = true;
                     slot.classList.add('dragging');
                     e.dataTransfer.effectAllowed = 'move';
                     window._dragSourceSlot = slot;
@@ -2477,6 +2479,7 @@
                     slot.classList.remove('dragging');
                     document.querySelectorAll('.drag-over').forEach(el => el.classList.remove('drag-over'));
                     window._dragSourceSlot = null;
+                    setTimeout(() => { window._isDragging = false; }, 100);
                 });
                 
                 slot.addEventListener('dragover', (e) => {
