@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Roster - HLL Tool v0.6.22</title>
+    <title>Roster - HLL Tool v0.6.23</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <link rel="stylesheet" href="../css/styles.css">
     <style>
@@ -66,7 +66,7 @@
         <!-- Header -->
         <div class="page-header">
             <h1 class="page-title">Roster</h1>
-            <span class="version-badge">v0.6.22</span>
+            <span class="version-badge">v0.6.23</span>
         </div>
 
         <!-- Stats Summary -->
@@ -480,6 +480,10 @@
                         <input type="text" class="form-input" id="editSteamId" value="${player.steam_id}" ${player.steam_id.startsWith('TEMP-') ? 'placeholder="Enter real SteamID to replace temp"' : 'disabled'}>
                     </div>
                     <div class="form-group">
+                        <label class="form-label">Name</label>
+                        <input type="text" class="form-input" id="editName" value="${player.name}">
+                    </div>
+                    <div class="form-group">
                         <label class="form-label">Team</label>
                         <select class="form-select" id="editTeam">
                             ${HLL.teams.map(t => `<option value="${t}" ${player.team === t ? 'selected' : ''}>${t}</option>`).join('')}
@@ -593,6 +597,7 @@
             const steamIdChanged = isTemp && newSteamId && newSteamId !== currentPlayerSteamId && !newSteamId.startsWith('TEMP-');
             
             const updates = {
+                name: document.getElementById('editName').value.trim(),
                 team: document.getElementById('editTeam').value,
                 primary_role: document.getElementById('editPrimaryRole').value || null,
                 secondary_role: document.getElementById('editSecondaryRole').value || null,
