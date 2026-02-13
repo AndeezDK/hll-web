@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Lineups - HLL Tool v0.10.2</title>
+    <title>Lineups - HLL Tool v0.10.6</title>
     <!-- Supabase JS Client -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <style>
@@ -238,6 +238,8 @@
         .unknown-team-badge[data-team="Merc"] { background: #3a3a1a; color: #d29922; border-color: #5a5a2a; }
         .player-slot.drag-over, .infantry-slot.drag-over, .node-slot.drag-over { outline: 2px dashed #f0a500; outline-offset: -2px; background: #f0a50011; }
         .player-slot.dragging, .infantry-slot.dragging, .node-slot.dragging { opacity: 0.4; }
+        .infantry-slot.unassigned { border-color: #d29922; background: #d299220f; }
+        .infantry-slot.unassigned .slot-name { color: #d29922; }
         .dropdown-item.freetext-add { color: #d29922; border-top: 1px solid #30363d; font-style: italic; }
         .dropdown-item.freetext-add:hover { background: #d299221a; }
         .bottom-sheet-item.freetext-add { color: #d29922; border-top: 1px solid #30363d; font-style: italic; }
@@ -845,7 +847,7 @@
     
     <div class="page-header">
         <h1 class="page-title">Lineups</h1>
-        <span class="version-badge">v0.10.2</span>
+        <span class="version-badge">v0.10.6</span>
         <select class="team-selector" id="teamSelector" onchange="switchTeam(this.value)">
             <option value="">Loading teams...</option>
         </select>
@@ -876,7 +878,7 @@
                 <option>Carentan</option><option>Driel</option><option>El Alamein</option><option>Elsenborn Ridge</option>
                 <option>Foy</option><option>Hill 400</option><option>Hürtgen Forest</option><option>Kharkov</option>
                 <option selected>Kursk</option><option>Mortain</option><option>Omaha Beach</option><option>Purple Heart Lane</option>
-                <option>Remagen</option><option>SMDM</option><option>SMDM V2</option><option>SME</option>
+                <option>Remagen</option><option>SMDM</option><option>SME</option>
                 <option>Smolensk</option><option>Stalingrad</option><option>Tobruk</option><option>Utah Beach</option>
             </select>
         </div>
@@ -1208,7 +1210,7 @@
         function populateTeamSelector(teams, selectedName) {
             const sel = document.getElementById('teamSelector');
             sel.innerHTML = teams.map(t => 
-                `<option value="${t.id}" ${t.name === selectedName ? 'selected' : ''}>${t.name}${t.tag ? ' [' + t.tag + ']' : ''}</option>`
+                `<option value="${t.id}" ${t.name === selectedName ? 'selected' : ''}>${t.name}</option>`
             ).join('');
         }
         
@@ -2038,6 +2040,11 @@
         
         function selectPlayerFromBottomSheet(name, team) {
             if (bottomSheetSlot) {
+                // Normalize team name freetext entries
+                const teamNames = { 'dkb': 'DKB', 'circle': 'Circle', 'merc': 'Merc' };
+                const normalized = teamNames[name.toLowerCase().trim()];
+                if (normalized) name = normalized;
+                
                 const nameEl = bottomSheetSlot.querySelector('.slot-name');
                 const isUnknown = !findRosterPlayer(name);
                 bottomSheetSlot.dataset.player = name;
@@ -2255,6 +2262,11 @@
         function selectPlayer(name, team) { 
             if (currentSlot) { 
                 const n = currentSlot.querySelector('.slot-name'); 
+                // Normalize team name freetext entries
+                const teamNames = { 'dkb': 'DKB', 'circle': 'Circle', 'merc': 'Merc' };
+                const normalized = teamNames[name.toLowerCase().trim()];
+                if (normalized) name = normalized;
+                
                 const isUnknown = !findRosterPlayer(name);
                 currentSlot.dataset.player = name;
                 currentSlot.dataset.unknown = isUnknown ? 'true' : '';
@@ -2798,6 +2810,9 @@
 
             updateCounters();
             markModified();
+            
+            // Highlight unassigned infantry
+            highlightUnassignedInfantry();
 
             const total = emptyEngSlots.length + emptySuppSlots.length;
             if (filled < total) {
@@ -2805,6 +2820,41 @@
             } else {
                 alert(`Auto-filled ${filled} node slots.\n\nEngineers \u2192 Eng slots, Supports \u2192 Supp slots where possible.`);
             }
+        }
+        
+        function highlightUnassignedInfantry() {
+            // Collect all names currently on nodes
+            const onNodes = new Set();
+            document.querySelectorAll('.node-slot .slot-name:not(.empty)').forEach(el => {
+                const slot = el.closest('.node-slot');
+                const name = slot?.dataset.player || el.textContent;
+                if (name && name !== 'Empty') onNodes.add(name);
+            });
+            
+            // Check all infantry slots across all squads
+            const allSections = ['northWestSlots', 'defenceSlots', 'meatGrindSlots', 'flexSlots', 'southEastSlots', 'infiltrationSlots'];
+            allSections.forEach(sectionId => {
+                const container = document.getElementById(sectionId);
+                if (!container) return;
+                container.querySelectorAll('.infantry-slot').forEach(slot => {
+                    slot.classList.remove('unassigned');
+                    
+                    const nameEl = slot.querySelector('.slot-name');
+                    if (!nameEl || nameEl.classList.contains('empty') || nameEl.textContent === 'Empty') return;
+                    
+                    const slDropdown = slot.querySelector('.sl-dropdown');
+                    const noteDropdown = slot.querySelector('.note-dropdown');
+                    const hasSL = slDropdown && slDropdown.value !== '';
+                    const hasRole = noteDropdown && noteDropdown.value !== '';
+                    const playerName = slot.dataset.player || nameEl.textContent;
+                    const isOnNodes = onNodes.has(playerName);
+                    
+                    // Unassigned = no SL, no role, not on nodes
+                    if (!hasSL && !hasRole && !isOnNodes) {
+                        slot.classList.add('unassigned');
+                    }
+                });
+            });
         }
 
         function processAttendance() {
@@ -3138,69 +3188,7 @@
                 return;
             }
             
-            // Clear all player slots
-            document.querySelectorAll('.player-slot, .infantry-slot, .node-slot').forEach(slot => {
-                const nameEl = slot.querySelector('.slot-name');
-                if (nameEl) {
-                    nameEl.textContent = 'Empty';
-                    nameEl.classList.add('empty');
-                }
-                slot.classList.remove('filled', 'no-show');
-                
-                // Uncheck checkboxes
-                const hereCheck = slot.querySelector('.here-check');
-                if (hereCheck) hereCheck.checked = false;
-                
-                const slCheck = slot.querySelector('.sl-check');
-                if (slCheck) slCheck.checked = false;
-                
-                // Reset dropdowns
-                const slDropdown = slot.querySelector('.sl-dropdown');
-                if (slDropdown) slDropdown.value = '';
-                
-                const noteDropdown = slot.querySelector('.note-dropdown');
-                if (noteDropdown) noteDropdown.value = '';
-            });
-            
-            // Clear reserves
-            document.querySelectorAll('.reserve-slot').forEach(slot => {
-                slot.textContent = 'Empty';
-                slot.classList.add('empty');
-            });
-            
-            // Clear dropouts
-            document.querySelectorAll('.dropout-item').forEach(item => {
-                item.style.display = 'none';
-                item.querySelector('.dropout-name').textContent = '-';
-                const replacement = item.querySelector('.replacement-name');
-                if (replacement) {
-                    replacement.textContent = '+ Replacement';
-                    replacement.classList.add('empty');
-                }
-                const excuse = item.querySelector('.excuse-dropdown');
-                if (excuse) excuse.value = '';
-            });
-            
-            // Reset infantry sections to 6 slots each
-            ['northWestSlots','defenceSlots','meatGrindSlots','flexSlots','southEastSlots','infiltrationSlots'].forEach(id => {
-                const container = document.getElementById(id);
-                const currentSlots = container.querySelectorAll('.infantry-slot').length;
-                
-                // Remove extra slots (keep 6)
-                if (currentSlots > 6) {
-                    const slots = container.querySelectorAll('.infantry-slot');
-                    for (let i = currentSlots - 1; i >= 6; i--) {
-                        slots[i].remove();
-                    }
-                }
-                
-                // Update header buttons state
-                updateAddButtons();
-            });
-            
-            updateCounters();
-            
-            // Delete from database
+            // Delete from database FIRST
             if (isOnline && supabaseClient && currentTeamId) {
                 try {
                     const { error } = await supabaseClient
@@ -3210,20 +3198,25 @@
                         .eq('lineup_number', currentLineupNumber);
                     
                     if (error) throw error;
-                    
-                    // Clear local data too
-                    if (lineupData[currentLineupNumber]) {
-                        lineupData[currentLineupNumber] = { slots: [], metadata: {} };
-                    }
-                    updateTabIndicators();
-                    lineupModified = false;
-                    updateSyncIndicator('synced', 'Cleared');
                     console.log('Lineup cleared from database');
                 } catch (err) {
                     console.error('Failed to clear lineup from database:', err);
-                    alert('Cleared locally but failed to delete from database: ' + err.message);
+                    alert('Failed to delete from database: ' + err.message);
+                    return;
                 }
             }
+            
+            // Clear local data
+            if (lineupData[currentLineupNumber]) {
+                lineupData[currentLineupNumber] = { slots: [], metadata: {} };
+            }
+            
+            // Clear all UI
+            clearLineupUI();
+            
+            updateTabIndicators();
+            lineupModified = false;
+            updateSyncIndicator('synced', 'Cleared');
             
             alert('Lineup cleared.');
         }
@@ -3397,7 +3390,7 @@ In production, this will:
         }
         
         attachSlotListeners(); updateCounters();
-        document.addEventListener('change', e => { if (e.target.classList.contains('sl-dropdown')) { updateCounters(); markModified(); } });
+        document.addEventListener('change', e => { if (e.target.classList.contains('sl-dropdown') || e.target.classList.contains('note-dropdown')) { updateCounters(); markModified(); highlightUnassignedInfantry(); } });
         
         // Add lineup tab click handlers
         document.querySelectorAll('.tab').forEach((tab, i) => {
