@@ -843,7 +843,7 @@ HLL._onAuthSuccess = async function() {
     const navUser = document.getElementById('navUser');
     if (navUser) {
         navUser.style.display = 'flex';
-        document.getElementById('navUserEmail').textContent = this.currentUser.email;
+        document.getElementById('navUserEmail').textContent = 'Loading...';
     }
     
     // Complete normal HLL.init() steps if not already done
