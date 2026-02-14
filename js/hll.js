@@ -971,7 +971,7 @@ HLL.loadUserRoles = async function() {
         const navEmail = document.getElementById('navUserEmail');
         if (navEmail && this.currentRole) {
             const roleLabel = this.currentRole.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
-            navEmail.textContent = `${this.currentUser.email} (${roleLabel})`;
+            navEmail.textContent = roleLabel;
         }
         
     } catch (err) {
