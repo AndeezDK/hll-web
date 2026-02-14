@@ -166,11 +166,11 @@
                 </button>
             </div>
 
-            <!-- Manage Teams -->
-            <div class="action-card">
+            <!-- Manage Teams (Super Admin only) -->
+            <div class="action-card hidden" id="manageTeamsCard">
                 <h3>🏷️ Manage Teams</h3>
                 <p class="text-muted mt-sm mb-md" style="font-size: 11px;">
-                    Manage known team names used in import dropdowns. Removing a team here does not delete match history.
+                    Create and configure teams, assign clans. Super Admin only.
                 </p>
                 
                 <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px;">
@@ -319,9 +319,10 @@
                     `<option value="${t.name}" ${t.name === HLL.currentTeam ? 'selected' : ''}>${t.name}</option>`
                 ).join('');
                 
-                // Show role management for Super Admins
+                // Show role management and team management for Super Admins
                 if (HLL.canManageRoles()) {
                     document.getElementById('roleManagementCard').classList.remove('hidden');
+                    document.getElementById('manageTeamsCard').classList.remove('hidden');
                     await loadRoleManagement();
                 }
             });
