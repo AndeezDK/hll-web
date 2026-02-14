@@ -3,9 +3,10 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Lineups - HLL Tool v0.14.1</title>
+    <title>Lineups - HLL Tool v0.15.0</title>
     <!-- Supabase JS Client -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="../js/hll.js?v=0.7.6"></script>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         
@@ -1034,22 +1035,7 @@
         }
     </style>
 </head>
-<body class="has-banner">
-    <!-- Auth Wall - blocks page until login -->
-    <div class="auth-wall" id="authWall">
-        <div class="auth-wall-box">
-            <div class="auth-wall-logo">HLL Tool</div>
-            <div class="auth-wall-subtitle">Sign in to access lineup management</div>
-            <label for="wallEmail">Email</label>
-            <input type="email" id="wallEmail" placeholder="you@example.com" autocomplete="email">
-            <label for="wallPassword">Password</label>
-            <input type="password" id="wallPassword" placeholder="Password" autocomplete="current-password">
-            <div class="auth-wall-error" id="wallError"></div>
-            <button class="auth-wall-btn" id="wallSubmitBtn" onclick="wallSubmit()">Log In</button>
-            <div class="auth-wall-toggle" id="wallToggleLink" onclick="toggleWallMode()">Don't have an account? Sign up</div>
-            <div class="auth-wall-loading" id="wallLoading" style="display:none;">Checking session...</div>
-        </div>
-    </div>
+<body>
     
     <!-- Navigation -->
     <nav class="nav-bar">
@@ -1064,53 +1050,16 @@
             <a href="admin.html" class="nav-link">Admin</a>
         </div>
         <div class="nav-spacer"></div>
-        <div class="nav-user" id="navUser" style="display:none;">
-            <span class="nav-user-email" id="navUserEmail"></span>
-            <span class="nav-user-role" id="navUserRole" style="display:none;"></span>
-            <button class="nav-logout-btn" onclick="authSignOut()">Log out</button>
-        </div>
-        <button class="nav-login-btn" id="navLoginBtn" onclick="showAuthModal()" style="display:none;">Log in</button>
         <div class="nav-status">
             <span class="status-dot" id="navStatusDot"></span>
             <span id="navStatusText">Connecting...</span>
         </div>
     </nav>
 
-    <!-- Connection Status Banner -->
-    <div class="connection-banner connecting" id="connectionBanner">Connecting to database...</div>
-    
-    <!-- Auth Modal -->
-    <div class="auth-modal" id="authModal">
-        <div class="auth-modal-box">
-            <h2 id="authModalTitle">🔒 Log In</h2>
-            <div class="auth-subtitle" id="authModalSubtitle">Sign in to edit lineups and save changes.</div>
-            <label for="authEmail">Email</label>
-            <input type="email" id="authEmail" placeholder="you@example.com" autocomplete="email">
-            <label for="authPassword">Password</label>
-            <input type="password" id="authPassword" placeholder="Password" autocomplete="current-password">
-            <div class="auth-error" id="authError"></div>
-            <div class="auth-btn-row">
-                <button class="auth-btn-secondary" onclick="hideAuthModal()">Cancel</button>
-                <button class="auth-btn-primary" id="authSubmitBtn" onclick="authSubmit()">Log In</button>
-            </div>
-            <div class="auth-toggle-link" id="authToggleLink" onclick="toggleAuthMode()">Don't have an account? Sign up</div>
-        </div>
-    </div>
-    
-    <!-- Auth Readonly Banner -->
-    <div class="auth-readonly-banner">🔒 View-only mode — <a href="#" onclick="showAuthModal(); return false;" style="color: #f5a623; text-decoration: underline;">Log in</a> to edit lineups</div>
-    
     <!-- Loading Overlay -->
     <div class="loading-overlay" id="loadingOverlay">
         <div class="loading-spinner"></div>
         <div class="loading-text" id="loadingText">Loading...</div>
-    </div>
-    
-    <!-- Config fields (hidden - credentials managed internally) -->
-    <div style="display:none;">
-        <input type="hidden" id="supabaseUrl">
-        <input type="hidden" id="supabaseKey">
-        <select id="defaultTeam"><option value="Circle">Circle</option></select>
     </div>
     
     <button class="share-toggle" onclick="toggleShareMode()">📷 Share</button>
@@ -1124,10 +1073,7 @@
     
     <div class="page-header">
         <h1 class="page-title">Lineups</h1>
-        <span class="version-badge">v0.14.1</span>
-        <select class="team-selector" id="teamSelector" onchange="switchTeam(this.value)">
-            <option value="">Loading teams...</option>
-        </select>
+        <span class="version-badge">v0.15.0</span>
         <div class="sync-indicator" id="syncIndicator">
             <span class="sync-dot"></span>
             <span class="sync-text">Offline</span>
@@ -1378,9 +1324,10 @@
         // SUPABASE CONFIGURATION & STATE
         // ========================================
         
-        let supabaseClient = null;
-        let isOnline = false;
-        let currentTeamId = null;
+        // supabaseClient now comes from HLL.supabase
+        // isOnline now comes from HLL.isOnline
+        // currentTeamId now comes from HLL.currentTeamId
+        // allTeams - local copy for lineup page
         let allTeams = [];
         let currentLineupNumber = 1;
         let lineupModified = false;
@@ -1393,445 +1340,11 @@
         let knownEnemyTeams = [];
         
         // Auth state
-        let currentUser = null;
+        // currentUser now comes from HLL.currentUser
         let authMode = 'login'; // 'login' or 'signup'
         
         // ========================================
-        // AUTHENTICATION
-        // ========================================
-        
-        function showAuthModal() {
-            authMode = 'login';
-            updateAuthModalUI();
-            document.getElementById('authEmail').value = '';
-            document.getElementById('authPassword').value = '';
-            document.getElementById('authError').classList.remove('visible');
-            document.getElementById('authModal').classList.add('visible');
-            document.getElementById('authEmail').focus();
-        }
-        
-        function hideAuthModal() {
-            document.getElementById('authModal').classList.remove('visible');
-        }
-        
-        function toggleAuthMode() {
-            authMode = authMode === 'login' ? 'signup' : 'login';
-            updateAuthModalUI();
-            document.getElementById('authError').classList.remove('visible');
-        }
-        
-        function updateAuthModalUI() {
-            const isLogin = authMode === 'login';
-            document.getElementById('authModalTitle').textContent = isLogin ? '🔒 Log In' : '📝 Sign Up';
-            document.getElementById('authModalSubtitle').textContent = isLogin 
-                ? 'Sign in to edit lineups and save changes.'
-                : 'Create an account to get started.';
-            document.getElementById('authSubmitBtn').textContent = isLogin ? 'Log In' : 'Sign Up';
-            document.getElementById('authToggleLink').textContent = isLogin 
-                ? "Don't have an account? Sign up" 
-                : 'Already have an account? Log in';
-            document.getElementById('authPassword').autocomplete = isLogin ? 'current-password' : 'new-password';
-        }
-        
-        async function authSubmit() {
-            const email = document.getElementById('authEmail').value.trim();
-            const password = document.getElementById('authPassword').value;
-            const errorEl = document.getElementById('authError');
-            const submitBtn = document.getElementById('authSubmitBtn');
-            
-            if (!email || !password) {
-                errorEl.textContent = 'Please enter email and password.';
-                errorEl.classList.add('visible');
-                return;
-            }
-            
-            if (authMode === 'signup' && password.length < 6) {
-                errorEl.textContent = 'Password must be at least 6 characters.';
-                errorEl.classList.add('visible');
-                return;
-            }
-            
-            if (!supabaseClient) {
-                errorEl.textContent = 'Not connected to database. Please connect first.';
-                errorEl.classList.add('visible');
-                return;
-            }
-            
-            submitBtn.disabled = true;
-            submitBtn.textContent = authMode === 'login' ? 'Signing in...' : 'Creating account...';
-            errorEl.classList.remove('visible');
-            
-            try {
-                let result;
-                if (authMode === 'login') {
-                    result = await supabaseClient.auth.signInWithPassword({ email, password });
-                } else {
-                    result = await supabaseClient.auth.signUp({ email, password });
-                }
-                
-                if (result.error) throw result.error;
-                
-                if (authMode === 'signup' && result.data?.user?.identities?.length === 0) {
-                    errorEl.textContent = 'An account with this email already exists.';
-                    errorEl.classList.add('visible');
-                    return;
-                }
-                
-                if (authMode === 'signup' && !result.data?.session) {
-                    // Email confirmation required
-                    errorEl.textContent = 'Check your email to confirm your account, then log in.';
-                    errorEl.classList.add('visible');
-                    errorEl.style.color = '#3fb950';
-                    setTimeout(() => { errorEl.style.color = ''; }, 5000);
-                    return;
-                }
-                
-                // Success — onAuthStateChange will handle the rest
-                hideAuthModal();
-                
-            } catch (err) {
-                console.error('Auth error:', err);
-                errorEl.textContent = err.message || 'Authentication failed.';
-                errorEl.classList.add('visible');
-            } finally {
-                submitBtn.disabled = false;
-                submitBtn.textContent = authMode === 'login' ? 'Log In' : 'Sign Up';
-            }
-        }
-        
-        async function authSignOut() {
-            if (!supabaseClient) return;
-            try {
-                await supabaseClient.auth.signOut();
-                // onAuthStateChange handles UI update
-            } catch (err) {
-                console.error('Sign out error:', err);
-            }
-        }
-        
-        function handleAuthStateChange(event, session) {
-            console.log('Auth state change:', event, session?.user?.email);
-            
-            if (session?.user) {
-                currentUser = session.user;
-                document.getElementById('navUser').style.display = 'flex';
-                document.getElementById('navUserEmail').textContent = currentUser.email;
-                document.getElementById('navLoginBtn').style.display = 'none';
-                updateEditingState(true);
-            } else {
-                currentUser = null;
-                document.getElementById('navUser').style.display = 'none';
-                document.getElementById('navLoginBtn').style.display = 'block';
-                updateEditingState(false);
-            }
-        }
-        
-        function updateEditingState(canEdit) {
-            // For now, just toggle a body class. 
-            // When RLS is added, this will be role-based.
-            if (canEdit) {
-                document.body.classList.remove('auth-readonly');
-            } else {
-                document.body.classList.add('auth-readonly');
-            }
-        }
-        
-        // Enter key submits auth form
-        document.addEventListener('DOMContentLoaded', () => {
-            ['authEmail', 'authPassword'].forEach(id => {
-                document.getElementById(id)?.addEventListener('keydown', (e) => {
-                    if (e.key === 'Enter') { e.preventDefault(); authSubmit(); }
-                });
-            });
-            ['wallEmail', 'wallPassword'].forEach(id => {
-                document.getElementById(id)?.addEventListener('keydown', (e) => {
-                    if (e.key === 'Enter') { e.preventDefault(); wallSubmit(); }
-                });
-            });
-        });
-        
-        // ========================================
-        // AUTH WALL (full-page login gate)
-        // ========================================
-        
-        let wallMode = 'login';
-        
-        function toggleWallMode() {
-            wallMode = wallMode === 'login' ? 'signup' : 'login';
-            const isLogin = wallMode === 'login';
-            document.getElementById('wallSubmitBtn').textContent = isLogin ? 'Log In' : 'Sign Up';
-            document.getElementById('wallToggleLink').textContent = isLogin 
-                ? "Don't have an account? Sign up" 
-                : 'Already have an account? Log in';
-            document.getElementById('wallPassword').autocomplete = isLogin ? 'current-password' : 'new-password';
-            document.getElementById('wallError').classList.remove('visible');
-        }
-        
-        async function wallSubmit() {
-            const email = document.getElementById('wallEmail').value.trim();
-            const password = document.getElementById('wallPassword').value;
-            const errorEl = document.getElementById('wallError');
-            const submitBtn = document.getElementById('wallSubmitBtn');
-            
-            if (!email || !password) {
-                errorEl.textContent = 'Please enter email and password.';
-                errorEl.classList.add('visible');
-                return;
-            }
-            
-            if (wallMode === 'signup' && password.length < 6) {
-                errorEl.textContent = 'Password must be at least 6 characters.';
-                errorEl.classList.add('visible');
-                return;
-            }
-            
-            // Need Supabase client — create it if not yet connected
-            if (!supabaseClient) {
-                const url = document.getElementById('supabaseUrl')?.value?.trim() 
-                    || localStorage.getItem('hll_supabase_url')
-                    || 'https://mtcfoncuegnokymtebpg.supabase.co';
-                const key = document.getElementById('supabaseKey')?.value?.trim()
-                    || localStorage.getItem('hll_supabase_key')
-                    || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im10Y2ZvbmN1ZWdub2t5bXRlYnBnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njk5NjAzODAsImV4cCI6MjA4NTUzNjM4MH0.-i2hVz1jDGSrm0pOsUrKUfdsip1gg8wpcOx7k75j8pc';
-                try {
-                    supabaseClient = window.supabase.createClient(url, key);
-                    supabaseClient.auth.onAuthStateChange(handleAuthStateChange);
-                } catch (err) {
-                    errorEl.textContent = 'Failed to connect to database.';
-                    errorEl.classList.add('visible');
-                    return;
-                }
-            }
-            
-            submitBtn.disabled = true;
-            submitBtn.textContent = wallMode === 'login' ? 'Signing in...' : 'Creating account...';
-            errorEl.classList.remove('visible');
-            
-            try {
-                let result;
-                if (wallMode === 'login') {
-                    result = await supabaseClient.auth.signInWithPassword({ email, password });
-                } else {
-                    result = await supabaseClient.auth.signUp({ email, password });
-                }
-                
-                if (result.error) throw result.error;
-                
-                if (wallMode === 'signup' && result.data?.user?.identities?.length === 0) {
-                    errorEl.textContent = 'An account with this email already exists.';
-                    errorEl.classList.add('visible');
-                    return;
-                }
-                
-                if (wallMode === 'signup' && !result.data?.session) {
-                    errorEl.textContent = 'Check your email to confirm your account, then log in.';
-                    errorEl.classList.add('visible');
-                    errorEl.style.color = '#3fb950';
-                    setTimeout(() => { errorEl.style.color = ''; }, 5000);
-                    return;
-                }
-                
-                // Success — proceed to load app
-                currentUser = result.data.session.user;
-                document.getElementById('authWall').classList.add('hidden');
-                await proceedAfterAuth();
-                
-            } catch (err) {
-                console.error('Wall auth error:', err);
-                errorEl.textContent = err.message || 'Authentication failed.';
-                errorEl.classList.add('visible');
-            } finally {
-                submitBtn.disabled = false;
-                submitBtn.textContent = wallMode === 'login' ? 'Log In' : 'Sign Up';
-            }
-        }
-        
-        async function proceedAfterAuth() {
-            showLoading('Loading lineup data...');
-            const savedUrl = localStorage.getItem('hll_supabase_url') 
-                || 'https://mtcfoncuegnokymtebpg.supabase.co';
-            const savedKey = localStorage.getItem('hll_supabase_key')
-                || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im10Y2ZvbmN1ZWdub2t5bXRlYnBnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njk5NjAzODAsImV4cCI6MjA4NTUzNjM4MH0.-i2hVz1jDGSrm0pOsUrKUfdsip1gg8wpcOx7k75j8pc';
-            const savedTeam = localStorage.getItem('hll_default_team') || 'Circle';
-            
-            localStorage.setItem('hll_supabase_url', savedUrl);
-            localStorage.setItem('hll_supabase_key', savedKey);
-            localStorage.setItem('hll_default_team', savedTeam);
-            
-            await connectToSupabase(savedUrl, savedKey, savedTeam);
-        }
-        
-        // Fallback players for offline mode
-        const fallbackPlayers = [
-            { steam_id: "OFFLINE_1", name: "PlayerOne", team: "Circle" },
-            { steam_id: "OFFLINE_2", name: "TankCommander1", team: "Circle" },
-            { steam_id: "OFFLINE_3", name: "SquadLeader1", team: "DKB" },
-            { steam_id: "OFFLINE_4", name: "InfantryPro", team: "Circle" },
-            { steam_id: "OFFLINE_5", name: "SniperElite", team: "DKB" },
-            { steam_id: "OFFLINE_6", name: "NodeBuilder", team: "Circle" },
-            { steam_id: "OFFLINE_7", name: "DefenceKing", team: "DKB" },
-            { steam_id: "OFFLINE_8", name: "FlexMaster", team: "Circle" },
-            { steam_id: "OFFLINE_9", name: "CommanderX", team: "Merc" },
-        ];
-        
-        // ========================================
-        // INITIALIZATION
-        // ========================================
-        
-        async function init() {
-            // Try to restore session before showing anything
-            const url = localStorage.getItem('hll_supabase_url') 
-                || 'https://mtcfoncuegnokymtebpg.supabase.co';
-            const key = localStorage.getItem('hll_supabase_key')
-                || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im10Y2ZvbmN1ZWdub2t5bXRlYnBnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njk5NjAzODAsImV4cCI6MjA4NTUzNjM4MH0.-i2hVz1jDGSrm0pOsUrKUfdsip1gg8wpcOx7k75j8pc';
-            
-            document.getElementById('wallLoading').style.display = 'block';
-            document.getElementById('wallSubmitBtn').style.display = 'none';
-            document.getElementById('wallToggleLink').style.display = 'none';
-            
-            try {
-                supabaseClient = window.supabase.createClient(url, key);
-                supabaseClient.auth.onAuthStateChange(handleAuthStateChange);
-                
-                const { data: { session } } = await supabaseClient.auth.getSession();
-                
-                if (session?.user) {
-                    // Already logged in — skip wall, load app
-                    currentUser = session.user;
-                    document.getElementById('authWall').classList.add('hidden');
-                    await proceedAfterAuth();
-                    return;
-                }
-            } catch (err) {
-                console.error('Session check failed:', err);
-            }
-            
-            // No session — show login wall
-            document.getElementById('wallLoading').style.display = 'none';
-            document.getElementById('wallSubmitBtn').style.display = '';
-            document.getElementById('wallToggleLink').style.display = '';
-            document.getElementById('wallEmail').focus();
-        }
-        
-        function showConfigModal() {
-            document.getElementById('configModal').classList.remove('hidden');
-        }
-        
-        function hideConfigModal() {
-            document.getElementById('configModal').classList.add('hidden');
-        }
-        
-        async function saveConfig() {
-            const url = document.getElementById('supabaseUrl').value.trim();
-            const key = document.getElementById('supabaseKey').value.trim();
-            const team = document.getElementById('defaultTeam').value;
-            
-            if (!url || !key) {
-                alert('Please enter both Supabase URL and Key');
-                return;
-            }
-            
-            localStorage.setItem('hll_supabase_url', url);
-            localStorage.setItem('hll_supabase_key', key);
-            localStorage.setItem('hll_default_team', team);
-            
-            hideConfigModal();
-            showLoading('Connecting...');
-            await connectToSupabase(url, key, team);
-        }
-        
-        function useOfflineMode() {
-            hideConfigModal();
-            setOfflineMode();
-            initializeUI();
-            hideLoading();
-        }
-        
-        async function connectToSupabase(url, key, defaultTeam) {
-            updateConnectionBanner('connecting', 'Connecting to database...');
-            
-            try {
-                supabaseClient = window.supabase.createClient(url, key);
-                
-                // Set up auth state listener
-                supabaseClient.auth.onAuthStateChange(handleAuthStateChange);
-                
-                // Check for existing session
-                const { data: { session } } = await supabaseClient.auth.getSession();
-                if (session?.user) {
-                    currentUser = session.user;
-                }
-                
-                // Test connection by fetching teams
-                const { data: teams, error } = await supabaseClient
-                    .from('teams')
-                    .select('id, name, tag')
-                    .limit(5);
-                
-                if (error) throw error;
-                
-                // Store all teams and populate selector
-                allTeams = teams || [];
-                populateTeamSelector(allTeams, defaultTeam);
-                
-                // Populate match info team selector from DB
-                const matchTeamSel = document.getElementById('matchTeamSelect');
-                matchTeamSel.innerHTML = allTeams.map(t => `<option>${t.name}</option>`).join('');
-                
-                // Find team ID
-                const team = teams?.find(t => t.name === defaultTeam || t.tag === defaultTeam);
-                if (team) {
-                    currentTeamId = team.id;
-                }
-                
-                isOnline = true;
-                updateConnectionBanner('connected', 'Connected');
-                updateSyncIndicator('synced', 'Connected');
-                
-                // Load players
-                await loadPlayersFromDatabase(defaultTeam);
-                
-                // Load known enemy teams for autocomplete
-                await loadEnemyTeams();
-                
-                // Initialize UI
-                initializeUI();
-                
-                // Load existing lineups
-                await loadLineupsFromDatabase();
-                
-                hideLoading();
-                
-                // Hide banner immediately on success
-                document.getElementById('connectionBanner').classList.add('hidden');
-                
-                // Update auth UI based on session
-                if (currentUser) {
-                    handleAuthStateChange('INITIAL_SESSION', { user: currentUser });
-                } else {
-                    document.getElementById('navLoginBtn').style.display = 'block';
-                    updateEditingState(false);
-                }
-                
-            } catch (err) {
-                console.error('Supabase connection error:', err);
-                updateConnectionBanner('error', 'Connection failed: ' + err.message);
-                updateSyncIndicator('error', 'Connection failed');
-                
-                setTimeout(() => {
-                    setOfflineMode();
-                    initializeUI();
-                    hideLoading();
-                }, 3000);
-            }
-        }
-        
-        function setOfflineMode() {
-            isOnline = false;
-            players = [...fallbackPlayers];
-            updateConnectionBanner('offline', 'Offline Mode - Using sample data');
-            updateSyncIndicator('error', 'Offline');
-        }
+        // AUTHENTICATION — handled by hll.js via HLL.initWithAuth()
         
         function populateTeamSelector(teams, selectedName) {
             const sel = document.getElementById('teamSelector');
@@ -1839,16 +1352,15 @@
                 `<option value="${t.id}" ${t.name === selectedName ? 'selected' : ''}>${t.name}</option>`
             ).join('');
         }
-        
         async function switchTeam(teamId) {
-            if (teamId === currentTeamId) return;
+            if (teamId === HLL.currentTeamId) return;
             
             // Auto-save current lineup before switching
-            if (lineupModified && isOnline && supabaseClient) {
+            if (lineupModified && HLL.isOnline && HLL.supabase) {
                 await saveLineup();
             }
             
-            currentTeamId = teamId;
+            HLL.currentTeamId = teamId;
             currentLineupNumber = 1;
             
             // Remember selected team
@@ -1872,9 +1384,8 @@
         }
         
         function updateConnectionBanner(status, text) {
-            const banner = document.getElementById('connectionBanner');
-            banner.className = 'connection-banner ' + status;
-            banner.textContent = text;
+            // Connection status now handled by hll.js nav
+            console.log(`Connection: ${status} - ${text}`);
         }
         
         function updateSyncIndicator(status, text) {
@@ -1908,7 +1419,7 @@
         // ========================================
         
         async function loadPlayersFromDatabase(teamFilter = null) {
-            if (!supabaseClient || !isOnline) {
+            if (!HLL.supabase || !HLL.isOnline) {
                 players = [...fallbackPlayers];
                 return;
             }
@@ -1916,7 +1427,7 @@
             showLoading('Loading players...');
             
             try {
-                let query = supabaseClient
+                let query = HLL.supabase
                     .from('players')
                     .select('steam_id, name, team')
                     .order('name');
@@ -1935,13 +1446,13 @@
         }
         
         async function loadLineupsFromDatabase() {
-            if (!supabaseClient || !isOnline || !currentTeamId) return;
+            if (!HLL.supabase || !HLL.isOnline || !HLL.currentTeamId) return;
             
             try {
-                const { data, error } = await supabaseClient
+                const { data, error } = await HLL.supabase
                     .from('lineups')
                     .select('*')
-                    .eq('team_id', currentTeamId)
+                    .eq('team_id', HLL.currentTeamId)
                     .order('lineup_number');
                 
                 if (error) throw error;
@@ -1966,12 +1477,12 @@
                 }
                 
                 // Load tasks from localStorage
-                const taskKey = `hll_tasks_${currentTeamId}_${currentLineupNumber}`;
+                const taskKey = `hll_tasks_${HLL.currentTeamId}_${currentLineupNumber}`;
                 const savedTasks = localStorage.getItem(taskKey);
                 loadTasksData(savedTasks ? JSON.parse(savedTasks) : []);
                 
                 // Load match info from localStorage
-                const matchKey = `hll_match_${currentTeamId}_${currentLineupNumber}`;
+                const matchKey = `hll_match_${HLL.currentTeamId}_${currentLineupNumber}`;
                 const savedMatch = localStorage.getItem(matchKey);
                 if (savedMatch) {
                     try {
@@ -1987,7 +1498,7 @@
                 }
                 
                 // Load reserves from localStorage
-                const reserveKey = `hll_reserves_${currentTeamId}_${currentLineupNumber}`;
+                const reserveKey = `hll_reserves_${HLL.currentTeamId}_${currentLineupNumber}`;
                 const savedReserves = localStorage.getItem(reserveKey);
                 if (savedReserves) {
                     try {
@@ -2018,21 +1529,21 @@
         let realtimeChannel = null;
         
         function subscribeToRealtimeChanges() {
-            if (!supabaseClient || !isOnline || !currentTeamId) return;
+            if (!HLL.supabase || !HLL.isOnline || !HLL.currentTeamId) return;
             
             // Unsubscribe from previous channel if exists
             if (realtimeChannel) {
-                supabaseClient.removeChannel(realtimeChannel);
+                HLL.supabase.removeChannel(realtimeChannel);
             }
             
-            realtimeChannel = supabaseClient
+            realtimeChannel = HLL.supabase
                 .channel('lineup-changes')
                 .on('postgres_changes', 
                     { 
                         event: '*', 
                         schema: 'public', 
                         table: 'lineups',
-                        filter: `team_id=eq.${currentTeamId}`
+                        filter: `team_id=eq.${HLL.currentTeamId}`
                     }, 
                     (payload) => {
                         console.log('Realtime update:', payload);
@@ -2057,13 +1568,13 @@
         }
         
         async function saveLineup() {
-            if (!isOnline || !supabaseClient) {
+            if (!HLL.isOnline || !HLL.supabase) {
                 alert('Cannot save in offline mode. Connect to Supabase first.');
                 return;
             }
             
-            if (!currentUser) {
-                showAuthModal();
+            if (!HLL.currentUser) {
+                alert('You must be logged in to save.');
                 return;
             }
             
@@ -2077,16 +1588,16 @@
                 const slots = collectLineupSlots();
                 
                 // Delete existing slots for this lineup
-                await supabaseClient
+                await HLL.supabase
                     .from('lineups')
                     .delete()
-                    .eq('team_id', currentTeamId)
+                    .eq('team_id', HLL.currentTeamId)
                     .eq('lineup_number', currentLineupNumber);
                 
                 // Insert new slots
                 if (slots.length > 0) {
                     const records = slots.map(slot => ({
-                        team_id: currentTeamId,
+                        team_id: HLL.currentTeamId,
                         lineup_number: currentLineupNumber,
                         cell_position: slot.cell || '',
                         steam_id: slot.steam_id,
@@ -2097,7 +1608,7 @@
                         is_here: slot.here
                     }));
                     
-                    const { error } = await supabaseClient
+                    const { error } = await HLL.supabase
                         .from('lineups')
                         .insert(records);
                     
@@ -2110,15 +1621,15 @@
                 updateTabIndicators();
                 
                 // Save tasks to localStorage
-                const taskKey = `hll_tasks_${currentTeamId}_${currentLineupNumber}`;
+                const taskKey = `hll_tasks_${HLL.currentTeamId}_${currentLineupNumber}`;
                 localStorage.setItem(taskKey, JSON.stringify(tasks));
                 
                 // Save match info to localStorage
-                const matchKey = `hll_match_${currentTeamId}_${currentLineupNumber}`;
+                const matchKey = `hll_match_${HLL.currentTeamId}_${currentLineupNumber}`;
                 localStorage.setItem(matchKey, JSON.stringify(getMatchInfo()));
                 
                 // Save reserves to localStorage
-                const reserveKey = `hll_reserves_${currentTeamId}_${currentLineupNumber}`;
+                const reserveKey = `hll_reserves_${HLL.currentTeamId}_${currentLineupNumber}`;
                 const reserves = [];
                 document.querySelectorAll('.reserve-slot').forEach(slot => {
                     const name = slot.dataset.player || (slot.classList.contains('empty') ? '' : slot.textContent);
@@ -2143,22 +1654,22 @@
         // ========================================
         
         async function snapshotLineup() {
-            if (!supabaseClient || !isOnline || !currentTeamId) return;
+            if (!HLL.supabase || !HLL.isOnline || !HLL.currentTeamId) return;
             try {
                 // Read current DB state (what we're about to overwrite)
-                const { data, error } = await supabaseClient
+                const { data, error } = await HLL.supabase
                     .from('lineups')
                     .select('cell_position, steam_id, player_name, role, sl_role, note, is_here')
-                    .eq('team_id', currentTeamId)
+                    .eq('team_id', HLL.currentTeamId)
                     .eq('lineup_number', currentLineupNumber);
                 
                 if (error) throw error;
                 if (!data || data.length === 0) return; // Nothing to snapshot
                 
-                await supabaseClient
+                await HLL.supabase
                     .from('lineup_history')
                     .insert({
-                        team_id: currentTeamId,
+                        team_id: HLL.currentTeamId,
                         lineup_number: currentLineupNumber,
                         snapshot: JSON.stringify(data)
                     });
@@ -2178,16 +1689,16 @@
         }
         
         async function undoLineup() {
-            if (!supabaseClient || !isOnline || !currentTeamId) return;
+            if (!HLL.supabase || !HLL.isOnline || !HLL.currentTeamId) return;
             
             updateSyncIndicator('syncing', 'Undoing...');
             
             try {
                 // Get most recent snapshot
-                const { data: history, error: histErr } = await supabaseClient
+                const { data: history, error: histErr } = await HLL.supabase
                     .from('lineup_history')
                     .select('id, snapshot, created_at')
-                    .eq('team_id', currentTeamId)
+                    .eq('team_id', HLL.currentTeamId)
                     .eq('lineup_number', currentLineupNumber)
                     .order('created_at', { ascending: false })
                     .limit(1);
@@ -2204,16 +1715,16 @@
                 const snapshotTime = new Date(history[0].created_at).toLocaleTimeString();
                 
                 // Delete current lineup slots
-                await supabaseClient
+                await HLL.supabase
                     .from('lineups')
                     .delete()
-                    .eq('team_id', currentTeamId)
+                    .eq('team_id', HLL.currentTeamId)
                     .eq('lineup_number', currentLineupNumber);
                 
                 // Restore from snapshot
                 if (snapshot.length > 0) {
                     const records = snapshot.map(s => ({
-                        team_id: currentTeamId,
+                        team_id: HLL.currentTeamId,
                         lineup_number: currentLineupNumber,
                         cell_position: s.cell_position,
                         steam_id: s.steam_id,
@@ -2224,7 +1735,7 @@
                         is_here: s.is_here
                     }));
                     
-                    const { error: insertErr } = await supabaseClient
+                    const { error: insertErr } = await HLL.supabase
                         .from('lineups')
                         .insert(records);
                     
@@ -2232,7 +1743,7 @@
                 }
                 
                 // Delete the used snapshot so next undo goes further back
-                await supabaseClient
+                await HLL.supabase
                     .from('lineup_history')
                     .delete()
                     .eq('id', snapshotId);
@@ -2257,13 +1768,13 @@
         
         async function updateUndoButton() {
             const btn = document.getElementById('undoBtn');
-            if (!btn || !supabaseClient || !isOnline || !currentTeamId) return;
+            if (!btn || !HLL.supabase || !HLL.isOnline || !HLL.currentTeamId) return;
             
             try {
-                const { data, error } = await supabaseClient
+                const { data, error } = await HLL.supabase
                     .from('lineup_history')
                     .select('id', { count: 'exact', head: true })
-                    .eq('team_id', currentTeamId)
+                    .eq('team_id', HLL.currentTeamId)
                     .eq('lineup_number', currentLineupNumber);
                 
                 const count = data ? data.length : 0;
@@ -2314,13 +1825,13 @@
         }
         
         async function checkConflictsFromDatabase() {
-            if (!supabaseClient || !isOnline) return [];
+            if (!HLL.supabase || !HLL.isOnline) return [];
             
             try {
-                const { data, error } = await supabaseClient
+                const { data, error } = await HLL.supabase
                     .from('lineups')
                     .select('lineup_number, player_name, cell_position')
-                    .eq('team_id', currentTeamId)
+                    .eq('team_id', HLL.currentTeamId)
                     .neq('lineup_number', currentLineupNumber);
                 
                 if (error) throw error;
@@ -2342,9 +1853,9 @@
         // ========================================
         
         async function loadEnemyTeams() {
-            if (!supabaseClient || !isOnline) return;
+            if (!HLL.supabase || !HLL.isOnline) return;
             try {
-                const { data, error } = await supabaseClient
+                const { data, error } = await HLL.supabase
                     .from('enemy_team_stats')
                     .select('*')
                     .order('total_matches', { ascending: false });
@@ -2439,8 +1950,8 @@
         }
         
         function saveMatchInfoToLocalStorage() {
-            if (!currentTeamId) return;
-            const matchKey = `hll_match_${currentTeamId}_${currentLineupNumber}`;
+            if (!HLL.currentTeamId) return;
+            const matchKey = `hll_match_${HLL.currentTeamId}_${currentLineupNumber}`;
             localStorage.setItem(matchKey, JSON.stringify(getMatchInfo()));
         }
         
@@ -2454,7 +1965,7 @@
         function debouncedAutoSave() {
             clearTimeout(autoSaveTimer);
             autoSaveTimer = setTimeout(async () => {
-                if (isOnline && supabaseClient) await saveLineup();
+                if (HLL.isOnline && HLL.supabase) await saveLineup();
             }, 1000);
         }
         
@@ -2582,7 +2093,7 @@
             if (num === currentLineupNumber) return;
             
             // Auto-save current lineup to Supabase before switching
-            if (lineupModified && isOnline && supabaseClient) {
+            if (lineupModified && HLL.isOnline && HLL.supabase) {
                 await saveLineup();
             }
             
@@ -2607,7 +2118,7 @@
             }
             
             // Restore match info for this lineup tab
-            const matchKey = `hll_match_${currentTeamId}_${currentLineupNumber}`;
+            const matchKey = `hll_match_${HLL.currentTeamId}_${currentLineupNumber}`;
             const savedMatch = localStorage.getItem(matchKey);
             if (savedMatch) {
                 try {
@@ -2622,12 +2133,12 @@
             }
             
             // Restore tasks
-            const taskKey = `hll_tasks_${currentTeamId}_${currentLineupNumber}`;
+            const taskKey = `hll_tasks_${HLL.currentTeamId}_${currentLineupNumber}`;
             const savedTasks = localStorage.getItem(taskKey);
             loadTasksData(savedTasks ? JSON.parse(savedTasks) : []);
             
             // Restore reserves
-            const reserveKey = `hll_reserves_${currentTeamId}_${currentLineupNumber}`;
+            const reserveKey = `hll_reserves_${HLL.currentTeamId}_${currentLineupNumber}`;
             const savedReserves = localStorage.getItem(reserveKey);
             if (savedReserves) {
                 try {
@@ -3614,7 +3125,7 @@
             }
 
             // 3. Get role data for smart matching
-            const { data: rosterData } = await supabaseClient
+            const { data: rosterData } = await HLL.supabase
                 .from('players')
                 .select('name, primary_role, secondary_role, tertiary_role')
                 .in('name', eligibleInfantry.map(p => p.name));
@@ -4408,12 +3919,12 @@
             }
             
             // Delete from database FIRST
-            if (isOnline && supabaseClient && currentTeamId) {
+            if (HLL.isOnline && HLL.supabase && HLL.currentTeamId) {
                 try {
-                    const { error } = await supabaseClient
+                    const { error } = await HLL.supabase
                         .from('lineups')
                         .delete()
-                        .eq('team_id', currentTeamId)
+                        .eq('team_id', HLL.currentTeamId)
                         .eq('lineup_number', currentLineupNumber);
                     
                     if (error) throw error;
