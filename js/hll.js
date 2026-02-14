@@ -7,7 +7,7 @@
 // ============================================================================
 
 const HLL = {
-    version: '0.7.0',
+    version: '0.7.1',
     
     // Default Supabase config (can be overridden via localStorage)
     config: {
@@ -855,6 +855,9 @@ HLL._onAuthSuccess = async function() {
         if (!el.textContent.trim()) el.textContent = 'v' + this.version;
     });
     
+    // Fetch user roles
+    await this.loadUserRoles();
+    
     // Fire callback if page registered one
     if (typeof this._authCallback === 'function') {
         await this._authCallback();
@@ -923,6 +926,83 @@ HLL.initWithAuth = async function(callback) {
     document.getElementById('wallSubmitBtn').style.display = '';
     document.getElementById('wallToggleLink').style.display = '';
     document.getElementById('wallEmail').focus();
+};
+
+// ============================================================================
+// ROLE MANAGEMENT
+// ============================================================================
+
+HLL.loadUserRoles = async function() {
+    this.userRoles = [];
+    this.userTeams = [];
+    this.currentRole = null;
+    this.isSuperAdmin = false;
+    
+    if (!this.supabase || !this.currentUser) return;
+    
+    try {
+        const { data, error } = await this.supabase
+            .from('user_roles')
+            .select('role, team_id, teams(name)')
+            .eq('user_id', this.currentUser.id);
+        
+        if (error) throw error;
+        
+        this.userRoles = data || [];
+        this.isSuperAdmin = data?.some(r => r.role === 'super_admin') || false;
+        this.userTeams = data?.map(r => ({ 
+            team_id: r.team_id, 
+            team_name: r.teams?.name, 
+            role: r.role 
+        })) || [];
+        
+        // Set currentRole to highest role across all teams
+        const hierarchy = ['super_admin', 'team_admin', 'officer', 'viewer'];
+        for (const level of hierarchy) {
+            if (data?.some(r => r.role === level)) {
+                this.currentRole = level;
+                break;
+            }
+        }
+        
+        console.log(`User role: ${this.currentRole}, teams: ${this.userTeams.map(t => t.team_name).join(', ')}`);
+        
+        // Update nav to show role
+        const navEmail = document.getElementById('navUserEmail');
+        if (navEmail && this.currentRole) {
+            const roleLabel = this.currentRole.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+            navEmail.textContent = `${this.currentUser.email} (${roleLabel})`;
+        }
+        
+    } catch (err) {
+        console.error('Error loading user roles:', err);
+    }
+};
+
+HLL.hasRole = function(minRole, teamId) {
+    const hierarchy = ['viewer', 'officer', 'team_admin', 'super_admin'];
+    if (this.isSuperAdmin) return true;
+    
+    const minLevel = hierarchy.indexOf(minRole);
+    if (minLevel === -1) return false;
+    
+    const matching = teamId 
+        ? this.userRoles.filter(r => r.team_id === teamId)
+        : this.userRoles;
+    
+    return matching.some(r => hierarchy.indexOf(r.role) >= minLevel);
+};
+
+HLL.canEdit = function(teamId) {
+    return this.hasRole('officer', teamId);
+};
+
+HLL.canDelete = function(teamId) {
+    return this.hasRole('team_admin', teamId);
+};
+
+HLL.canManageRoles = function() {
+    return this.isSuperAdmin;
 };
 
 // ============================================================================
