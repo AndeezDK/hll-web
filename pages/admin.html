@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Admin - HLL Tool v0.6.30</title>
+    <title>Admin - HLL Tool v0.6.31</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <link rel="stylesheet" href="../css/styles.css">
     <style>
@@ -81,7 +81,7 @@
         <!-- Header -->
         <div class="page-header">
             <h1 class="page-title">Admin</h1>
-            <span class="version-badge">v0.6.30</span>
+            <span class="version-badge">v0.6.31</span>
         </div>
 
         <div class="admin-grid">
@@ -293,7 +293,7 @@
         <div class="loading-text">Loading...</div>
     </div>
 
-    <script src="../js/hll.js?v=0.7.6"></script>
+    <script src="../js/hll.js?v=0.7.7"></script>
     <script>
         // ============================================================================
         // STATE
@@ -2414,6 +2414,20 @@
             const { data: matches } = await HLL.supabase.from('matches').select('my_team');
             if (matches) matches.forEach(m => { if (m.my_team) myTeamsSet.add(m.my_team); });
             
+            // Load clan composition for all teams
+            const allTeamClans = await HLL.getAllTeamClans();
+            const clansByTeam = {};
+            allTeamClans.forEach(tc => {
+                if (!clansByTeam[tc.team_id]) clansByTeam[tc.team_id] = [];
+                clansByTeam[tc.team_id].push(tc.clan_name);
+            });
+            
+            // Get all distinct clan names (from players.team) for the dropdown
+            const allClanNames = new Set();
+            if (players) players.forEach(p => { if (p.team) allClanNames.add(p.team); });
+            if (teamsData) teamsData.forEach(t => allClanNames.add(t.name));
+            const sortedClans = [...allClanNames].sort();
+            
             // Count players and matches per team
             const playerCounts = {};
             const matchCounts = {};
@@ -2434,22 +2448,48 @@
                         ? `<img src="${logo}" style="width:20px;height:20px;border-radius:4px;object-fit:cover;">`
                         : `<span style="width:20px;height:20px;border-radius:4px;background:#30363d;display:inline-flex;align-items:center;justify-content:center;font-size:10px;color:#8b949e;">?</span>`;
                     
+                    const tid = teamIds[t];
+                    const clans = tid ? (clansByTeam[tid] || []) : [];
+                    const clanTags = clans.map(c => {
+                        const cEsc = c.replace(/'/g, "\\'");
+                        return `<span style="display:inline-flex;align-items:center;gap:2px;background:var(--bg-tertiary);border:1px solid var(--border-color);border-radius:3px;padding:1px 5px;font-size:10px;">
+                            ${c}
+                            <button onclick="removeClanFromTeam('${tid}','${cEsc}')" style="background:none;border:none;color:#f87171;cursor:pointer;font-size:9px;padding:0 1px;" title="Remove clan">✕</button>
+                        </span>`;
+                    }).join(' ');
+                    
+                    const canAddMore = clans.length < 4 && tid;
+                    const availableClans = sortedClans.filter(c => !clans.includes(c));
+                    const addClanHtml = canAddMore && availableClans.length > 0
+                        ? `<select onchange="addClanToTeam('${tid}', this.value); this.value='';" style="font-size:10px;padding:1px 3px;background:var(--bg-tertiary);border:1px solid var(--border-color);border-radius:3px;color:var(--text-primary);max-width:80px;">
+                            <option value="">+ clan</option>
+                            ${availableClans.map(c => `<option value="${c}">${c}</option>`).join('')}
+                           </select>`
+                        : clans.length >= 4 ? '<span style="font-size:9px;color:var(--text-secondary);">max 4</span>' : '';
+                    
                     return `
-                    <div style="display: flex; justify-content: space-between; align-items: center; padding: 3px 0; border-bottom: 1px solid rgba(255,255,255,0.05);">
-                        <div style="display:flex;align-items:center;gap:6px;">
-                            ${logoHtml}
-                            <span style="font-size: 0.85rem;">${t}</span>
-                            <span style="font-size:10px;color:var(--text-secondary);">(${pc}p, ${mc}m)</span>
+                    <div style="padding: 4px 0; border-bottom: 1px solid rgba(255,255,255,0.05);">
+                        <div style="display: flex; justify-content: space-between; align-items: center;">
+                            <div style="display:flex;align-items:center;gap:6px;">
+                                ${logoHtml}
+                                <span style="font-size: 0.85rem;">${t}</span>
+                                <span style="font-size:10px;color:var(--text-secondary);">(${pc}p, ${mc}m)</span>
+                            </div>
+                            <div style="display:flex;gap:2px;">
+                                <label style="background: none; border: none; color: #388bfd; cursor: pointer; font-size: 11px; padding: 2px 6px;" title="Upload logo">
+                                    🖼️
+                                    <input type="file" accept="image/*" style="display:none;" onchange="uploadTeamLogo('${escaped}', this.files[0])">
+                                </label>
+                                <button onclick="renameMyTeam('${escaped}')" 
+                                    style="background: none; border: none; color: var(--accent-orange); cursor: pointer; font-size: 11px; padding: 2px 6px;" title="Migrate players / Rename">✏️</button>
+                                <button onclick="deleteMyTeam('${escaped}')" 
+                                    style="background: none; border: none; color: #f87171; cursor: pointer; font-size: 11px; padding: 2px 6px;" title="Delete">✕</button>
+                            </div>
                         </div>
-                        <div style="display:flex;gap:2px;">
-                            <label style="background: none; border: none; color: #388bfd; cursor: pointer; font-size: 11px; padding: 2px 6px;" title="Upload logo">
-                                🖼️
-                                <input type="file" accept="image/*" style="display:none;" onchange="uploadTeamLogo('${escaped}', this.files[0])">
-                            </label>
-                            <button onclick="renameMyTeam('${escaped}')" 
-                                style="background: none; border: none; color: var(--accent-orange); cursor: pointer; font-size: 11px; padding: 2px 6px;" title="Migrate players / Rename">✏️</button>
-                            <button onclick="deleteMyTeam('${escaped}')" 
-                                style="background: none; border: none; color: #f87171; cursor: pointer; font-size: 11px; padding: 2px 6px;" title="Delete">✕</button>
+                        <div style="display:flex;align-items:center;gap:4px;margin-top:3px;margin-left:26px;flex-wrap:wrap;">
+                            <span style="font-size:10px;color:var(--text-secondary);">Clans:</span>
+                            ${clans.length > 0 ? clanTags : '<span style="font-size:10px;color:var(--text-secondary);font-style:italic;">none</span>'}
+                            ${addClanHtml}
                         </div>
                     </div>`;
                 }).join('');
@@ -2483,12 +2523,51 @@
             const input = document.getElementById('addMyTeamInput');
             const name = input.value.trim();
             if (!name) return;
-            // Add a placeholder player entry to register the team, or just note it
-            // For now, we add it via a dummy roster entry check — but simpler: just insert a player with no steam_id
-            // Actually, my_team comes from players.team — we can't add without a player.
-            // Better approach: just inform user that my teams come from roster entries.
             HLL.showAlert('My Teams are populated from your player roster. Add a player with this team name to register it.', 'info');
             input.value = '';
+        }
+
+        async function addClanToTeam(teamId, clanName) {
+            if (!teamId || !clanName) return;
+            try {
+                // Check current count
+                const { data: existing } = await HLL.supabase
+                    .from('team_clans')
+                    .select('id')
+                    .eq('team_id', teamId);
+                if (existing && existing.length >= 4) {
+                    HLL.showAlert('Maximum 4 clans per team', 'error');
+                    return;
+                }
+                const { error } = await HLL.supabase
+                    .from('team_clans')
+                    .insert({ team_id: teamId, clan_name: clanName, sort_order: (existing?.length || 0) });
+                if (error) throw error;
+                HLL.clearTeamClansCache();
+                HLL.showAlert(`Added "${clanName}" to team`, 'success');
+                await loadManagedTeams();
+            } catch (err) {
+                console.error('Error adding clan:', err);
+                HLL.showAlert('Failed to add clan: ' + err.message, 'error');
+            }
+        }
+
+        async function removeClanFromTeam(teamId, clanName) {
+            if (!teamId || !clanName) return;
+            try {
+                const { error } = await HLL.supabase
+                    .from('team_clans')
+                    .delete()
+                    .eq('team_id', teamId)
+                    .eq('clan_name', clanName);
+                if (error) throw error;
+                HLL.clearTeamClansCache();
+                HLL.showAlert(`Removed "${clanName}" from team`, 'success');
+                await loadManagedTeams();
+            } catch (err) {
+                console.error('Error removing clan:', err);
+                HLL.showAlert('Failed to remove clan: ' + err.message, 'error');
+            }
         }
 
         async function addEnemyTeam() {

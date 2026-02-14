@@ -3,10 +3,10 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Lineups - HLL Tool v0.15.0</title>
+    <title>Lineups - HLL Tool v0.15.1</title>
     <!-- Supabase JS Client -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <script src="../js/hll.js?v=0.7.6"></script>
+    <script src="../js/hll.js?v=0.7.7"></script>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         
@@ -234,9 +234,6 @@
         .slot-name.unknown-player { color: #d29922; font-style: italic; }
         .unknown-team-badge { display: inline-block; font-size: 10px; padding: 1px 6px; border-radius: 3px; margin-left: 6px; cursor: pointer; background: #30363d; color: #8b949e; border: 1px solid #444c56; vertical-align: middle; user-select: none; }
         .unknown-team-badge:hover { border-color: #768390; }
-        .unknown-team-badge[data-team="DKB"] { background: #1a3a1a; color: #3fb950; border-color: #2a5a2a; }
-        .unknown-team-badge[data-team="Circle"] { background: #1a2a3a; color: #58a6ff; border-color: #2a4a6a; }
-        .unknown-team-badge[data-team="Merc"] { background: #3a3a1a; color: #d29922; border-color: #5a5a2a; }
         .player-slot.drag-over, .infantry-slot.drag-over, .node-slot.drag-over { outline: 2px dashed #f0a500; outline-offset: -2px; background: #f0a50011; }
         .player-slot.dragging, .infantry-slot.dragging, .node-slot.dragging { opacity: 0.4; }
         .infantry-slot.unassigned { border: 2px solid #c9d1d9; background: #c9d1d90a; }
@@ -1073,7 +1070,7 @@
     
     <div class="page-header">
         <h1 class="page-title">Lineups</h1>
-        <span class="version-badge">v0.15.0</span>
+        <span class="version-badge">v0.15.1</span>
         <div class="sync-indicator" id="syncIndicator">
             <span class="sync-dot"></span>
             <span class="sync-text">Offline</span>
@@ -1126,9 +1123,8 @@
     <div class="stats-row">
         <div class="stat-box"><span class="stat-value" id="rosterTotal">0</span><span class="stat-label">Roster</span></div>
         <div class="stat-box" id="slBox"><span class="stat-value" id="slTotal">0</span><span class="stat-label">SL Total</span></div>
-        <div class="stat-box ok" id="dkbBox"><span class="stat-value" id="dkbCount">0</span><span class="stat-label">DKB</span></div>
-        <div class="stat-box" id="circleBox"><span class="stat-value" id="circleCount">0</span><span class="stat-label">Circle</span></div>
-        <div class="stat-box"><span class="stat-value" id="mercCount">0</span><span class="stat-label">Merc</span></div>
+        <!-- Team counters inserted dynamically -->
+        <span id="teamCounterContainer" style="display:contents;"></span>
         <div class="stat-box ok"><span class="stat-value" id="conflictCount">0</span><span class="stat-label">Conflicts</span></div>
         <div class="stat-box" id="unknownBox"><span class="stat-value" id="unknownCount">0</span><span class="stat-label">Unknown</span></div>
     </div>
@@ -1376,6 +1372,9 @@
                     // Initialize UI
                     initializeUI();
                     
+                    // Build dynamic team counters
+                    buildTeamCounters(teams);
+                    
                     // Load existing lineups
                     await loadLineupsFromDatabase();
                     
@@ -1389,6 +1388,8 @@
                 // Register for team changes from nav
                 HLL.onTeamChange_register(async (teamId, teamName) => {
                     showLoading('Switching team...');
+                    HLL.clearTeamClansCache();
+                    await buildTeamCounters(allTeams);
                     await loadPlayersFromDatabase(teamName);
                     clearLineupUI();
                     lineupData = {};
@@ -2354,8 +2355,7 @@
         function selectPlayerFromBottomSheet(name, team) {
             if (bottomSheetSlot) {
                 // Normalize team name freetext entries
-                const teamNames = { 'dkb': 'DKB', 'circle': 'Circle', 'merc': 'Merc' };
-                const normalized = teamNames[name.toLowerCase().trim()];
+                const normalized = normalizeTeamName(name);
                 if (normalized) name = normalized;
                 
                 const nameEl = bottomSheetSlot.querySelector('.slot-name');
@@ -2489,9 +2489,9 @@
         // Format player name with team tag for display
         function formatPlayerName(name, team) {
             const clean = getRawPlayerName(name);
-            if (team === 'Circle') return '◯ | ' + clean;
-            if (team === 'DKB') return '[DKB] ' + clean;
-            return clean; // Merc or other - no tag
+            const meta = teamMeta[team];
+            if (meta && meta.tag) return meta.tag + ' ' + clean;
+            return clean;
         }
         
         // Get raw name from formatted display name
@@ -2587,8 +2587,7 @@
         function selectPlayer(name, team) { 
             if (currentSlot) { 
                 // Normalize team name freetext entries
-                const teamNames = { 'dkb': 'DKB', 'circle': 'Circle', 'merc': 'Merc' };
-                const normalized = teamNames[name.toLowerCase().trim()];
+                const normalized = normalizeTeamName(name);
                 if (normalized) name = normalized;
                 
                 // Reserve slots have no .slot-name child — text is directly in the div
@@ -2641,10 +2640,9 @@
             if (slot.querySelector('.unknown-team-badge')) return;
             
             // Auto-detect team from player name
-            const playerName = (slot.dataset.player || '').toLowerCase().trim();
-            const teamMap = { 'dkb': 'DKB', 'circle': 'Circle', 'merc': 'Merc' };
-            const autoTeam = teamMap[playerName] || '';
-            const autoLabel = autoTeam === 'DKB' ? 'DKB' : autoTeam === 'Circle' ? 'CRC' : autoTeam === 'Merc' ? 'MERC' : 'TEAM?';
+            const playerName = (slot.dataset.player || '').trim();
+            const autoTeam = normalizeTeamName(playerName);
+            const autoLabel = autoTeam ? (teamMeta[autoTeam]?.shortLabel || autoTeam) : 'TEAM?';
             
             const badge = document.createElement('span');
             badge.className = 'unknown-team-badge';
@@ -2654,8 +2652,9 @@
             
             badge.addEventListener('click', (e) => {
                 e.stopPropagation();
-                const teams = ['', 'DKB', 'Circle', 'Merc'];
-                const labels = ['TEAM?', 'DKB', 'CRC', 'MERC'];
+                const names = getAllKnownNames();
+                const teams = ['', ...names];
+                const labels = ['TEAM?', ...names.map(n => teamMeta[n]?.shortLabel || n)];
                 const idx = (teams.indexOf(badge.dataset.team) + 1) % teams.length;
                 badge.dataset.team = teams[idx];
                 badge.textContent = labels[idx];
@@ -2981,8 +2980,108 @@
             }
         });
         
+        // ============================================================================
+        // DYNAMIC TEAM COUNTERS (clan-based)
+        // ============================================================================
+        
+        // Auto-assign colors to clans based on index
+        const teamColorPalette = [
+            { bg: '#1a3a1a', fg: '#3fb950', border: '#2a5a2a' },  // green
+            { bg: '#1a2a3a', fg: '#58a6ff', border: '#2a4a6a' },  // blue
+            { bg: '#3a3a1a', fg: '#d29922', border: '#5a5a2a' },  // yellow
+            { bg: '#3a1a2a', fg: '#f778ba', border: '#5a2a4a' },  // pink
+            { bg: '#2a1a3a', fg: '#bc8cff', border: '#4a2a6a' },  // purple
+            { bg: '#1a3a3a', fg: '#56d4dd', border: '#2a5a5a' },  // cyan
+        ];
+        
+        // Map clan name → color (assigned on first load)
+        let teamColors = {};
+        
+        // Map clan name → { tag, shortLabel } for display
+        let teamMeta = {};
+        
+        // Current team's clan list (what counters show)
+        let currentTeamClans = [];
+        
+        async function buildTeamCounters(teams) {
+            const container = document.getElementById('teamCounterContainer');
+            container.innerHTML = '';
+            teamColors = {};
+            teamMeta = {};
+            
+            // Build tag/label metadata for ALL teams (needed for formatPlayerName)
+            teams.forEach((t, i) => {
+                const color = teamColorPalette[i % teamColorPalette.length];
+                teamColors[t.name] = color;
+                
+                let shortLabel = t.name.substring(0, 4).toUpperCase();
+                if (t.tag) {
+                    const cleaned = t.tag.replace(/[\[\]|◯\s]/g, '').trim();
+                    if (cleaned.length > 0) shortLabel = cleaned.toUpperCase();
+                    else if (t.name.length <= 5) shortLabel = t.name.toUpperCase();
+                }
+                teamMeta[t.name] = { tag: t.tag || '', shortLabel };
+            });
+            
+            // Load clan composition for the currently selected team
+            currentTeamClans = [];
+            if (HLL.currentTeamId) {
+                currentTeamClans = await HLL.getTeamClans(HLL.currentTeamId);
+            }
+            
+            // If no clans configured, fall back to all team names as counters
+            const counterNames = currentTeamClans.length > 0 ? currentTeamClans : teams.map(t => t.name);
+            
+            counterNames.forEach((clanName, i) => {
+                const color = teamColors[clanName] || teamColorPalette[i % teamColorPalette.length];
+                // Ensure color is registered for this clan name
+                if (!teamColors[clanName]) teamColors[clanName] = color;
+                
+                // Create stat box
+                const box = document.createElement('div');
+                box.className = 'stat-box';
+                box.id = `teamBox_${clanName}`;
+                box.innerHTML = `<span class="stat-value" id="teamCount_${clanName}">0</span><span class="stat-label">${clanName}</span>`;
+                container.appendChild(box);
+            });
+            
+            // Inject CSS for all known team badge colors
+            const styleId = 'dynamic-team-badge-styles';
+            let styleEl = document.getElementById(styleId);
+            if (!styleEl) { styleEl = document.createElement('style'); styleEl.id = styleId; document.head.appendChild(styleEl); }
+            styleEl.textContent = Object.entries(teamColors).map(([name, color]) =>
+                `.unknown-team-badge[data-team="${name}"] { background: ${color.bg}; color: ${color.fg}; border-color: ${color.border}; }`
+            ).join('\n');
+        }
+        
+        // Get the clan names used for counters
+        function getCounterClanNames() {
+            if (currentTeamClans.length > 0) return currentTeamClans;
+            return Object.keys(teamMeta);
+        }
+        
+        // Get ALL known team/clan names (for badge cycling, normalization)
+        function getAllKnownNames() {
+            return Object.keys(teamMeta);
+        }
+        
+        // Normalize a freetext input to a known team/clan name (case-insensitive)
+        function normalizeTeamName(text) {
+            if (!text) return '';
+            const lower = text.toLowerCase().trim();
+            for (const name of getAllKnownNames()) {
+                if (name.toLowerCase() === lower) return name;
+                if (teamMeta[name]?.shortLabel?.toLowerCase() === lower) return name;
+            }
+            return '';
+        }
+        
         function updateCounters() {
-            let roster = 0, sl = 0, dkb = 0, circle = 0, merc = 0, unknown = 0;
+            let roster = 0, sl = 0, unknown = 0;
+            const clanNames = getCounterClanNames();
+            const teamCounts = {};
+            clanNames.forEach(n => teamCounts[n] = 0);
+            
             document.querySelectorAll('.slot-name:not(.empty)').forEach(e => {
                 if (e.textContent !== 'Empty') { 
                     const slot = e.closest('.player-slot, .infantry-slot, .node-slot, .reserve-slot');
@@ -2998,29 +3097,21 @@
                     if (slot.dataset.unknown === 'true') {
                         // Check badge, then check if name itself is a team name
                         const assignedTeam = slot.dataset.team;
-                        const nameAsTeam = (slot.dataset.player || '').toLowerCase().trim();
-                        const effectiveTeam = assignedTeam || 
-                            (nameAsTeam === 'dkb' ? 'DKB' : nameAsTeam === 'circle' ? 'Circle' : nameAsTeam === 'merc' ? 'Merc' : '');
-                        if (effectiveTeam === 'DKB') dkb++;
-                        else if (effectiveTeam === 'Circle') circle++;
-                        else if (effectiveTeam === 'Merc') merc++;
+                        const nameAsTeam = normalizeTeamName(slot.dataset.player);
+                        const effectiveTeam = assignedTeam || nameAsTeam;
+                        if (effectiveTeam && teamCounts.hasOwnProperty(effectiveTeam)) teamCounts[effectiveTeam]++;
                         else unknown++;
                         return;
                     }
                     const rawName = slot.dataset.player || getRawPlayerName(e.textContent);
                     const p = players.find(x => x.name === rawName);
                     if (p) { 
-                        if (p.team === 'DKB') dkb++; 
-                        else if (p.team === 'Circle') circle++; 
-                        else if (p.team === 'Merc') merc++;
+                        if (teamCounts.hasOwnProperty(p.team)) teamCounts[p.team]++;
                         else unknown++;
                     } else {
-                        // Check if the name itself is a team name (freetext "circle", "dkb", etc.)
-                        const nameAsTeam = (slot.dataset.player || '').toLowerCase().trim();
-                        if (nameAsTeam === 'dkb') dkb++;
-                        else if (nameAsTeam === 'circle') circle++;
-                        else if (nameAsTeam === 'merc') merc++;
-                        else unknown++; // Player not found in roster
+                        const nameAsTeam = normalizeTeamName(slot.dataset.player);
+                        if (nameAsTeam && teamCounts.hasOwnProperty(nameAsTeam)) teamCounts[nameAsTeam]++;
+                        else unknown++;
                     }
                 }
             });
@@ -3036,16 +3127,17 @@
             });
             document.getElementById('rosterTotal').textContent = roster;
             document.getElementById('slTotal').textContent = sl;
-            document.getElementById('dkbCount').textContent = dkb;
-            document.getElementById('circleCount').textContent = circle;
-            document.getElementById('mercCount').textContent = merc;
+            
+            // Update dynamic clan counters
+            clanNames.forEach(name => {
+                const el = document.getElementById('teamCount_' + name);
+                if (el) el.textContent = teamCounts[name];
+            });
+            
             document.getElementById('unknownCount').textContent = unknown;
             document.getElementById('unknownBox').classList.toggle('unknown-highlight', unknown > 0);
             document.getElementById('unknownBanner').classList.toggle('visible', unknown > 0);
             document.getElementById('slBox').classList.toggle('warning', sl >= 19);
-            document.getElementById('dkbBox').classList.toggle('warning', dkb > 20);
-            document.getElementById('dkbBox').classList.toggle('ok', dkb <= 20);
-            document.getElementById('circleBox').classList.toggle('warning', circle > 29);
             let rc = 0; document.querySelectorAll('.reserve-slot:not(.empty)').forEach(e => { if (e.textContent !== 'Empty') rc++; });
             document.getElementById('reserveCount').textContent = rc;
             

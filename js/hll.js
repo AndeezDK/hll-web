@@ -1134,21 +1134,77 @@ HLL.getAccessibleTeams = async function() {
             // Super Admin sees all teams
             const { data, error } = await this.supabase
                 .from('teams')
-                .select('id, name')
+                .select('id, name, tag')
                 .order('name');
             if (error) throw error;
             return data || [];
         }
         
-        // Others see only their assigned teams
-        return this.userTeams.map(t => ({
-            id: t.team_id,
-            name: t.team_name
-        }));
+        // Others see only their assigned teams — fetch tag from DB
+        if (this.userTeams.length === 0) return [];
+        const teamIds = this.userTeams.map(t => t.team_id);
+        const { data, error } = await this.supabase
+            .from('teams')
+            .select('id, name, tag')
+            .in('id', teamIds)
+            .order('name');
+        if (error) throw error;
+        return data || [];
     } catch (err) {
         console.error('Error getting accessible teams:', err);
         return [];
     }
+};
+
+// ============================================================================
+// TEAM-CLAN COMPOSITION
+// ============================================================================
+
+// Cache: team_id → [clan_name, ...]
+HLL._teamClansCache = {};
+
+// Load clans for a specific team (returns array of clan_name strings)
+HLL.getTeamClans = async function(teamId) {
+    if (!teamId || !this.supabase || !this.isOnline) return [];
+    
+    // Return cached if available
+    if (this._teamClansCache[teamId]) return this._teamClansCache[teamId];
+    
+    try {
+        const { data, error } = await this.supabase
+            .from('team_clans')
+            .select('clan_name, sort_order')
+            .eq('team_id', teamId)
+            .order('sort_order');
+        if (error) throw error;
+        const clans = (data || []).map(d => d.clan_name);
+        this._teamClansCache[teamId] = clans;
+        return clans;
+    } catch (err) {
+        console.error('Error loading team clans:', err);
+        return [];
+    }
+};
+
+// Load all team_clans mappings (for admin)
+HLL.getAllTeamClans = async function() {
+    if (!this.supabase || !this.isOnline) return [];
+    try {
+        const { data, error } = await this.supabase
+            .from('team_clans')
+            .select('*')
+            .order('sort_order');
+        if (error) throw error;
+        return data || [];
+    } catch (err) {
+        console.error('Error loading all team clans:', err);
+        return [];
+    }
+};
+
+// Clear cache (call after editing team_clans)
+HLL.clearTeamClansCache = function() {
+    this._teamClansCache = {};
 };
 
 // ============================================================================

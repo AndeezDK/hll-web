@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Roster - HLL Tool v0.6.28</title>
+    <title>Roster - HLL Tool v0.6.29</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <link rel="stylesheet" href="../css/styles.css">
     <style>
@@ -66,7 +66,7 @@
         <!-- Header -->
         <div class="page-header">
             <h1 class="page-title">Roster</h1>
-            <span class="version-badge">v0.6.28</span>
+            <span class="version-badge">v0.6.29</span>
         </div>
 
         <!-- Stats Summary -->
@@ -150,7 +150,7 @@
         <div class="loading-text">Loading...</div>
     </div>
 
-    <script src="../js/hll.js?v=0.7.6"></script>
+    <script src="../js/hll.js?v=0.7.7"></script>
     <script>
         // ============================================================================
         // STATE
@@ -190,8 +190,11 @@
                 // Set up event listeners
                 setupEventListeners();
                 
-                // When team changes in nav, switch filter
+                // When team changes in nav, switch filter and rebuild counters
                 HLL.onTeamChange_register(async (teamId, teamName) => {
+                    HLL.clearTeamClansCache();
+                    await buildClanCounters();
+                    updateStats();
                     selectTeamFilter(teamName);
                 });
             });
@@ -215,10 +218,12 @@
         
         let accessibleTeams = [];
         
+        let rosterClans = []; // clan names for current team's counter boxes
+        
         async function buildTeamUI() {
             accessibleTeams = await HLL.getAccessibleTeams();
             
-            // Build filter buttons
+            // Build filter buttons (one per team + "All")
             const filterGroup = document.getElementById('filterGroup');
             accessibleTeams.forEach(t => {
                 const btn = document.createElement('button');
@@ -228,15 +233,31 @@
                 filterGroup.appendChild(btn);
             });
             
-            // Build stat boxes
+            // Build stat boxes from clan composition of current team
+            await buildClanCounters();
+        }
+        
+        async function buildClanCounters() {
             const statsRow = document.getElementById('rosterStats');
             const activeBox = statsRow.lastElementChild;
-            accessibleTeams.forEach(t => {
+            
+            // Remove old dynamic clan boxes
+            statsRow.querySelectorAll('.dynamic-clan-box').forEach(el => el.remove());
+            
+            // Load clans for current team
+            rosterClans = [];
+            if (HLL.currentTeamId) {
+                rosterClans = await HLL.getTeamClans(HLL.currentTeamId);
+            }
+            // Fallback: if no clans configured, use team names
+            const counterNames = rosterClans.length > 0 ? rosterClans : accessibleTeams.map(t => t.name);
+            
+            counterNames.forEach(name => {
                 const box = document.createElement('div');
-                box.className = 'stat-box';
+                box.className = 'stat-box dynamic-clan-box';
                 box.innerHTML = `
-                    <span class="stat-value" id="teamCount_${t.name}">-</span>
-                    <span class="stat-label">${t.name}</span>
+                    <span class="stat-value" id="teamCount_${name}">-</span>
+                    <span class="stat-label">${name}</span>
                 `;
                 statsRow.insertBefore(box, activeBox);
             });
@@ -302,10 +323,11 @@
         function updateStats() {
             const total = allPlayers.length;
             
-            // Dynamic team counts
-            accessibleTeams.forEach(t => {
-                const el = document.getElementById('teamCount_' + t.name);
-                if (el) el.textContent = allPlayers.filter(p => p.team === t.name).length;
+            // Dynamic clan counts
+            const counterNames = rosterClans.length > 0 ? rosterClans : accessibleTeams.map(t => t.name);
+            counterNames.forEach(name => {
+                const el = document.getElementById('teamCount_' + name);
+                if (el) el.textContent = allPlayers.filter(p => p.team === name).length;
             });
             
             // Active in last 30 days
@@ -531,7 +553,7 @@
                     <div class="form-group">
                         <label class="form-label">Team</label>
                         <select class="form-select" id="editTeam">
-                            ${HLL.teams.map(t => `<option value="${t}" ${player.team === t ? 'selected' : ''}>${t}</option>`).join('')}
+                            ${accessibleTeams.map(t => `<option value="${t.name}" ${player.team === t.name ? 'selected' : ''}>${t.name}</option>`).join('')}
                         </select>
                     </div>
                     <div class="form-group">
