@@ -7,7 +7,7 @@
 // ============================================================================
 
 const HLL = {
-    version: '0.7.5',
+    version: '0.7.6',
     
     // Default Supabase config (can be overridden via localStorage)
     config: {
@@ -1017,6 +1017,9 @@ HLL.buildNavTeamSelector = async function() {
     const teams = await this.getAccessibleTeams();
     if (teams.length === 0) return;
     
+    // Load logos
+    await this.loadTeamLogos();
+    
     // Get saved team from localStorage
     const savedTeamId = localStorage.getItem('hll_selected_team_id');
     
@@ -1048,12 +1051,28 @@ HLL.updateTeamBadge = function() {
         if (versionBadge) {
             badge = document.createElement('span');
             badge.id = 'teamBadge';
-            badge.style.cssText = 'background: #f5a623; color: #0d1117; padding: 2px 10px; border-radius: 12px; font-size: 12px; font-weight: 700; margin-left: 8px;';
+            badge.style.cssText = 'display: inline-flex; align-items: center; gap: 6px; background: #f5a623; color: #0d1117; padding: 2px 10px; border-radius: 12px; font-size: 12px; font-weight: 700; margin-left: 8px;';
             versionBadge.parentNode.insertBefore(badge, versionBadge.nextSibling);
         }
     }
     if (badge && this.currentTeam) {
-        badge.textContent = this.currentTeam;
+        // Check if we have a logo cached
+        const logo = this._teamLogos?.[this.currentTeamId];
+        const logoHtml = logo 
+            ? `<img src="${logo}" style="width:16px;height:16px;border-radius:3px;object-fit:cover;">` 
+            : '';
+        badge.innerHTML = `${logoHtml}${this.currentTeam}`;
+    }
+};
+
+HLL.loadTeamLogos = async function() {
+    if (!this.supabase || !this.isOnline) return;
+    try {
+        const { data } = await this.supabase.from('teams').select('id, logo_url');
+        this._teamLogos = {};
+        if (data) data.forEach(t => { if (t.logo_url) this._teamLogos[t.id] = t.logo_url; });
+    } catch (err) {
+        console.error('Error loading team logos:', err);
     }
 };
 

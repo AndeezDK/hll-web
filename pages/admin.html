@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Admin - HLL Tool v0.6.28</title>
+    <title>Admin - HLL Tool v0.6.29</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <link rel="stylesheet" href="../css/styles.css">
     <style>
@@ -81,7 +81,7 @@
         <!-- Header -->
         <div class="page-header">
             <h1 class="page-title">Admin</h1>
-            <span class="version-badge">v0.6.28</span>
+            <span class="version-badge">v0.6.29</span>
         </div>
 
         <div class="admin-grid">
@@ -293,7 +293,7 @@
         <div class="loading-text">Loading...</div>
     </div>
 
-    <script src="../js/hll.js?v=0.7.5"></script>
+    <script src="../js/hll.js?v=0.7.6"></script>
     <script>
         // ============================================================================
         // STATE
@@ -2402,8 +2402,13 @@
         // ===================== MANAGE TEAMS =====================
 
         async function loadManagedTeams() {
-            // My Teams: distinct team values from players table + my_team from matches
+            // My Teams: from teams table + distinct team values from players/matches
             const myTeamsSet = new Set();
+            const { data: teamsData } = await HLL.supabase.from('teams').select('id, name, logo_url');
+            const teamLogos = {};
+            const teamIds = {};
+            if (teamsData) teamsData.forEach(t => { myTeamsSet.add(t.name); teamLogos[t.name] = t.logo_url; teamIds[t.name] = t.id; });
+            
             const { data: players } = await HLL.supabase.from('players').select('team');
             if (players) players.forEach(p => { if (p.team) myTeamsSet.add(p.team); });
             const { data: matches } = await HLL.supabase.from('matches').select('my_team');
@@ -2423,15 +2428,24 @@
                 myList.innerHTML = myTeams.map(t => {
                     const pc = playerCounts[t] || 0;
                     const mc = matchCounts[t] || 0;
-                    const isEmpty = pc === 0 && mc === 0;
                     const escaped = t.replace(/'/g, "\\'");
+                    const logo = teamLogos[t];
+                    const logoHtml = logo 
+                        ? `<img src="${logo}" style="width:20px;height:20px;border-radius:4px;object-fit:cover;">`
+                        : `<span style="width:20px;height:20px;border-radius:4px;background:#30363d;display:inline-flex;align-items:center;justify-content:center;font-size:10px;color:#8b949e;">?</span>`;
+                    
                     return `
                     <div style="display: flex; justify-content: space-between; align-items: center; padding: 3px 0; border-bottom: 1px solid rgba(255,255,255,0.05);">
                         <div style="display:flex;align-items:center;gap:6px;">
+                            ${logoHtml}
                             <span style="font-size: 0.85rem;">${t}</span>
                             <span style="font-size:10px;color:var(--text-secondary);">(${pc}p, ${mc}m)</span>
                         </div>
                         <div style="display:flex;gap:2px;">
+                            <label style="background: none; border: none; color: #388bfd; cursor: pointer; font-size: 11px; padding: 2px 6px;" title="Upload logo">
+                                🖼️
+                                <input type="file" accept="image/*" style="display:none;" onchange="uploadTeamLogo('${escaped}', this.files[0])">
+                            </label>
                             <button onclick="renameMyTeam('${escaped}')" 
                                 style="background: none; border: none; color: var(--accent-orange); cursor: pointer; font-size: 11px; padding: 2px 6px;" title="Migrate players / Rename">✏️</button>
                             <button onclick="deleteMyTeam('${escaped}')" 
@@ -2857,6 +2871,61 @@
             } catch (err) {
                 console.error('Error removing role:', err);
                 HLL.showAlert('Failed: ' + err.message, 'error');
+            }
+        }
+
+        async function uploadTeamLogo(teamName, file) {
+            if (!file) return;
+            
+            // Validate file
+            if (!file.type.startsWith('image/')) {
+                HLL.showAlert('Please select an image file', 'error');
+                return;
+            }
+            if (file.size > 2 * 1024 * 1024) {
+                HLL.showAlert('Image must be under 2MB', 'error');
+                return;
+            }
+            
+            const ext = file.name.split('.').pop().toLowerCase();
+            const fileName = `${teamName.toLowerCase().replace(/[^a-z0-9]/g, '_')}.${ext}`;
+            
+            try {
+                HLL.showLoading('Uploading logo...');
+                
+                // Upload to Supabase Storage
+                const { error: uploadErr } = await HLL.supabase.storage
+                    .from('logos')
+                    .upload(fileName, file, { upsert: true });
+                
+                if (uploadErr) throw uploadErr;
+                
+                // Get public URL
+                const { data: urlData } = HLL.supabase.storage
+                    .from('logos')
+                    .getPublicUrl(fileName);
+                
+                const logoUrl = urlData.publicUrl;
+                
+                // Save URL to teams table
+                const { error: updateErr } = await HLL.supabase
+                    .from('teams')
+                    .update({ logo_url: logoUrl })
+                    .eq('name', teamName);
+                
+                if (updateErr) throw updateErr;
+                
+                HLL.hideLoading();
+                HLL.showAlert(`Logo uploaded for ${teamName}`, 'success');
+                
+                // Refresh teams list and team badge
+                loadManagedTeams();
+                await HLL.buildNavTeamSelector();
+                
+            } catch (err) {
+                HLL.hideLoading();
+                console.error('Logo upload error:', err);
+                HLL.showAlert('Upload failed: ' + err.message, 'error');
             }
         }
 
