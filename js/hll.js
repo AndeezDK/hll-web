@@ -7,7 +7,7 @@
 // ============================================================================
 
 const HLL = {
-    version: '0.7.2',
+    version: '0.7.3',
     
     // Default Supabase config (can be overridden via localStorage)
     config: {
@@ -710,6 +710,20 @@ HLL.injectAuthWall = function() {
             font-family: inherit;
         }
         .nav-logout-btn:hover { background: #2d333b; color: #f85149; border-color: #f85149; }
+        .nav-team-select {
+            background: #161b22;
+            border: 1px solid #30363d;
+            color: #f5a623;
+            padding: 4px 8px;
+            border-radius: 6px;
+            font-size: 12px;
+            font-weight: 600;
+            font-family: inherit;
+            cursor: pointer;
+            outline: none;
+        }
+        .nav-team-select:hover { border-color: #f5a623; }
+        .nav-team-select:focus { border-color: #f5a623; box-shadow: 0 0 0 1px #f5a623; }
     `;
     document.head.appendChild(style);
 
@@ -750,11 +764,13 @@ HLL.injectAuthWall = function() {
         navUser.id = 'navUser';
         navUser.style.display = 'none';
         navUser.innerHTML = `
+            <select class="nav-team-select" id="navTeamSelect" style="display:none;"></select>
             <span class="nav-user-email" id="navUserEmail"></span>
             <button class="nav-logout-btn" id="navLogoutBtn">Log out</button>
         `;
         navStatus.parentNode.insertBefore(navUser, navStatus);
         document.getElementById('navLogoutBtn').addEventListener('click', () => HLL.authSignOut());
+        document.getElementById('navTeamSelect').addEventListener('change', (e) => HLL.onTeamChange(e.target.value));
     }
 };
 
@@ -974,9 +990,60 @@ HLL.loadUserRoles = async function() {
             navEmail.textContent = roleLabel;
         }
         
+        // Build team selector in nav
+        await this.buildNavTeamSelector();
+        
     } catch (err) {
         console.error('Error loading user roles:', err);
     }
+};
+
+HLL.buildNavTeamSelector = async function() {
+    const select = document.getElementById('navTeamSelect');
+    if (!select) return;
+    
+    const teams = await this.getAccessibleTeams();
+    if (teams.length === 0) return;
+    
+    // Get saved team from localStorage
+    const savedTeamId = localStorage.getItem('hll_selected_team_id');
+    
+    select.innerHTML = teams.map(t => 
+        `<option value="${t.id}" ${t.id === savedTeamId ? 'selected' : ''}>${t.name}</option>`
+    ).join('');
+    
+    // Set current team
+    const selectedOption = select.options[select.selectedIndex];
+    if (selectedOption) {
+        this.currentTeamId = selectedOption.value;
+        this.currentTeam = selectedOption.textContent;
+        localStorage.setItem('hll_selected_team_id', this.currentTeamId);
+        localStorage.setItem('hll_default_team', this.currentTeam);
+    }
+    
+    select.style.display = '';
+    console.log(`Team selected: ${this.currentTeam} (${this.currentTeamId})`);
+};
+
+HLL.onTeamChange = function(teamId) {
+    const select = document.getElementById('navTeamSelect');
+    const selectedOption = select?.options[select.selectedIndex];
+    
+    this.currentTeamId = teamId;
+    this.currentTeam = selectedOption?.textContent || '';
+    localStorage.setItem('hll_selected_team_id', teamId);
+    localStorage.setItem('hll_default_team', this.currentTeam);
+    
+    console.log(`Team changed: ${this.currentTeam} (${this.currentTeamId})`);
+    
+    // Fire callback so page can refresh data
+    if (typeof this._onTeamChangeCallback === 'function') {
+        this._onTeamChangeCallback(teamId, this.currentTeam);
+    }
+};
+
+HLL.onTeamChange_register = function(callback) {
+    this._onTeamChangeCallback = callback;
 };
 
 HLL.hasRole = function(minRole, teamId) {
