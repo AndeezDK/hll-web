@@ -1348,9 +1348,59 @@
         
         function populateTeamSelector(teams, selectedName) {
             const sel = document.getElementById('teamSelector');
+            if (!sel) return;
             sel.innerHTML = teams.map(t => 
                 `<option value="${t.id}" ${t.name === selectedName ? 'selected' : ''}>${t.name}</option>`
             ).join('');
+        }
+        
+        async function init() {
+            await HLL.initWithAuth(async () => {
+                showLoading('Loading lineup data...');
+                
+                if (HLL.isOnline) {
+                    // Load teams for match info selector
+                    const teams = await HLL.getAccessibleTeams();
+                    allTeams = teams;
+                    const matchTeamSel = document.getElementById('matchTeamSelect');
+                    if (matchTeamSel) {
+                        matchTeamSel.innerHTML = teams.map(t => `<option>${t.name}</option>`).join('');
+                    }
+                    
+                    // Load players
+                    await loadPlayersFromDatabase(HLL.currentTeam);
+                    
+                    // Load known enemy teams for autocomplete
+                    await loadEnemyTeams();
+                    
+                    // Initialize UI
+                    initializeUI();
+                    
+                    // Load existing lineups
+                    await loadLineupsFromDatabase();
+                    
+                    // Update connection status
+                    updateConnectionBanner('connected', 'Connected');
+                    updateSyncIndicator('synced', 'Connected');
+                }
+                
+                hideLoading();
+                
+                // Register for team changes from nav
+                HLL.onTeamChange_register(async (teamId, teamName) => {
+                    showLoading('Switching team...');
+                    await loadPlayersFromDatabase(teamName);
+                    clearLineupUI();
+                    lineupData = {};
+                    currentLineupNumber = 1;
+                    document.querySelectorAll('.tab').forEach((tab, i) => {
+                        tab.classList.toggle('active', i === 0);
+                    });
+                    await loadLineupsFromDatabase();
+                    hideLoading();
+                    showToast(`Switched to ${teamName}`);
+                });
+            });
         }
         async function switchTeam(teamId) {
             if (teamId === HLL.currentTeamId) return;
