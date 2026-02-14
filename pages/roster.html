@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Roster - HLL Tool v0.6.25</title>
+    <title>Roster - HLL Tool v0.6.26</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <link rel="stylesheet" href="../css/styles.css">
     <style>
@@ -66,7 +66,7 @@
         <!-- Header -->
         <div class="page-header">
             <h1 class="page-title">Roster</h1>
-            <span class="version-badge">v0.6.25</span>
+            <span class="version-badge">v0.6.26</span>
         </div>
 
         <!-- Stats Summary -->
@@ -75,18 +75,7 @@
                 <span class="stat-value" id="totalCount">-</span>
                 <span class="stat-label">Total</span>
             </div>
-            <div class="stat-box">
-                <span class="stat-value" id="circleCount">-</span>
-                <span class="stat-label">Circle</span>
-            </div>
-            <div class="stat-box">
-                <span class="stat-value" id="dkbCount">-</span>
-                <span class="stat-label">DKB</span>
-            </div>
-            <div class="stat-box">
-                <span class="stat-value" id="mercCount">-</span>
-                <span class="stat-label">Merc</span>
-            </div>
+            <!-- Team counts inserted dynamically -->
             <div class="stat-box">
                 <span class="stat-value" id="activeCount">-</span>
                 <span class="stat-label">Active (30d)</span>
@@ -99,11 +88,9 @@
                 <span class="search-icon">🔍</span>
                 <input type="text" class="form-input" id="searchInput" placeholder="Search players...">
             </div>
-            <div class="filter-group">
+            <div class="filter-group" id="filterGroup">
                 <button class="filter-btn active" data-filter="all">All</button>
-                <button class="filter-btn" data-filter="Circle">Circle</button>
-                <button class="filter-btn" data-filter="DKB">DKB</button>
-                <button class="filter-btn" data-filter="Merc">Merc</button>
+                <!-- Team buttons inserted dynamically -->
             </div>
             <button class="btn btn-secondary" onclick="exportRoster()">📤 Export CSV</button>
         </div>
@@ -163,7 +150,7 @@
         <div class="loading-text">Loading...</div>
     </div>
 
-    <script src="../js/hll.js?v=0.7.1"></script>
+    <script src="../js/hll.js?v=0.7.2"></script>
     <script>
         // ============================================================================
         // STATE
@@ -185,6 +172,7 @@
                 HLL.showLoading('Loading roster...');
                 
                 if (HLL.isOnline) {
+                    await buildTeamUI();
                     await loadRoster();
                     await loadPlayerRoleData();
                 } else {
@@ -196,6 +184,35 @@
                 
                 // Set up event listeners
                 setupEventListeners();
+            });
+        }
+        
+        let accessibleTeams = [];
+        
+        async function buildTeamUI() {
+            accessibleTeams = await HLL.getAccessibleTeams();
+            
+            // Build filter buttons
+            const filterGroup = document.getElementById('filterGroup');
+            accessibleTeams.forEach(t => {
+                const btn = document.createElement('button');
+                btn.className = 'filter-btn';
+                btn.dataset.filter = t.name;
+                btn.textContent = t.name;
+                filterGroup.appendChild(btn);
+            });
+            
+            // Build stat boxes
+            const statsRow = document.getElementById('rosterStats');
+            const activeBox = statsRow.lastElementChild;
+            accessibleTeams.forEach(t => {
+                const box = document.createElement('div');
+                box.className = 'stat-box';
+                box.innerHTML = `
+                    <span class="stat-value" id="teamCount_${t.name}">-</span>
+                    <span class="stat-label">${t.name}</span>
+                `;
+                statsRow.insertBefore(box, activeBox);
             });
         }
         
@@ -258,9 +275,12 @@
         
         function updateStats() {
             const total = allPlayers.length;
-            const circle = allPlayers.filter(p => p.team === 'Circle').length;
-            const dkb = allPlayers.filter(p => p.team === 'DKB').length;
-            const merc = allPlayers.filter(p => p.team === 'Merc').length;
+            
+            // Dynamic team counts
+            accessibleTeams.forEach(t => {
+                const el = document.getElementById('teamCount_' + t.name);
+                if (el) el.textContent = allPlayers.filter(p => p.team === t.name).length;
+            });
             
             // Active in last 30 days
             const thirtyDaysAgo = new Date();
@@ -268,9 +288,6 @@
             const active = allPlayers.filter(p => p.last_seen && new Date(p.last_seen) > thirtyDaysAgo).length;
             
             document.getElementById('totalCount').textContent = total;
-            document.getElementById('circleCount').textContent = circle;
-            document.getElementById('dkbCount').textContent = dkb;
-            document.getElementById('mercCount').textContent = merc;
             document.getElementById('activeCount').textContent = active;
         }
         

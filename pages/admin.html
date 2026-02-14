@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Admin - HLL Tool v0.6.23</title>
+    <title>Admin - HLL Tool v0.6.24</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <link rel="stylesheet" href="../css/styles.css">
     <style>
@@ -81,7 +81,7 @@
         <!-- Header -->
         <div class="page-header">
             <h1 class="page-title">Admin</h1>
-            <span class="version-badge">v0.6.23</span>
+            <span class="version-badge">v0.6.24</span>
         </div>
 
         <div class="admin-grid">
@@ -258,6 +258,60 @@
                 <button class="btn btn-primary" onclick="confirmMatchImport()">Confirm Import</button>
             </div>
         </div>
+
+        <!-- Role Management (Super Admin only) -->
+        <div class="card mt-lg hidden" id="roleManagementCard">
+            <div class="card-header">
+                <span class="card-title">🔐 Role Management</span>
+            </div>
+            <div class="card-body">
+                <p class="text-muted mb-md" style="font-size: 11px;">
+                    Assign roles to users per team. Only Super Admins can manage roles.
+                </p>
+                
+                <!-- Add Role -->
+                <div style="display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 16px; align-items: flex-end;">
+                    <div style="flex: 1; min-width: 150px;">
+                        <label class="form-label" style="font-size: 11px;">User Email</label>
+                        <select class="form-select" id="roleUserSelect" style="font-size: 12px;">
+                            <option value="">— Select user —</option>
+                        </select>
+                    </div>
+                    <div style="min-width: 120px;">
+                        <label class="form-label" style="font-size: 11px;">Team</label>
+                        <select class="form-select" id="roleTeamSelect" style="font-size: 12px;">
+                        </select>
+                    </div>
+                    <div style="min-width: 120px;">
+                        <label class="form-label" style="font-size: 11px;">Role</label>
+                        <select class="form-select" id="roleRoleSelect" style="font-size: 12px;">
+                            <option value="viewer">Viewer</option>
+                            <option value="officer">Officer</option>
+                            <option value="team_admin">Team Admin</option>
+                            <option value="super_admin">Super Admin</option>
+                        </select>
+                    </div>
+                    <button class="btn btn-primary btn-sm" onclick="assignRole()" style="padding: 6px 16px;">Assign</button>
+                </div>
+
+                <!-- Current Roles Table -->
+                <div class="table-container">
+                    <table class="data-table" id="rolesTable">
+                        <thead>
+                            <tr>
+                                <th>User</th>
+                                <th>Team</th>
+                                <th>Role</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="rolesBody">
+                            <tr><td colspan="4" class="text-center text-muted">Loading...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
     </div>
 
     <!-- Loading Overlay -->
@@ -266,7 +320,7 @@
         <div class="loading-text">Loading...</div>
     </div>
 
-    <script src="../js/hll.js?v=0.7.1"></script>
+    <script src="../js/hll.js?v=0.7.2"></script>
     <script>
         // ============================================================================
         // STATE
@@ -282,6 +336,12 @@
         async function init() {
             await HLL.initWithAuth(async () => {
                 setupFileUpload();
+                
+                // Show role management for Super Admins
+                if (HLL.canManageRoles()) {
+                    document.getElementById('roleManagementCard').classList.remove('hidden');
+                    await loadRoleManagement();
+                }
             });
         }
         
@@ -2649,6 +2709,160 @@
             } else {
                 HLL.showAlert(`Removed "${teamTag}"`, 'success');
                 loadManagedTeams();
+            }
+        }
+
+        // ============================================================================
+        // ROLE MANAGEMENT (Super Admin only)
+        // ============================================================================
+
+        async function loadRoleManagement() {
+            try {
+                // Load all teams for dropdown
+                const teams = await HLL.getAccessibleTeams();
+                const teamSelect = document.getElementById('roleTeamSelect');
+                teamSelect.innerHTML = teams.map(t => 
+                    `<option value="${t.id}">${t.name}</option>`
+                ).join('');
+
+                // Load all auth users for dropdown
+                // We need a server function for this since client can't list auth.users
+                // For now, use existing user_roles + allow typing email
+                const userSelect = document.getElementById('roleUserSelect');
+                
+                // Get known users from user_roles
+                const { data: roles, error } = await HLL.supabase
+                    .from('user_roles')
+                    .select('user_id, role, team_id, teams(name)');
+                
+                if (error) throw error;
+
+                // Get unique user IDs
+                const userIds = [...new Set((roles || []).map(r => r.user_id))];
+                
+                // Build user options - show user_id for now
+                // Add a manual email input option
+                userSelect.innerHTML = '<option value="">— Select user —</option>' +
+                    '<option value="__new__">+ Add by email...</option>' +
+                    userIds.map(uid => {
+                        const userRoles = (roles || []).filter(r => r.user_id === uid);
+                        const teamNames = userRoles.map(r => r.teams?.name).filter(Boolean).join(', ');
+                        const topRole = userRoles[0]?.role?.replace(/_/g, ' ') || '';
+                        return `<option value="${uid}">${uid.substring(0, 8)}... (${topRole} - ${teamNames})</option>`;
+                    }).join('');
+
+                // Render current roles
+                renderRolesTable(roles || []);
+
+            } catch (err) {
+                console.error('Error loading role management:', err);
+            }
+        }
+
+        function renderRolesTable(roles) {
+            const tbody = document.getElementById('rolesBody');
+            
+            if (roles.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="4" class="text-center text-muted">No roles assigned</td></tr>';
+                return;
+            }
+
+            tbody.innerHTML = roles.map(r => {
+                const roleLabel = r.role.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+                const teamName = r.teams?.name || r.team_id.substring(0, 8) + '...';
+                const userId = r.user_id.substring(0, 8) + '...';
+                const isSelf = r.user_id === HLL.currentUser?.id;
+                
+                return `<tr>
+                    <td>${userId}${isSelf ? ' <span style="color: #f5a623; font-size: 10px;">(you)</span>' : ''}</td>
+                    <td>${teamName}</td>
+                    <td><span class="badge" style="background: ${getRoleBadgeColor(r.role)}; color: white; padding: 2px 8px; border-radius: 4px; font-size: 11px;">${roleLabel}</span></td>
+                    <td>${!isSelf ? `<button class="btn btn-sm" style="font-size: 11px; padding: 2px 8px; color: #f85149;" onclick="removeRole('${r.user_id}', '${r.team_id}')">Remove</button>` : ''}</td>
+                </tr>`;
+            }).join('');
+        }
+
+        function getRoleBadgeColor(role) {
+            switch(role) {
+                case 'super_admin': return '#da3633';
+                case 'team_admin': return '#f5a623';
+                case 'officer': return '#388bfd';
+                case 'viewer': return '#484f58';
+                default: return '#484f58';
+            }
+        }
+
+        async function assignRole() {
+            let userId = document.getElementById('roleUserSelect').value;
+            const teamId = document.getElementById('roleTeamSelect').value;
+            const role = document.getElementById('roleRoleSelect').value;
+
+            if (userId === '__new__') {
+                const email = prompt('Enter the user\'s email address:');
+                if (!email) return;
+                
+                // Look up user by email using a database function
+                const { data, error } = await HLL.supabase.rpc('get_user_id_by_email', { p_email: email });
+                if (error || !data) {
+                    HLL.showAlert('User not found. They must sign up first.', 'error');
+                    return;
+                }
+                userId = data;
+            }
+
+            if (!userId || !teamId || !role) {
+                HLL.showAlert('Please fill in all fields', 'error');
+                return;
+            }
+
+            // Get team name for confirmation
+            const teamOption = document.getElementById('roleTeamSelect').selectedOptions[0];
+            const roleLabel = role.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+            
+            if (!confirm(`Assign "${roleLabel}" on ${teamOption.textContent} to this user?`)) return;
+
+            try {
+                const { error } = await HLL.supabase
+                    .from('user_roles')
+                    .upsert({ 
+                        user_id: userId, 
+                        team_id: teamId, 
+                        role: role,
+                        granted_by: HLL.currentUser.id
+                    }, { onConflict: 'user_id,team_id' });
+
+                if (error) throw error;
+                
+                HLL.showAlert(`Role assigned: ${roleLabel}`, 'success');
+                await loadRoleManagement();
+            } catch (err) {
+                console.error('Error assigning role:', err);
+                HLL.showAlert('Failed to assign role: ' + err.message, 'error');
+            }
+        }
+
+        async function removeRole(userId, teamId) {
+            if (userId === HLL.currentUser?.id) {
+                HLL.showAlert('Cannot remove your own role', 'error');
+                return;
+            }
+            
+            if (!confirm('Remove this role assignment?')) return;
+
+            try {
+                const { error } = await HLL.supabase
+                    .from('user_roles')
+                    .delete()
+                    .eq('user_id', userId)
+                    .eq('team_id', teamId);
+
+                if (error) throw error;
+                
+                HLL.showAlert('Role removed', 'success');
+                await loadRoleManagement();
+            } catch (err) {
+                console.error('Error removing role:', err);
+                HLL.showAlert('Failed to remove role: ' + err.message, 'error');
             }
         }
 

@@ -7,7 +7,7 @@
 // ============================================================================
 
 const HLL = {
-    version: '0.7.1',
+    version: '0.7.2',
     
     // Default Supabase config (can be overridden via localStorage)
     config: {
@@ -1003,6 +1003,31 @@ HLL.canDelete = function(teamId) {
 
 HLL.canManageRoles = function() {
     return this.isSuperAdmin;
+};
+
+HLL.getAccessibleTeams = async function() {
+    if (!this.supabase || !this.isOnline) return [];
+    
+    try {
+        if (this.isSuperAdmin) {
+            // Super Admin sees all teams
+            const { data, error } = await this.supabase
+                .from('teams')
+                .select('id, name')
+                .order('name');
+            if (error) throw error;
+            return data || [];
+        }
+        
+        // Others see only their assigned teams
+        return this.userTeams.map(t => ({
+            id: t.team_id,
+            name: t.team_name
+        }));
+    } catch (err) {
+        console.error('Error getting accessible teams:', err);
+        return [];
+    }
 };
 
 // ============================================================================
