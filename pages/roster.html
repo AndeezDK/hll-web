@@ -240,7 +240,7 @@
         
         async function loadRoster() {
             try {
-                // Load player stats view (includes calculated fields)
+                // Load all players (null bypasses team auto-filter, roster has its own filter buttons)
                 const { data, error } = await HLL.supabase
                     .from('players')
                     .select('*')

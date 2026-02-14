@@ -171,10 +171,13 @@ HLL.unsubscribe = function(channel) {
 // PLAYER OPERATIONS
 // ============================================================================
 
-HLL.loadPlayers = async function(teamFilter = null) {
+HLL.loadPlayers = async function(teamFilter = undefined) {
     if (!this.supabase || !this.isOnline) {
         return [];
     }
+    
+    // Use currentTeam if no filter specified
+    const filter = teamFilter !== undefined ? teamFilter : this.currentTeam;
     
     try {
         let query = this.supabase
@@ -182,8 +185,8 @@ HLL.loadPlayers = async function(teamFilter = null) {
             .select('*')
             .order('name');
         
-        if (teamFilter) {
-            query = query.eq('team', teamFilter);
+        if (filter) {
+            query = query.eq('team', filter);
         }
         
         const { data, error } = await query;
@@ -191,7 +194,7 @@ HLL.loadPlayers = async function(teamFilter = null) {
         if (error) throw error;
         
         this.players = data || [];
-        console.log(`Loaded ${this.players.length} players`);
+        console.log(`Loaded ${this.players.length} players` + (filter ? ` (team: ${filter})` : ''));
         
         return this.players;
     } catch (err) {
@@ -252,14 +255,23 @@ HLL.createPlayer = async function(player) {
 // MATCH OPERATIONS
 // ============================================================================
 
-HLL.loadMatches = async function(limit = 50) {
+HLL.loadMatches = async function(limit = 50, teamFilter = undefined) {
     if (!this.supabase || !this.isOnline) return [];
     
-    const { data, error } = await this.supabase
+    // Use currentTeam if no filter specified
+    const filter = teamFilter !== undefined ? teamFilter : this.currentTeam;
+    
+    let query = this.supabase
         .from('matches')
         .select('*')
         .order('match_date', { ascending: false })
         .limit(limit);
+    
+    if (filter) {
+        query = query.eq('my_team', filter);
+    }
+    
+    const { data, error } = await query;
     
     if (error) {
         console.error('Error loading matches:', error);
