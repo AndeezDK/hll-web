@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Admin - HLL Tool v0.6.29</title>
+    <title>Admin - HLL Tool v0.6.30</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <link rel="stylesheet" href="../css/styles.css">
     <style>
@@ -81,7 +81,7 @@
         <!-- Header -->
         <div class="page-header">
             <h1 class="page-title">Admin</h1>
-            <span class="version-badge">v0.6.29</span>
+            <span class="version-badge">v0.6.30</span>
         </div>
 
         <div class="admin-grid">
@@ -2875,7 +2875,8 @@
         }
 
         async function uploadTeamLogo(teamName, file) {
-            if (!file) return;
+            console.log('uploadTeamLogo called:', teamName, file);
+            if (!file) { console.log('No file selected'); return; }
             
             // Validate file
             if (!file.type.startsWith('image/')) {
@@ -2889,15 +2890,15 @@
             
             const ext = file.name.split('.').pop().toLowerCase();
             const fileName = `${teamName.toLowerCase().replace(/[^a-z0-9]/g, '_')}.${ext}`;
+            console.log('Uploading as:', fileName);
             
             try {
-                HLL.showLoading('Uploading logo...');
-                
                 // Upload to Supabase Storage
-                const { error: uploadErr } = await HLL.supabase.storage
+                const { data: uploadData, error: uploadErr } = await HLL.supabase.storage
                     .from('logos')
                     .upload(fileName, file, { upsert: true });
                 
+                console.log('Upload result:', uploadData, uploadErr);
                 if (uploadErr) throw uploadErr;
                 
                 // Get public URL
@@ -2906,6 +2907,7 @@
                     .getPublicUrl(fileName);
                 
                 const logoUrl = urlData.publicUrl;
+                console.log('Logo URL:', logoUrl);
                 
                 // Save URL to teams table
                 const { error: updateErr } = await HLL.supabase
@@ -2915,7 +2917,6 @@
                 
                 if (updateErr) throw updateErr;
                 
-                HLL.hideLoading();
                 HLL.showAlert(`Logo uploaded for ${teamName}`, 'success');
                 
                 // Refresh teams list and team badge
@@ -2923,7 +2924,6 @@
                 await HLL.buildNavTeamSelector();
                 
             } catch (err) {
-                HLL.hideLoading();
                 console.error('Logo upload error:', err);
                 HLL.showAlert('Upload failed: ' + err.message, 'error');
             }
