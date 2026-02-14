@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Admin - HLL Tool v0.6.26</title>
+    <title>Admin - HLL Tool v0.6.27</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <link rel="stylesheet" href="../css/styles.css">
     <style>
@@ -81,7 +81,7 @@
         <!-- Header -->
         <div class="page-header">
             <h1 class="page-title">Admin</h1>
-            <span class="version-badge">v0.6.26</span>
+            <span class="version-badge">v0.6.27</span>
         </div>
 
         <div class="admin-grid">
@@ -2496,7 +2496,7 @@
 
         async function renameMyTeam(oldName) {
             // Fetch players and matches using this team
-            const { data: playersUsing, error: pErr } = await HLL.supabase.from('players').select('steam_id, player_name').eq('team', String(oldName)).order('player_name');
+            const { data: playersUsing, error: pErr } = await HLL.supabase.from('players').select('steam_id, name').eq('team', String(oldName)).order('name');
             const { data: matchesUsing, error: mErr } = await HLL.supabase.from('matches').select('match_id').eq('my_team', String(oldName));
             if (pErr) console.warn('Player query error:', pErr);
             if (mErr) console.warn('Match query error:', mErr);
@@ -2551,7 +2551,7 @@
                         ${playerCount > 0 ? playersUsing.map(p => `
                             <label style="display:flex;align-items:center;gap:8px;padding:4px 6px;font-size:0.85rem;cursor:pointer;">
                                 <input type="checkbox" class="team-edit-cb" value="${p.steam_id}" checked>
-                                <span>${p.player_name || p.steam_id}</span>
+                                <span>${p.name || p.steam_id}</span>
                                 <span style="font-size:10px;color:var(--text-secondary);margin-left:auto;">${p.steam_id}</span>
                             </label>
                         `).join('') : '<div style="color:var(--text-secondary);font-size:0.8rem;padding:8px;">No players found with this team value. It may exist only in match records.</div>'}
@@ -2640,6 +2640,13 @@
                 if (errors.length > 0) {
                     HLL.showAlert('Some updates failed: ' + errors.join('; '), 'error');
                 } else {
+                    // Delete the old team from teams table if no more players/matches reference it
+                    const { data: remainingPlayers } = await HLL.supabase.from('players').select('steam_id').eq('team', oldName);
+                    const { data: remainingMatches } = await HLL.supabase.from('matches').select('match_id').eq('my_team', oldName);
+                    if ((!remainingPlayers || remainingPlayers.length === 0) && (!remainingMatches || remainingMatches.length === 0)) {
+                        await HLL.supabase.from('teams').delete().eq('name', oldName);
+                    }
+                    
                     HLL.showAlert(`Moved ${summary.join(' and ')} → "${dest}"`, 'success');
                     loadManagedTeams();
                 }
@@ -2655,6 +2662,14 @@
             
             if (pc === 0 && mc === 0) {
                 if (!confirm(`Delete "${teamName}"?`)) return;
+                
+                // Actually delete from teams table
+                const { error } = await HLL.supabase.from('teams').delete().eq('name', teamName);
+                if (error) {
+                    HLL.showAlert('Failed to delete: ' + error.message, 'error');
+                    return;
+                }
+                
                 HLL.showAlert(`"${teamName}" removed.`, 'success');
                 loadManagedTeams();
                 return;
