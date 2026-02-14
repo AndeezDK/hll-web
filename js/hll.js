@@ -7,7 +7,7 @@
 // ============================================================================
 
 const HLL = {
-    version: '0.7.4',
+    version: '0.7.5',
     
     // Default Supabase config (can be overridden via localStorage)
     config: {
@@ -1035,6 +1035,26 @@ HLL.buildNavTeamSelector = async function() {
     
     select.style.display = '';
     console.log(`Team selected: ${this.currentTeam} (${this.currentTeamId})`);
+    
+    // Inject team badge on page
+    this.updateTeamBadge();
+};
+
+HLL.updateTeamBadge = function() {
+    // Find or create badge next to version badge
+    let badge = document.getElementById('teamBadge');
+    if (!badge) {
+        const versionBadge = document.querySelector('.version-badge');
+        if (versionBadge) {
+            badge = document.createElement('span');
+            badge.id = 'teamBadge';
+            badge.style.cssText = 'background: #f5a623; color: #0d1117; padding: 2px 10px; border-radius: 12px; font-size: 12px; font-weight: 700; margin-left: 8px;';
+            versionBadge.parentNode.insertBefore(badge, versionBadge.nextSibling);
+        }
+    }
+    if (badge && this.currentTeam) {
+        badge.textContent = this.currentTeam;
+    }
 };
 
 HLL.onTeamChange = function(teamId) {
@@ -1047,6 +1067,9 @@ HLL.onTeamChange = function(teamId) {
     localStorage.setItem('hll_default_team', this.currentTeam);
     
     console.log(`Team changed: ${this.currentTeam} (${this.currentTeamId})`);
+    
+    // Update team badge
+    this.updateTeamBadge();
     
     // Fire callback so page can refresh data
     if (typeof this._onTeamChangeCallback === 'function') {
