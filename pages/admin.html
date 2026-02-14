@@ -174,15 +174,17 @@
                 </p>
                 
                 <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px;">
-                    <!-- My Teams -->
+                    <!-- Teams -->
                     <div style="min-width: 0; overflow: hidden;">
-                        <h4 style="font-size: 0.9rem; margin-bottom: 8px; color: var(--accent-orange);">My Teams</h4>
+                        <h4 style="font-size: 0.9rem; margin-bottom: 8px; color: var(--accent-orange);">Teams</h4>
                         <div id="myTeamsList" style="margin-bottom: 8px;">
                             <div style="color: var(--text-secondary); font-size: 0.85rem;">Loading...</div>
                         </div>
-                        <div style="display: flex; gap: 6px;">
-                            <input type="text" id="addMyTeamInput" placeholder="New team name" 
+                        <div style="display: flex; gap: 6px; align-items: center;">
+                            <input type="text" id="addMyTeamInput" placeholder="Team name" 
                                 style="flex: 1; min-width: 0; padding: 4px 8px; font-size: 12px; background: var(--bg-input, #1a1a2e); border: 1px solid var(--border-color); border-radius: 4px; color: var(--text-primary);">
+                            <input type="text" id="addMyTeamTag" placeholder="Tag (e.g. [DKB])" 
+                                style="width: 90px; padding: 4px 8px; font-size: 12px; background: var(--bg-input, #1a1a2e); border: 1px solid var(--border-color); border-radius: 4px; color: var(--text-primary);">
                             <button class="btn btn-secondary btn-sm" onclick="addMyTeam()" style="font-size: 11px; padding: 4px 8px; white-space: nowrap;">+ Add</button>
                         </div>
                     </div>
@@ -2520,11 +2522,40 @@
         }
 
         async function addMyTeam() {
-            const input = document.getElementById('addMyTeamInput');
-            const name = input.value.trim();
-            if (!name) return;
-            HLL.showAlert('My Teams are populated from your player roster. Add a player with this team name to register it.', 'info');
-            input.value = '';
+            const nameInput = document.getElementById('addMyTeamInput');
+            const tagInput = document.getElementById('addMyTeamTag');
+            const name = nameInput.value.trim();
+            const tag = tagInput.value.trim() || null;
+            if (!name) { HLL.showAlert('Enter a team name', 'error'); return; }
+            
+            try {
+                // Check if already exists
+                const { data: existing } = await HLL.supabase.from('teams').select('id').eq('name', name);
+                if (existing && existing.length > 0) {
+                    HLL.showAlert(`Team "${name}" already exists`, 'error');
+                    return;
+                }
+                
+                // Insert into teams table
+                const { data, error } = await HLL.supabase
+                    .from('teams')
+                    .insert({ name, tag })
+                    .select('id')
+                    .single();
+                if (error) throw error;
+                
+                // Auto-add the team as its own first clan
+                await HLL.supabase.from('team_clans').insert({ team_id: data.id, clan_name: name, sort_order: 0 });
+                
+                HLL.clearTeamClansCache();
+                HLL.showAlert(`Team "${name}" created`, 'success');
+                nameInput.value = '';
+                tagInput.value = '';
+                await loadManagedTeams();
+            } catch (err) {
+                console.error('Error creating team:', err);
+                HLL.showAlert('Failed to create team: ' + err.message, 'error');
+            }
         }
 
         async function addClanToTeam(teamId, clanName) {
