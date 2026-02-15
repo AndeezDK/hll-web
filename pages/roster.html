@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Roster - HLL Tool v0.6.29</title>
+    <title>Roster - HLL Tool v0.6.30</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <link rel="stylesheet" href="../css/styles.css">
     <style>
@@ -66,7 +66,7 @@
         <!-- Header -->
         <div class="page-header">
             <h1 class="page-title">Roster</h1>
-            <span class="version-badge">v0.6.29</span>
+            <span class="version-badge">v0.6.30</span>
         </div>
 
         <!-- Stats Summary -->
@@ -249,8 +249,10 @@
             if (HLL.currentTeamId) {
                 rosterClans = await HLL.getTeamClans(HLL.currentTeamId);
             }
-            // Fallback: if no clans configured, use team names
-            const counterNames = rosterClans.length > 0 ? rosterClans : accessibleTeams.map(t => t.name);
+            // Only show clan counters for alliance teams (2+ clans), plus Merc
+            const counterNames = rosterClans.length > 1 
+                ? [...rosterClans, ...(!rosterClans.includes('Merc') ? ['Merc'] : [])]
+                : [];
             
             counterNames.forEach(name => {
                 const box = document.createElement('div');
@@ -323,8 +325,10 @@
         function updateStats() {
             const total = allPlayers.length;
             
-            // Dynamic clan counts
-            const counterNames = rosterClans.length > 0 ? rosterClans : accessibleTeams.map(t => t.name);
+            // Dynamic clan counts (only for alliance teams)
+            const counterNames = rosterClans.length > 1 
+                ? [...rosterClans, ...(!rosterClans.includes('Merc') ? ['Merc'] : [])]
+                : [];
             counterNames.forEach(name => {
                 const el = document.getElementById('teamCount_' + name);
                 if (el) el.textContent = allPlayers.filter(p => p.team === name).length;
