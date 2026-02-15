@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Admin - HLL Tool v0.6.31</title>
+    <title>Admin - HLL Tool v0.6.32</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <link rel="stylesheet" href="../css/styles.css">
     <style>
@@ -81,7 +81,7 @@
         <!-- Header -->
         <div class="page-header">
             <h1 class="page-title">Admin</h1>
-            <span class="version-badge">v0.6.31</span>
+            <span class="version-badge">v0.6.32</span>
         </div>
 
         <div class="admin-grid">
@@ -169,36 +169,36 @@
             <!-- Manage Teams (Super Admin only) -->
             <div class="action-card hidden" id="manageTeamsCard">
                 <h3>🏷️ Manage Teams</h3>
-                <p class="text-muted mt-sm mb-md" style="font-size: 11px;">
+                <p class="text-muted mt-sm mb-md">
                     Create and configure teams, assign clans. Super Admin only.
                 </p>
                 
-                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px;">
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 24px;">
                     <!-- Teams -->
                     <div style="min-width: 0; overflow: hidden;">
-                        <h4 style="font-size: 0.9rem; margin-bottom: 8px; color: var(--accent-orange);">Teams</h4>
-                        <div id="myTeamsList" style="margin-bottom: 8px;">
-                            <div style="color: var(--text-secondary); font-size: 0.85rem;">Loading...</div>
+                        <h4 style="margin-bottom: 12px; color: var(--accent-orange);">Teams</h4>
+                        <div id="myTeamsList" style="margin-bottom: 12px;">
+                            <div class="text-muted">Loading...</div>
                         </div>
-                        <div style="display: flex; gap: 6px; align-items: center;">
-                            <input type="text" id="addMyTeamInput" placeholder="Team name" 
-                                style="flex: 1; min-width: 0; padding: 4px 8px; font-size: 12px; background: var(--bg-input, #1a1a2e); border: 1px solid var(--border-color); border-radius: 4px; color: var(--text-primary);">
-                            <input type="text" id="addMyTeamTag" placeholder="Tag (e.g. [DKB])" 
-                                style="width: 90px; padding: 4px 8px; font-size: 12px; background: var(--bg-input, #1a1a2e); border: 1px solid var(--border-color); border-radius: 4px; color: var(--text-primary);">
-                            <button class="btn btn-secondary btn-sm" onclick="addMyTeam()" style="font-size: 11px; padding: 4px 8px; white-space: nowrap;">+ Add</button>
+                        <div style="display: flex; gap: 8px; align-items: center;">
+                            <input type="text" class="form-input" id="addMyTeamInput" placeholder="Team name" 
+                                style="flex: 1; min-width: 0;">
+                            <input type="text" class="form-input" id="addMyTeamTag" placeholder="Tag (e.g. [DKB])" 
+                                style="width: 120px;">
+                            <button class="btn btn-secondary btn-sm" onclick="addMyTeam()">+ Add</button>
                         </div>
                     </div>
                     
                     <!-- Enemy Teams -->
                     <div style="min-width: 0; overflow: hidden;">
-                        <h4 style="font-size: 0.9rem; margin-bottom: 8px; color: var(--accent-orange);">Enemy Teams</h4>
-                        <div id="enemyTeamsList" style="margin-bottom: 8px;">
-                            <div style="color: var(--text-secondary); font-size: 0.85rem;">Loading...</div>
+                        <h4 style="margin-bottom: 12px; color: var(--accent-orange);">Enemy Teams</h4>
+                        <div id="enemyTeamsList" style="margin-bottom: 12px;">
+                            <div class="text-muted">Loading...</div>
                         </div>
-                        <div style="display: flex; gap: 6px;">
-                            <input type="text" id="addEnemyTeamInput" placeholder="New team tag" 
-                                style="flex: 1; min-width: 0; padding: 4px 8px; font-size: 12px; background: var(--bg-input, #1a1a2e); border: 1px solid var(--border-color); border-radius: 4px; color: var(--text-primary);">
-                            <button class="btn btn-secondary btn-sm" onclick="addEnemyTeam()" style="font-size: 11px; padding: 4px 8px; white-space: nowrap;">+ Add</button>
+                        <div style="display: flex; gap: 8px;">
+                            <input type="text" class="form-input" id="addEnemyTeamInput" placeholder="New team tag" 
+                                style="flex: 1; min-width: 0;">
+                            <button class="btn btn-secondary btn-sm" onclick="addEnemyTeam()">+ Add</button>
                         </div>
                     </div>
                 </div>
@@ -2440,7 +2440,7 @@
             const myTeams = [...myTeamsSet].sort();
             const myList = document.getElementById('myTeamsList');
             if (myTeams.length === 0) {
-                myList.innerHTML = '<div style="color: var(--text-secondary); font-size: 0.8rem;">No teams yet</div>';
+                myList.innerHTML = '<div class="text-muted">No teams yet</div>';
             } else {
                 myList.innerHTML = myTeams.map(t => {
                     const pc = playerCounts[t] || 0;
@@ -2448,50 +2448,48 @@
                     const escaped = t.replace(/'/g, "\\'");
                     const logo = teamLogos[t];
                     const logoHtml = logo 
-                        ? `<img src="${logo}" style="width:20px;height:20px;border-radius:4px;object-fit:cover;">`
-                        : `<span style="width:20px;height:20px;border-radius:4px;background:#30363d;display:inline-flex;align-items:center;justify-content:center;font-size:10px;color:#8b949e;">?</span>`;
+                        ? `<img src="${logo}" style="width:24px;height:24px;border-radius:4px;object-fit:cover;">`
+                        : `<span style="width:24px;height:24px;border-radius:4px;background:#30363d;display:inline-flex;align-items:center;justify-content:center;color:#8b949e;">?</span>`;
                     
                     const tid = teamIds[t];
                     const clans = tid ? (clansByTeam[tid] || []) : [];
                     const clanTags = clans.map(c => {
                         const cEsc = c.replace(/'/g, "\\'");
-                        return `<span style="display:inline-flex;align-items:center;gap:2px;background:var(--bg-tertiary);border:1px solid var(--border-color);border-radius:3px;padding:1px 5px;font-size:10px;">
+                        return `<span class="badge" style="display:inline-flex;align-items:center;gap:4px;padding:3px 8px;">
                             ${c}
-                            <button onclick="removeClanFromTeam('${tid}','${cEsc}')" style="background:none;border:none;color:#f87171;cursor:pointer;font-size:9px;padding:0 1px;" title="Remove clan">✕</button>
+                            <button onclick="removeClanFromTeam('${tid}','${cEsc}')" style="background:none;border:none;color:#f87171;cursor:pointer;padding:0 2px;line-height:1;" title="Remove clan">✕</button>
                         </span>`;
                     }).join(' ');
                     
                     const canAddMore = clans.length < 4 && tid;
                     const availableClans = sortedClans.filter(c => !clans.includes(c));
                     const addClanHtml = canAddMore && availableClans.length > 0
-                        ? `<select onchange="addClanToTeam('${tid}', this.value); this.value='';" style="font-size:10px;padding:1px 3px;background:var(--bg-tertiary);border:1px solid var(--border-color);border-radius:3px;color:var(--text-primary);max-width:80px;">
+                        ? `<select class="form-select" onchange="addClanToTeam('${tid}', this.value); this.value='';" style="width:auto;min-width:90px;padding:3px 8px;">
                             <option value="">+ clan</option>
                             ${availableClans.map(c => `<option value="${c}">${c}</option>`).join('')}
                            </select>`
-                        : clans.length >= 4 ? '<span style="font-size:9px;color:var(--text-secondary);">max 4</span>' : '';
+                        : clans.length >= 4 ? '<span class="text-muted">max 4</span>' : '';
                     
                     return `
-                    <div style="padding: 4px 0; border-bottom: 1px solid rgba(255,255,255,0.05);">
+                    <div style="padding: 10px 0; border-bottom: 1px solid var(--border-color);">
                         <div style="display: flex; justify-content: space-between; align-items: center;">
-                            <div style="display:flex;align-items:center;gap:6px;">
+                            <div style="display:flex;align-items:center;gap:8px;">
                                 ${logoHtml}
-                                <span style="font-size: 0.85rem;">${t}</span>
-                                <span style="font-size:10px;color:var(--text-secondary);">(${pc}p, ${mc}m)</span>
+                                <strong>${t}</strong>
+                                <span class="text-muted">(${pc} players, ${mc} matches)</span>
                             </div>
-                            <div style="display:flex;gap:2px;">
-                                <label style="background: none; border: none; color: #388bfd; cursor: pointer; font-size: 11px; padding: 2px 6px;" title="Upload logo">
+                            <div style="display:flex;gap:4px;">
+                                <label class="btn btn-secondary btn-sm" style="cursor:pointer;margin:0;" title="Upload logo">
                                     🖼️
                                     <input type="file" accept="image/*" style="display:none;" onchange="uploadTeamLogo('${escaped}', this.files[0])">
                                 </label>
-                                <button onclick="renameMyTeam('${escaped}')" 
-                                    style="background: none; border: none; color: var(--accent-orange); cursor: pointer; font-size: 11px; padding: 2px 6px;" title="Migrate players / Rename">✏️</button>
-                                <button onclick="deleteMyTeam('${escaped}')" 
-                                    style="background: none; border: none; color: #f87171; cursor: pointer; font-size: 11px; padding: 2px 6px;" title="Delete">✕</button>
+                                <button class="btn btn-secondary btn-sm" onclick="renameMyTeam('${escaped}')" title="Rename / Migrate">✏️</button>
+                                <button class="btn btn-secondary btn-sm" onclick="deleteMyTeam('${escaped}')" style="color:#f87171;" title="Delete">✕</button>
                             </div>
                         </div>
-                        <div style="display:flex;align-items:center;gap:4px;margin-top:3px;margin-left:26px;flex-wrap:wrap;">
-                            <span style="font-size:10px;color:var(--text-secondary);">Clans:</span>
-                            ${clans.length > 0 ? clanTags : '<span style="font-size:10px;color:var(--text-secondary);font-style:italic;">none</span>'}
+                        <div style="display:flex;align-items:center;gap:6px;margin-top:6px;margin-left:32px;flex-wrap:wrap;">
+                            <span class="text-muted">Clans:</span>
+                            ${clans.length > 0 ? clanTags : '<span class="text-muted" style="font-style:italic;">none</span>'}
                             ${addClanHtml}
                         </div>
                     </div>`;
@@ -2508,15 +2506,14 @@
             const allEnemy = [...enemyTeamsSet].sort();
             const enemyList = document.getElementById('enemyTeamsList');
             if (allEnemy.length === 0) {
-                enemyList.innerHTML = '<div style="color: var(--text-secondary); font-size: 0.8rem;">No teams yet</div>';
+                enemyList.innerHTML = '<div class="text-muted">No teams yet</div>';
             } else {
                 // Track which are in enemy_teams table vs only in matches
                 const inTable = new Set((enemyTeams || []).map(t => t.team_tag));
                 enemyList.innerHTML = allEnemy.map(t => `
-                    <div style="display: flex; justify-content: space-between; align-items: center; padding: 3px 0; border-bottom: 1px solid rgba(255,255,255,0.05); gap: 4px;">
-                        <span style="font-size: 0.85rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0;">${t} ${!inTable.has(t) ? '<span style="font-size:10px;color:var(--text-secondary);">(matches)</span>' : ''}</span>
-                        <button onclick="removeEnemyTeam('${t.replace(/'/g, "\\'")}')" 
-                            style="background: none; border: none; color: #f87171; cursor: pointer; font-size: 11px; padding: 2px 6px; flex-shrink: 0;" title="Remove">✕</button>
+                    <div style="display: flex; justify-content: space-between; align-items: center; padding: 6px 0; border-bottom: 1px solid var(--border-color);">
+                        <span>${t} ${!inTable.has(t) ? '<span class="text-muted">(matches only)</span>' : ''}</span>
+                        <button class="btn btn-secondary btn-sm" onclick="removeEnemyTeam('${t.replace(/'/g, "\\'")}')" style="color:#f87171;" title="Remove">✕</button>
                     </div>
                 `).join('');
             }
