@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Lineups - HLL Tool v0.15.2</title>
+    <title>Lineups - HLL Tool v0.15.3</title>
     <!-- Supabase JS Client -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="../js/hll.js?v=0.7.7"></script>
@@ -1070,7 +1070,7 @@
     
     <div class="page-header">
         <h1 class="page-title">Lineups</h1>
-        <span class="version-badge">v0.15.2</span>
+        <span class="version-badge">v0.15.3</span>
         <div class="sync-indicator" id="syncIndicator">
             <span class="sync-dot"></span>
             <span class="sync-text">Offline</span>
@@ -1085,7 +1085,7 @@
     
     <div class="match-info">
         <div class="match-field vs-display">
-            <select id="matchTeamSelect"></select>
+            <span id="matchTeamSelect" style="font-weight:600;color:var(--accent-orange);font-size:0.95rem;white-space:nowrap;"></span>
             <span class="vs-badge">vs</span>
             <div class="enemy-autocomplete-wrapper">
                 <input type="text" id="enemyTeamInput" value="" placeholder="Enemy..." autocomplete="off">
@@ -1360,7 +1360,8 @@
                     allTeams = teams;
                     const matchTeamSel = document.getElementById('matchTeamSelect');
                     if (matchTeamSel) {
-                        matchTeamSel.innerHTML = teams.map(t => `<option>${t.name}</option>`).join('');
+                        matchTeamSel.textContent = HLL.currentTeam || teams[0]?.name || '';
+                        matchTeamSel.dataset.value = HLL.currentTeam || teams[0]?.name || '';
                     }
                     
                     // Load players
@@ -1388,6 +1389,12 @@
                 // Register for team changes from nav
                 HLL.onTeamChange_register(async (teamId, teamName) => {
                     showLoading('Switching team...');
+                    // Update the friendly team label
+                    const matchTeamSel = document.getElementById('matchTeamSelect');
+                    if (matchTeamSel) {
+                        matchTeamSel.textContent = teamName;
+                        matchTeamSel.dataset.value = teamName;
+                    }
                     HLL.clearTeamClansCache();
                     await buildTeamCounters(allTeams);
                     await loadPlayersFromDatabase(teamName);
@@ -1538,7 +1545,7 @@
                 if (savedMatch) {
                     try {
                         const m = JSON.parse(savedMatch);
-                        if (m.team) document.getElementById('matchTeamSelect').value = m.team;
+                        // team is always from global selector, not localStorage
                         if (m.enemy) document.getElementById('enemyTeamInput').value = m.enemy;
                         if (m.map) document.getElementById('matchMapSelect').value = m.map;
                         if (m.faction) document.getElementById('matchFactionSelect').value = m.faction;
@@ -2174,7 +2181,7 @@
             if (savedMatch) {
                 try {
                     const m = JSON.parse(savedMatch);
-                    if (m.team) document.getElementById('matchTeamSelect').value = m.team;
+                    // team is always from global selector, not localStorage
                     if (m.enemy) document.getElementById('enemyTeamInput').value = m.enemy;
                     if (m.map) document.getElementById('matchMapSelect').value = m.map;
                     if (m.faction) document.getElementById('matchFactionSelect').value = m.faction;
@@ -2243,8 +2250,9 @@
         }
         
         function getMatchInfo() {
+            const teamEl = document.getElementById('matchTeamSelect');
             return {
-                team: document.getElementById('matchTeamSelect').value,
+                team: teamEl?.dataset?.value || teamEl?.textContent || '',
                 enemy: document.getElementById('enemyTeamInput').value,
                 map: document.getElementById('matchMapSelect').value,
                 faction: document.getElementById('matchFactionSelect').value,
@@ -3809,7 +3817,8 @@
         
         function exportLineup() {
             // Generate unique filename
-            const team = document.getElementById('matchTeamSelect').value || 'Team';
+            const teamEl = document.getElementById('matchTeamSelect');
+            const team = teamEl?.dataset?.value || teamEl?.textContent || 'Team';
             const enemy = document.getElementById('enemyTeamInput').value || 'Enemy';
             const date = document.getElementById('matchDateInput').value || '';
             const lineupNum = document.querySelector('.tab.active')?.textContent.replace('Lineup ', '') || '1';
